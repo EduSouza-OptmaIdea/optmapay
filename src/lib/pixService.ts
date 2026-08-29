@@ -8,25 +8,83 @@ export interface ParsedPixData {
   description?: string;
   orderId?: string;
   merchantName?: string;
+  isOptmaPayCode: boolean;
   isEmv: boolean;
 }
 
 /**
- * Parses raw Pix input (plain key, PIX: prefix, or EMV BR Code standard payload)
+ * Generates an OptmaPay Sandbox transaction instruction code/URL.
+ * This encapsulates the receiver, account, amount, and order reference into an actionable payload.
+ */
+export function generateOptmaPayPixPayload(params: {
+  receiverPixKey: string;
+  receiverName: string;
+  receiverAccountId?: string;
+  amount?: number;
+  orderId?: string;
+  description?: string;
+}): string {
+  const queryParams = new URLSearchParams();
+  queryParams.set('to', params.receiverPixKey.trim());
+  queryParams.set('name', params.receiverName.trim());
+  if (params.receiverAccountId) queryParams.set('accId', params.receiverAccountId);
+  if (params.amount && params.amount > 0) queryParams.set('amount', params.amount.toFixed(2));
+  if (params.orderId) queryParams.set('ref', params.orderId.trim());
+  if (params.description) queryParams.set('desc', params.description.trim());
+  queryParams.set('env', 'sandbox');
+  queryParams.set('ts', Date.now().toString());
+
+  return `OPTMAPAY://PIX/v1?${queryParams.toString()}`;
+}
+
+/**
+ * Parses raw Pix input:
+ * 1. OptmaPay Sandbox Instruction (OPTMAPAY://PIX/v1?...)
+ * 2. PIX:chave
+ * 3. BR Code / EMV Standard (000201...)
+ * 4. Plain Pix Key (email, CPF, CNPJ, phone, EVP)
  */
 export function parsePixPayload(rawInput: string): ParsedPixData {
   const trimmed = rawInput.trim();
 
-  // 1. Simple "PIX:chave" format
+  // 1. OptmaPay Application-Specific Instruction
+  if (trimmed.toUpperCase().startsWith('OPTMAPAY://PIX') || trimmed.toUpperCase().startsWith('OPTMAPAY:PIX')) {
+    try {
+      const queryString = trimmed.includes('?') ? trimmed.split('?')[1] : trimmed;
+      const params = new URLSearchParams(queryString);
+      const to = params.get('to') || '';
+      const name = params.get('name') || '';
+      const amountStr = params.get('amount');
+      const ref = params.get('ref') || '';
+      const desc = params.get('desc') || '';
+
+      const amount = amountStr ? parseFloat(amountStr) : undefined;
+
+      return {
+        cleanKey: to || trimmed,
+        amount: !isNaN(amount as number) && (amount as number) > 0 ? amount : undefined,
+        description: desc || (name ? `Pagamento para ${name}` : 'Transferência OptmaPay Sandbox'),
+        orderId: ref || undefined,
+        merchantName: name || undefined,
+        isOptmaPayCode: true,
+        isEmv: false,
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // 2. Simple "PIX:chave" format
   if (trimmed.toUpperCase().startsWith('PIX:')) {
     const key = trimmed.slice(4).trim();
     return {
       cleanKey: key,
+      isOptmaPayCode: false,
       isEmv: false,
     };
   }
 
-  // 2. EMV standard BR Code (starts with "000201")
+  // 3. EMV standard BR Code (starts with "000201")
   if (trimmed.startsWith('000201')) {
     let cleanKey = '';
     let amount: number | undefined = undefined;
@@ -45,7 +103,6 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
       index += 4 + length;
 
       if (tag === '26') {
-        // Merchant Account Info - sub-TLV
         let subIndex = 0;
         while (subIndex < value.length) {
           const subTag = value.substring(subIndex, subIndex + 2);
@@ -59,16 +116,13 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
           }
         }
       } else if (tag === '54') {
-        // Amount
         const parsedVal = parseFloat(value);
         if (!isNaN(parsedVal) && parsedVal > 0) {
           amount = parsedVal;
         }
       } else if (tag === '59') {
-        // Merchant Name
         merchantName = value;
       } else if (tag === '62') {
-        // Additional data field template (txid / reference)
         let subIndex = 0;
         while (subIndex < value.length) {
           const subTag = value.substring(subIndex, subIndex + 2);
@@ -91,14 +145,16 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
         description: merchantName ? `Pagamento para ${merchantName}` : 'Pagamento Pix QR Code',
         orderId,
         merchantName,
+        isOptmaPayCode: false,
         isEmv: true,
       };
     }
   }
 
-  // 3. Plain Pix Key fallback
+  // 4. Plain Pix Key fallback
   return {
     cleanKey: trimmed,
+    isOptmaPayCode: false,
     isEmv: false,
   };
 }
@@ -164,8 +220,8 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     );
   }
 
-  // 2. Fetch Receiver Account (Lookup by pix_key, cpf_cnpj, or id)
-  let { data: receivers, error: receiverErr } = await supabase
+  // 2. Fetch Receiver Account
+  let { data: receivers } = await supabase
     .from('accounts')
     .select('*')
     .or(`pix_key.eq."${targetKey}",pix_key.ilike."%${targetKey}%",cpf_cnpj.eq."${targetKey}"`);
@@ -173,7 +229,6 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   let receiver: SandboxAccount | null = receivers && receivers.length > 0 ? receivers[0] : null;
 
   if (!receiver) {
-    // Try clean numbers only match for CPF/CNPJ
     const cleanNumbers = targetKey.replace(/\D/g, '');
     if (cleanNumbers.length >= 11) {
       const { data: numMatch } = await supabase
@@ -187,7 +242,7 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   }
 
   if (!receiver) {
-    throw new Error(`Chave Pix "${targetKey}" não encontrada no sistema de contas.`);
+    throw new Error(`Chave Pix "${targetKey}" não foi encontrada no banco de dados.`);
   }
 
   if (receiver.id === sender.id) {
@@ -213,13 +268,12 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     .eq('id', receiver.id);
 
   if (updReceiverErr) {
-    // Rollback sender balance
     await supabase.from('accounts').update({ balance: senderBalance }).eq('id', sender.id);
     throw new Error(`Falha ao creditar saldo de destino: ${updReceiverErr.message}`);
   }
 
-  // 4. Create Transaction Records (Outbound & Inbound)
-  const finalDesc = description || `Transferência Pix para ${receiver.name}`;
+  // 4. Create Transaction Records
+  const finalDesc = description || parsed.description || `Transferência Pix para ${receiver.name}`;
   const finalRef = externalReference || parsed.orderId || `PIX-${Date.now().toString().slice(-6)}`;
 
   const { data: outTx } = await supabase
@@ -260,7 +314,7 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     .select('id')
     .single();
 
-  // 5. Trigger Webhooks for Receiver Account
+  // 5. Trigger Webhooks
   let dispatched = 0;
   try {
     dispatched = await triggerWebhookEvents({
@@ -287,7 +341,7 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
 
   return {
     success: true,
-    message: `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${receiver.name}!`,
+    message: `Transferência Pix de R$ ${amount.toFixed(2)} concluída com sucesso para ${receiver.name}!`,
     amount,
     senderName: sender.name,
     receiverName: receiver.name,

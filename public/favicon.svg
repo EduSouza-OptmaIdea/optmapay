@@ -1,4 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#0f172a" />
-  <path d="M16 5L5 11l11 6 11-6-11-6zM5 21l11 6 11-6M5 16l11 6 11-6" stroke="#2dd4bf" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="64" height="64" viewBox="0 0 110 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Growth Arrow Chart -->
+  <path d="M32 38L52 14L74 34L94 10" stroke="#26c6da" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M74 10H94V30" stroke="#26c6da" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Left Coin Stack -->
+  <g stroke="#26c6da" stroke-width="7" fill="none">
+    <ellipse cx="28" cy="46" rx="20" ry="8" fill="#0f172a" />
+    <path d="M8 56C8 60.4 17 64 28 64C39 64 48 60.4 48 56" />
+    <path d="M8 66C8 70.4 17 74 28 74C39 74 48 70.4 48 66" />
+    <path d="M8 76C8 80.4 17 84 28 84C39 84 48 80.4 48 76" />
+    <line x1="8" y1="46" x2="8" y2="76" stroke-linecap="round" />
+    <line x1="48" y1="46" x2="48" y2="76" strokeLinecap="round" />
+  </g>
+
+  <!-- Right Coin Stack -->
+  <g stroke="#f36c3d" stroke-width="7" fill="none">
+    <ellipse cx="64" cy="52" rx="20" ry="8" fill="#0f172a" />
+    <path d="M44 62C44 66.4 53 70 64 70C75 70 84 66.4 84 62" />
+    <path d="M44 72C44 76.4 53 80 64 80C75 80 84 76.4 84 72" />
+    <path d="M44 82C44 86.4 53 90 64 90C75 90 84 86.4 84 82" />
+    <line x1="44" y1="52" x2="44" y2="82" stroke-linecap="round" />
+    <line x1="84" y1="52" x2="84" y2="82" stroke-linecap="round" />
+  </g>
 </svg>

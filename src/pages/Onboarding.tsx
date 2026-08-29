@@ -304,7 +304,7 @@ export const Onboarding: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl transition shadow-xl shadow-teal-950/40 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+              className="w-full py-3.5 bg-[#f36c3d] hover:bg-[#ea580c] text-white font-bold text-xs rounded-xl transition shadow-xl shadow-orange-950/40 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
               <span>{loading ? 'Abrindo Conta no Supabase...' : 'Abrir Conta Digital e Acessar Banco'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -315,8 +315,9 @@ export const Onboarding: React.FC = () => {
 
       {/* Footer */}
       <footer className="max-w-6xl w-full mx-auto text-center text-slate-500 text-[11px]">
-        OptmaPay Sandbox • Microcosmos OptmaIdea • Persistência em Tempo Real via PostgreSQL Supabase
+        OPTMA Pay Sandbox Dev Bank • Microcosmos OptmaIdea • Persistência em Tempo Real via PostgreSQL Supabase
       </footer>
+
 
       {/* Supabase Config Modal */}
       <SupabaseConfigModal

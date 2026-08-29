@@ -42,7 +42,18 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchTransactions();
-  }, [activeAccount]);
+
+    const handleRealtime = () => {
+      fetchTransactions();
+    };
+
+    window.addEventListener('optmapay:realtime_update', handleRealtime);
+
+    return () => {
+      window.removeEventListener('optmapay:realtime_update', handleRealtime);
+    };
+  }, [activeAccount?.id]);
+
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();

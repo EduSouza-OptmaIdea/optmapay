@@ -31,16 +31,9 @@ export const GoldenBanner: React.FC = () => {
             <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
               <strong className="font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                REGRA DE OURO (GOLDEN RULE):
+                ATENÇÃO:
               </strong>{' '}
-              Este é um banco digital fictício para testes. Todas as operações retornam{' '}
-              <code className="bg-amber-200 dark:bg-amber-900/60 px-1 py-0.5 rounded text-[11px] font-mono text-amber-950 dark:text-amber-100">
-                realMoney: false
-              </code>{' '}
-              e{' '}
-              <code className="bg-amber-200 dark:bg-amber-900/60 px-1 py-0.5 rounded text-[11px] font-mono text-amber-950 dark:text-amber-100">
-                environment: "sandbox"
-              </code>.
+              Este é um banco sandbox usado apenas para testes de api e webhook em sites, apps etc.. As transações e dados aqui visualizados são todos fictícios.
             </span>
           </div>
           <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-amber-700 dark:text-amber-400 shrink-0">
@@ -48,6 +41,7 @@ export const GoldenBanner: React.FC = () => {
             <span>API /api/sandbox/v1</span>
           </div>
         </div>
+
       )}
 
       <SupabaseConfigModal

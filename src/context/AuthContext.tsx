@@ -33,7 +33,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const savedActiveId = localStorage.getItem('optmapay_active_account_id');
     const matched = fetched.find((a) => a.id === savedActiveId);
-    setActiveAccount(matched || fetched[0] || null);
+    setActiveAccount((prev) => {
+      if (savedActiveId && matched) return matched;
+      if (prev) {
+        const stillExists = fetched.find((a) => a.id === prev.id);
+        if (stillExists) return stillExists;
+      }
+      return matched || fetched[0] || null;
+    });
   };
 
   useEffect(() => {
@@ -49,10 +56,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await loadAccounts(currentUser?.id);
     });
 
+    // Supabase Realtime Listener on accounts and transactions tables
+    const realtimeChannel = supabase
+      .channel('optmapay_global_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'accounts' },
+        (_payload) => {
+          loadAccounts(user?.id);
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        (_payload) => {
+          loadAccounts(user?.id);
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'boletos' },
+        (_payload) => {
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+        }
+      )
+      .subscribe();
+
     return () => {
       authListener.subscription.unsubscribe();
+      supabase.removeChannel(realtimeChannel);
     };
-  }, []);
+  }, [user?.id]);
 
   const setActiveAccountId = (id: string) => {
     const matched = accounts.find((a) => a.id === id);
