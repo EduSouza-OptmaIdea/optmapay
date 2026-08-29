@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { MobileQrScannerModal } from '../components/MobileQrScannerModal';
+import { supabase } from '../lib/supabase';
+import { SandboxTransaction } from '../types/sandbox';
 import {
   parsePixPayload,
   executePixTransfer,
@@ -21,6 +23,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Link2,
+  ArrowDownLeft,
+  ArrowUpRight,
+  RefreshCw,
+  Clock,
 } from 'lucide-react';
 
 export const PixArea: React.FC = () => {
@@ -30,10 +36,10 @@ export const PixArea: React.FC = () => {
   const [copiedInstruction, setCopiedInstruction] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
-  // Transfer Pay Pix State
+  // Transfer Pay Pix State - Starts with 0.00
   const [rawPixInput, setRawPixInput] = useState('');
   const [parsedData, setParsedData] = useState<ParsedPixData | null>(null);
-  const [payAmount, setPayAmount] = useState('150.00');
+  const [payAmount, setPayAmount] = useState('0.00');
   const [payDesc, setPayDesc] = useState('Transferência Pix Sandbox');
   const [payOrderId, setPayOrderId] = useState(`ORD-${Math.floor(1000 + Math.random() * 9000)}`);
   const [paying, setPaying] = useState(false);
@@ -41,11 +47,43 @@ export const PixArea: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Dynamic QR Code State
-  const [pixAmount, setPixAmount] = useState('150.00');
+  const [pixAmount, setPixAmount] = useState('0.00');
   const [pixDesc, setPixDesc] = useState('Pedido Venda Sandbox');
   const [dynamicOrderId, setDynamicOrderId] = useState(`ORD-${Math.floor(1000 + Math.random() * 9000)}`);
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
   const [copiedDynamicPayload, setCopiedDynamicPayload] = useState(false);
+
+  // Dedicated Pix Statement State
+  const [pixTransactions, setPixTransactions] = useState<SandboxTransaction[]>([]);
+  const [loadingPixTx, setLoadingPixTx] = useState(false);
+
+  const fetchPixTransactions = async () => {
+    if (!activeAccount) return;
+    setLoadingPixTx(true);
+    const { data } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('account_id', activeAccount.id)
+      .eq('type', 'pix')
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    setPixTransactions((data || []) as SandboxTransaction[]);
+    setLoadingPixTx(false);
+  };
+
+  useEffect(() => {
+    fetchPixTransactions();
+
+    const handleRealtime = () => {
+      fetchPixTransactions();
+    };
+
+    window.addEventListener('optmapay:realtime_update', handleRealtime);
+    return () => {
+      window.removeEventListener('optmapay:realtime_update', handleRealtime);
+    };
+  }, [activeAccount?.id]);
 
   if (!activeAccount) return null;
 
@@ -64,20 +102,31 @@ export const PixArea: React.FC = () => {
 
     if (!val.trim()) {
       setParsedData(null);
+      setPayAmount('0.00');
+      setPayDesc('Transferência Pix Sandbox');
       return;
     }
 
     const parsed = parsePixPayload(val);
     setParsedData(parsed);
 
+    // If the copied/scanned payload specifies an amount, fill it; otherwise keep 0.00
     if (parsed.amount && parsed.amount > 0) {
       setPayAmount(parsed.amount.toFixed(2));
+    } else {
+      setPayAmount('0.00');
     }
+
     if (parsed.orderId) {
       setPayOrderId(parsed.orderId);
     }
+
     if (parsed.description) {
       setPayDesc(parsed.description);
+    } else if (parsed.merchantName) {
+      setPayDesc(`Pagamento para ${parsed.merchantName}`);
+    } else {
+      setPayDesc('Transferência Pix Sandbox');
     }
   };
 
@@ -128,7 +177,7 @@ export const PixArea: React.FC = () => {
 
     const val = parseFloat(payAmount);
     if (isNaN(val) || val <= 0) {
-      setErrorMessage('Informe um valor válido maior que R$ 0,00.');
+      setErrorMessage('Informe um valor de transferência válido maior que R$ 0,00.');
       return;
     }
 
@@ -150,8 +199,13 @@ export const PixArea: React.FC = () => {
 
       setTransferReceipt(result);
       await refreshAccounts();
+      await fetchPixTransactions();
+
+      // Reset transfer form to 0.00
       setRawPixInput('');
       setParsedData(null);
+      setPayAmount('0.00');
+      setPayDesc('Transferência Pix Sandbox');
       setPayOrderId(`ORD-${Math.floor(1000 + Math.random() * 9000)}`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao processar transferência Pix.');
@@ -172,7 +226,7 @@ export const PixArea: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-teal-600 dark:text-[#26c6da]" />
+            <QrCode className="w-5 h-5 text-[#26c6da]" />
             Área Pix Sandbox & Transferências
           </h1>
           <p className="text-xs text-slate-500">
@@ -527,6 +581,75 @@ export const PixArea: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* EXTRATO EXCLUSIVO PIX DA CONTA */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-teal-600 dark:text-[#26c6da]" />
+              Extrato Exclusivo de Pix ({activeAccount.name})
+            </h2>
+            <p className="text-xs text-slate-500">
+              Histórico de transferências Pix enviadas e recebidas em tempo real
+            </p>
+          </div>
+
+          <button
+            onClick={fetchPixTransactions}
+            className="p-2 text-slate-400 hover:text-teal-600 dark:hover:text-[#26c6da] transition"
+            title="Atualizar extrato Pix"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingPixTx ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {pixTransactions.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+            Nenhuma transferência Pix realizada ou recebida por esta conta ainda.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-700/60 overflow-x-auto">
+            {pixTransactions.map((tx) => {
+              const isIn = tx.direction === 'in';
+              return (
+                <div key={tx.id} className="py-3 flex items-center justify-between gap-4 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2 rounded-xl shrink-0 ${
+                        isIn
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {isIn ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">
+                        {isIn ? `Pix Recebido de ${tx.counterparty_name || 'Origem'}` : `Pix Enviado para ${tx.counterparty_name || 'Destino'}`}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {tx.description ? `${tx.description} • ` : ''}
+                        {tx.external_reference ? `Ref: ${tx.external_reference} • ` : ''}
+                        {new Date(tx.created_at).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0 font-mono">
+                    <p className={`font-bold ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {isIn ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                    <span className="text-[10px] text-slate-400 uppercase">
+                      PIX SANDBOX
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Modal Leitor de QR Code via Câmera Mobile */}
       <MobileQrScannerModal

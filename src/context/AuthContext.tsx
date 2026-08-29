@@ -25,22 +25,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
 
   const loadAccounts = async (userId?: string) => {
-    const targetUserId = userId || user?.id || '';
+    const targetUserId = userId !== undefined ? userId : user?.id || '';
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
-    setAccounts(fetched);
+    if (fetched && fetched.length > 0) {
+      setAccounts(fetched);
 
-    const savedActiveId = localStorage.getItem('optmapay_active_account_id');
-    const matched = fetched.find((a) => a.id === savedActiveId);
-    setActiveAccount((prev) => {
-      if (savedActiveId && matched) return matched;
-      if (prev) {
-        const stillExists = fetched.find((a) => a.id === prev.id);
-        if (stillExists) return stillExists;
-      }
-      return matched || fetched[0] || null;
-    });
+      const savedActiveId = localStorage.getItem('optmapay_active_account_id');
+      const matched = fetched.find((a) => a.id === savedActiveId);
+
+      setActiveAccount((prev) => {
+        if (savedActiveId && matched) return { ...matched };
+        if (prev) {
+          const stillExists = fetched.find((a) => a.id === prev.id);
+          if (stillExists) return { ...stillExists };
+        }
+        return matched ? { ...matched } : { ...fetched[0] };
+      });
+    }
   };
 
   useEffect(() => {
@@ -62,24 +65,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'accounts' },
-        (_payload) => {
+        (payload) => {
+          if (payload.new && (payload.new as any).id) {
+            const updated = payload.new as SandboxAccount;
+            setAccounts((prev) =>
+              prev.map((acc) => (acc.id === updated.id ? { ...acc, ...updated } : acc))
+            );
+            setActiveAccount((prev) => {
+              if (prev && prev.id === updated.id) {
+                return { ...prev, ...updated };
+              }
+              return prev;
+            });
+          }
           loadAccounts(user?.id);
-          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
-        (_payload) => {
+        (payload) => {
           loadAccounts(user?.id);
-          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'boletos' },
-        (_payload) => {
-          window.dispatchEvent(new CustomEvent('optmapay:realtime_update'));
+        (payload) => {
+          loadAccounts(user?.id);
+          window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
       .subscribe();
@@ -93,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setActiveAccountId = (id: string) => {
     const matched = accounts.find((a) => a.id === id);
     if (matched) {
-      setActiveAccount(matched);
+      setActiveAccount({ ...matched });
       localStorage.setItem('optmapay_active_account_id', id);
     }
   };
