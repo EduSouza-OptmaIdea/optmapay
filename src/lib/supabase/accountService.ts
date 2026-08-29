@@ -36,7 +36,7 @@ export async function fetchUserAccounts(userId?: string): Promise<{ accounts: Sa
     }
 
     return { accounts: (data || []) as SandboxAccount[], isUnauthorized: false };
-  } catch (err: any) {
+  } catch {
     return { accounts: [], isUnauthorized: true };
   }
 }
@@ -77,4 +77,96 @@ export async function createBankAccount(userId: string | undefined, input: Creat
   }
 
   return data as SandboxAccount;
+}
+
+/**
+ * Exclui a conta e todos os dados relacionados em cascata via RPC no PostgreSQL
+ */
+export async function deleteSandboxAccountRPC(accountId: string): Promise<any> {
+  const client = getSupabaseClient();
+  
+  // Tenta via RPC atômica
+  const { data, error } = await client.rpc('delete_sandbox_account', {
+    p_account_id: accountId,
+  });
+
+  if (error) {
+    // Fallback: se a RPC ainda não tiver sido criada no Supabase SQL Editor, realiza exclusões diretas em cascata
+    console.warn('RPC delete_sandbox_account não encontrada. Executando fallback em cascata...', error.message);
+    await client.from('transactions').delete().or(`account_id.eq.${accountId},counterparty_account_id.eq.${accountId}`);
+    await client.from('boletos').delete().eq('account_id', accountId);
+    await client.from('cartoes').delete().eq('account_id', accountId);
+    await client.from('webhooks_config').delete().eq('account_id', accountId);
+    const { error: accErr } = await client.from('accounts').delete().eq('id', accountId);
+    if (accErr) throw accErr;
+    return { success: true, fallback: true };
+  }
+
+  return data;
+}
+
+/**
+ * Exporta todos os dados da conta em formato estruturado JSON para backup (LGPD / Portabilidade)
+ */
+export async function exportAccountDataJson(accountId: string): Promise<any> {
+  const client = getSupabaseClient();
+
+  const { data, error } = await client.rpc('export_account_data_json', {
+    p_account_id: accountId,
+  });
+
+  if (error || !data) {
+    // Fallback client query
+    const { data: account } = await client.from('accounts').select('*').eq('id', accountId).single();
+    const { data: transactions } = await client.from('transactions').select('*').eq('account_id', accountId);
+    const { data: boletos } = await client.from('boletos').select('*').eq('account_id', accountId);
+    const { data: cartoes } = await client.from('cartoes').select('*').eq('account_id', accountId);
+    const { data: webhooks } = await client.from('webhooks_config').select('*').eq('account_id', accountId);
+
+    return {
+      export_version: '1.0.0',
+      exported_at: new Date().toISOString(),
+      environment: 'sandbox',
+      realMoney: false,
+      account,
+      transactions: transactions || [],
+      boletos: boletos || [],
+      cartoes: cartoes || [],
+      webhooks_config: webhooks || [],
+    };
+  }
+
+  return data;
+}
+
+/**
+ * Dispara um aporte / crédito simulado em conta via RPC
+ */
+export async function depositFundsRPC(accountId: string, amount: number, description?: string): Promise<any> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('deposit_funds', {
+    p_account_id: accountId,
+    p_amount: amount,
+    p_description: description || 'Aporte Fictício Sandbox',
+  });
+
+  if (error) {
+    // Fallback: update account balance and insert transaction
+    const { data: acc } = await client.from('accounts').select('balance').eq('id', accountId).single();
+    const newBal = (acc?.balance || 0) + amount;
+    await client.from('accounts').update({ balance: newBal }).eq('id', accountId);
+    await client.from('transactions').insert({
+      account_id: accountId,
+      type: 'deposit',
+      direction: 'in',
+      amount,
+      description: description || 'Aporte Fictício Sandbox',
+      status: 'completed',
+      real_money: false,
+      environment: 'sandbox',
+    });
+    return { success: true, new_balance: newBal };
+  }
+
+  return data;
 }

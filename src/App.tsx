@@ -6,7 +6,10 @@ import { Header } from './components/Header';
 import { GoldenBanner } from './components/GoldenBanner';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
+import { CookieBanner } from './components/CookieBanner';
 import { PublicHome } from './pages/PublicHome';
+import { TermsOfUse } from './pages/TermsOfUse';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Dashboard } from './pages/Dashboard';
 import { PixArea } from './pages/PixArea';
 import { BoletosArea } from './pages/BoletosArea';
@@ -62,6 +65,7 @@ const ProtectedLayout: React.FC = () => {
       </div>
 
       <BottomNav />
+      <CookieBanner />
     </div>
   );
 };
@@ -72,8 +76,10 @@ export function App() {
       <AuthProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
-            {/* Rota Pública Principal */}
+            {/* Rotas Públicas Principais */}
             <Route path="/" element={<PublicHome />} />
+            <Route path="/termos-de-uso" element={<TermsOfUse />} />
+            <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
 
             {/* Rotas de Autenticação e Onboarding */}
             <Route path="/login" element={<Login />} />
@@ -82,6 +88,7 @@ export function App() {
             {/* Rotas Privadas do Banco Digital */}
             <Route path="/*" element={<ProtectedLayout />} />
           </Routes>
+          <CookieBanner />
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

@@ -428,7 +428,15 @@ export const PublicHome: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-center sm:text-right">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-center sm:text-right">
+            <Link to="/termos-de-uso" className="hover:text-[#F1613A] hover:underline font-semibold">
+              Termos de Uso
+            </Link>
+            <span>•</span>
+            <Link to="/politica-de-privacidade" className="hover:text-[#19A999] hover:underline font-semibold">
+              Privacidade & LGPD
+            </Link>
+            <span>•</span>
             <span>Copyright © 2026</span>
             <a
               href="https://optmaidea.com.br"
@@ -446,3 +454,4 @@ export const PublicHome: React.FC = () => {
     </div>
   );
 };
+

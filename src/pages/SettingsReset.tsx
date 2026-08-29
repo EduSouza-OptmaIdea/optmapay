@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { resetSandboxScenario } from '../lib/seedData';
-import { Settings, RefreshCw, Download, Upload, ShieldAlert, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Settings, RefreshCw, Download, ShieldAlert, CheckCircle2, ShieldCheck, Trash2 } from 'lucide-react';
 
 export const SettingsReset: React.FC = () => {
   const { activeAccount, refreshAccounts } = useAuth();
   const [resetting, setResetting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!activeAccount) return null;
 
@@ -29,9 +30,9 @@ export const SettingsReset: React.FC = () => {
 
     setResetting(false);
     if (ok) {
-      setMsg('✅ Cenário resetado com sucesso no Supabase para dados padrão!');
+      setMsg({ type: 'success', text: 'Cenário resetado com sucesso no Supabase para dados padrão!' });
     } else {
-      setMsg('❌ Erro ao resetar cenário.');
+      setMsg({ type: 'error', text: 'Erro ao resetar cenário.' });
     }
   };
 
@@ -70,12 +71,13 @@ export const SettingsReset: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `optmapay-sandbox-export-${Date.now()}.json`;
+      a.download = `optmapay-backup-snapshot-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
+      a.remove();
 
-      setMsg('✅ Exportação concluída com sucesso!');
+      setMsg({ type: 'success', text: 'Arquivo de backup completo em JSON baixado com sucesso!' });
     } catch (err: any) {
-      setMsg(`❌ Erro ao exportar: ${err.message}`);
+      setMsg({ type: 'error', text: `Erro ao exportar: ${err.message}` });
     } finally {
       setExporting(false);
     }
@@ -85,37 +87,48 @@ export const SettingsReset: React.FC = () => {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+          <Settings className="w-5 h-5 text-[#19A999]" />
           Configurações & Reset de Cenário
         </h1>
         <p className="text-xs text-slate-500">
-          Gerenciador de restauração de fábrica e portabilidade de dados em JSON
+          Gerenciador de restauração de fábrica, portabilidade de dados em JSON e conformidade LGPD
         </p>
       </div>
 
       {msg && (
-        <div className="p-3 rounded-xl bg-slate-900 text-white font-mono text-xs shadow-md">
-          {msg}
+        <div
+          className={`p-3.5 rounded-2xl text-xs flex items-center gap-2 animate-fadeIn ${
+            msg.type === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-800 dark:text-emerald-200'
+              : 'bg-rose-50 dark:bg-rose-950/80 border border-rose-500 text-rose-800 dark:text-rose-200'
+          }`}
+        >
+          {msg.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          ) : (
+            <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+          )}
+          <span>{msg.text}</span>
         </div>
       )}
 
-      {/* Export / Import */}
+      {/* Export Snapshot */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <Download className="w-4 h-4 text-teal-600" />
-          Exportar Cenário para Outra Máquina (JSON)
+          <Download className="w-4 h-4 text-[#19A999]" />
+          Exportar Backup Completo (JSON - Portabilidade LGPD)
         </h2>
         <p className="text-xs text-slate-500">
-          Baixe um snapshot completo em arquivo JSON contendo todas as contas, transações, cartões e boletos fictícios para importar em outros ambientes de desenvolvimento.
+          Baixe um snapshot completo em arquivo JSON contendo todas as contas, transações, cartões e boletos fictícios para manter seu histórico ou importar em outros ambientes.
         </p>
 
         <button
           onClick={handleExportJson}
           disabled={exporting}
-          className="py-2.5 px-4 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-2 shadow-md shadow-teal-900/20 disabled:opacity-50"
+          className="py-2.5 px-4 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition flex items-center gap-2 shadow-sm disabled:opacity-50"
         >
           <Download className="w-4 h-4" />
-          <span>{exporting ? 'Gerando JSON...' : 'Exportar Snapshot (JSON)'}</span>
+          <span>{exporting ? 'Gerando JSON...' : 'Baixar Snapshot Completo (JSON)'}</span>
         </button>
       </div>
 
@@ -124,12 +137,12 @@ export const SettingsReset: React.FC = () => {
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
           <h2 className="text-sm font-bold text-rose-800 dark:text-rose-200">
-            Zona de Perigo: Reset de Fábrica do Supabase
+            Zona de Manutenção: Reset de Fábrica do Sandbox
           </h2>
         </div>
 
-        <p className="text-xs text-rose-800/80 dark:text-rose-300">
-          Esta ação irá apagar permanentemente todos os lançamentos, cartões e boletos criados nesta conta e repopular o banco do Supabase com as contas de teste padrão da OptmaIdea (Empresa + Pseudo Clientes).
+        <p className="text-xs text-rose-800/80 dark:text-rose-300 leading-relaxed">
+          Esta ação irá limpar todos os lançamentos e repopular o banco de dados Supabase com as contas de teste padrão da OptmaIdea (Empresa + Clientes).
         </p>
 
         <button
@@ -140,6 +153,17 @@ export const SettingsReset: React.FC = () => {
           <RefreshCw className={`w-4 h-4 ${resetting ? 'animate-spin' : ''}`} />
           <span>{resetting ? 'Resetando Banco Supabase...' : 'Resetar Cenário para Dados Padrão'}</span>
         </button>
+      </div>
+
+      {/* Legal and Privacy Links */}
+      <div className="text-center text-xs text-slate-500 dark:text-slate-400 space-x-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <Link to="/termos-de-uso" className="hover:text-[#F1613A] hover:underline">
+          Termos de Uso do Sandbox
+        </Link>
+        <span>•</span>
+        <Link to="/politica-de-privacidade" className="hover:text-[#19A999] hover:underline">
+          Política de Privacidade & LGPD
+        </Link>
       </div>
     </div>
   );
