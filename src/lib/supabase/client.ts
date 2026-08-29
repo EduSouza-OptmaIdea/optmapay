@@ -15,12 +15,14 @@ export function setStoredAnonKey(key: string): void {
 }
 
 let supabaseInstance: SupabaseClient | null = null;
+let currentKeyUsed: string | null = null;
 
 export function getSupabaseClient(): SupabaseClient {
   const anonKey = getStoredAnonKey();
   const validKey = anonKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key_for_offline';
 
-  if (!supabaseInstance) {
+  if (!supabaseInstance || currentKeyUsed !== validKey) {
+    currentKeyUsed = validKey;
     supabaseInstance = createClient(DEFAULT_SUPABASE_URL, validKey, {
       auth: {
         persistSession: true,
@@ -34,6 +36,7 @@ export function getSupabaseClient(): SupabaseClient {
 
 export function resetSupabaseClient(newAnonKey: string): SupabaseClient {
   setStoredAnonKey(newAnonKey);
+  currentKeyUsed = newAnonKey.trim();
   supabaseInstance = createClient(DEFAULT_SUPABASE_URL, newAnonKey.trim(), {
     auth: {
       persistSession: true,
@@ -43,4 +46,14 @@ export function resetSupabaseClient(newAnonKey: string): SupabaseClient {
   return supabaseInstance;
 }
 
-export const supabase = getSupabaseClient();
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getSupabaseClient();
+    const value = (client as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
+

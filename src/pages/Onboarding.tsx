@@ -3,13 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createBankAccount } from '../lib/supabase/accountService';
 import { Logo } from '../components/Logo';
-import { Building2, User, Sparkles, ArrowRight, ShieldCheck, CheckCircle2, Wallet, QrCode } from 'lucide-react';
+import { Building2, User, Sparkles, ArrowRight, ShieldCheck, CheckCircle2, Wallet, QrCode, Key } from 'lucide-react';
 import { AccountType } from '../types/sandbox';
+import { getStoredAnonKey } from '../lib/supabase/client';
+import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
-  const { user, refreshAccounts, setActiveAccountId } = useAuth();
+  const { user, isUnauthorized, refreshAccounts, setActiveAccountId } = useAuth();
 
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('merchant');
   const [name, setName] = useState('OptmaIdea Vendas & Soluções LTDA');
   const [cpfCnpj, setCpfCnpj] = useState('45.892.102/0001-90');
@@ -18,6 +21,7 @@ export const Onboarding: React.FC = () => {
   const [pixKey, setPixKey] = useState('vendas@optmaidea.com.br');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
 
   const handleTypeChange = (type: AccountType) => {
     setAccountType(type);
@@ -81,9 +85,19 @@ export const Onboarding: React.FC = () => {
       {/* Header Landing */}
       <header className="max-w-6xl w-full mx-auto flex items-center justify-between py-2">
         <Logo showBadge={true} />
-        <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-          <ShieldCheck className="w-4 h-4 text-teal-400" />
-          <span>Ambiente de Testes Fictício</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsConfigModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-teal-400 font-medium transition shadow-sm"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>Configurar Supabase</span>
+          </button>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-mono">
+            <ShieldCheck className="w-4 h-4 text-teal-400" />
+            <span>Ambiente Sandbox</span>
+          </div>
         </div>
       </header>
 
@@ -154,11 +168,32 @@ export const Onboarding: React.FC = () => {
             </p>
           </div>
 
-          {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs font-mono">
-              {errorMsg}
+          {(errorMsg || isUnauthorized || !getStoredAnonKey()) && (
+            <div className="p-4 rounded-2xl bg-amber-950/60 border border-amber-800/80 text-amber-200 text-xs space-y-3">
+              <div className="flex items-start gap-2.5">
+                <Key className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-amber-300">
+                    {errorMsg?.includes('Invalid API key') || isUnauthorized || !getStoredAnonKey()
+                      ? 'Chave API Anon do Supabase necessária'
+                      : errorMsg}
+                  </p>
+                  <p className="text-[11px] text-amber-300/80 mt-0.5">
+                    Insira a chave pública (`anon`) do seu projeto Supabase para salvar e sincronizar os dados.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsConfigModalOpen(true)}
+                className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-md"
+              >
+                <Key className="w-3.5 h-3.5" />
+                <span>Inserir Chave Anon do Supabase</span>
+              </button>
             </div>
           )}
+
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Account Type Selector */}
@@ -282,6 +317,17 @@ export const Onboarding: React.FC = () => {
       <footer className="max-w-6xl w-full mx-auto text-center text-slate-500 text-[11px]">
         OptmaPay Sandbox • Microcosmos OptmaIdea • Persistência em Tempo Real via PostgreSQL Supabase
       </footer>
+
+      {/* Supabase Config Modal */}
+      <SupabaseConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onSaved={async () => {
+          await refreshAccounts();
+          setErrorMsg(null);
+        }}
+      />
     </div>
   );
 };
+
