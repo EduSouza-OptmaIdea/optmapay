@@ -1,36 +1,79 @@
 ---
 name: optmaidea-sandbox
-description: Guidelines and architecture specs for OptmaIdea Sandbox (optmapay-sandbox) - internet banking simulator for testing online sales payment workflows, duplicatas, and webhooks.
+description: Guidelines, architecture specs, design system, and business logic for OptmaPay Sandbox (optmapay-sandbox) - internet banking simulator for testing online sales payment workflows, duplicatas, and webhooks in the OptmaIdea ecosystem.
 ---
 
-# OptmaIdea Sandbox Skill Guide (`optmapay-sandbox`)
+# OptmaPay Sandbox Skill Guide (`optmapay-sandbox`)
 
-This skill defines the technical standards, branding rules, and business logic for `optmapay-sandbox`, part of the OptmaIdea ecosystem.
+This skill defines the technical standards, branding rules, and business logic for `optmapay-sandbox`, part of the **OptmaIdea** ecosystem.
 
-## 1. Core Principles & OptmaIdea Branding
-- **Philosophy**: "Menos vaidade, mais resultado" (Less vanity, more result). Clean, fast, lightweight web applications.
-- **Golden Rule**: Every API response, webhook payload, and UI view MUST explicitly state `realMoney: false` and `environment: "sandbox"`.
-- **Color Palette**:
-  - Primary: Teal-700 (`#0F766E`)
-  - Secondary/Background: Slate-50 (`#F8FAFC`) / Slate-900 (`#0F172A`) (Dark & Light mode support)
-  - Success/Credit: Emerald-500 (`#10B981`)
-  - Fail/Debit/Alert: Rose-500 (`#F43F5E`)
+---
 
-## 2. Technical Stack
-- **Frontend**: React (Vite) + TypeScript + Tailwind CSS
-- **Backend & Auth & DB**: 100% Supabase (PostgreSQL, Supabase Auth, Webhooks, Edge/RPC Functions)
-- **State Management**: Real-time Supabase queries + React State. No local storage for core financial scenario state.
+## 1. Identidade Visual e Design System
 
-## 3. Database Schema Overview
-- `accounts`: ID, owner user_id, name, type (`merchant` or `customer`), cpf_cnpj, balance, pix_key, config JSONB.
-- `transactions`: unified financial statement entries (`deposit`, `pix`, `card`, `boleto`) with `external_reference` / `order_id`.
-- `boletos`: fake barcode charges with due date, status (`pending`, `paid`, `canceled`).
-- `cartoes`: virtual debit/credit cards with credit limits and masked numbers.
-- `webhooks_config`: registered HTTPS endpoints for events (`pix.received`, `pix.paid`, `boleto.paid`, `order.paid`).
-- `webhooks_log`: delivery logs with payload, HTTP response status, body, and retry support.
-- `api_keys`: test API keys (`sk_test_...`) linked to operator account.
+### Paleta de Cores Oficial
+- **Navy Principal**: `#29324E` (Header institucional, base dos cards dark e textos principais)
+- **Coral / Laranja CTA**: `#F1613A` (Botões de ação primária, badge Pay e botões de conversão)
+- **Verde-Água / Teal**: `#19A999` (Status ativo/sucesso, links secundários e ícones de confirmação)
+- **Mostarda / Atenção**: `#FAA832` (Alertas intermediários e avisos sandbox)
+- **Roxo Premium**: `#7B2D8E` (Totalizadores, faturamento e duplicatas)
+- **Vermelho Alerta**: `#DC2626` (Exclusivo para erros críticos e falhas de pagamento)
+- **Fundo Claro**: `#F8F6F2` (Off-white aconchegante)
+- **Fundo Escuro**: `#0F172A` / `#0B1120` (Dark mode premium)
 
-## 4. Key Workflows
-- **Active Account Context**: Operator toggles active account between Merchant (company receiving sales) and Customer (pseudo client making purchases).
-- **Atomic Pix Transfer (`transfer_pix` RPC)**: Debits customer account and credits merchant account atomically while logging mirrored transactions.
-- **Webhook Delivery Engine**: Sends POST HTTPS with 5s timeout, blocks SSRF to private IP ranges, attaches `x-optmapay-real-money: false` headers.
+### Tipografia
+- Fonte Principal: `"Plus Jakarta Sans"`, Candara, Inter, Segoe UI, sans-serif
+- Fonte Mono (Chaves, IDs, Extratos): `"JetBrains Mono"`, monospace
+
+### Modos de Tema
+- Suporte a 3 modos via `ThemeContext`: **Claro** (`light`), **Escuro** (`dark`) e **Sistema** (`system` automático).
+
+---
+
+## 2. Princípios Fundamentais & Regra Sandbox
+- **Regra de Ouro (Golden Rule)**: Todas as operações, extratos, retornos de API e payloads de webhooks DEVEM retornar:
+  ```json
+  {
+    "realMoney": false,
+    "environment": "sandbox"
+  }
+  ```
+- **Aviso Obrigatório**: Banner de topo persistente e legível informando que trata-se de ambiente de testes fictício.
+- **Copyright Oficial**: `OptmaIdea 2026. Direitos reservados.` com link para `https://optmaidea.com.br`.
+
+---
+
+## 3. Arquitetura Técnica & Rotas
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + React Router DOM
+- **Backend & Auth & DB**: 100% Supabase (PostgreSQL, Supabase Auth, Webhooks, Edge/RPC Functions, Realtime WebSocket)
+- **Rotas Públicas**:
+  - `/` -> `PublicHome` (Landing institucional, apresentação, banners, Formspree)
+  - `/login` -> `Login` (Supabase Auth: E-mail/Senha e Magic Link)
+  - `/onboarding` -> `Onboarding` (Abertura da primeira conta digital de teste)
+- **Rotas Privadas (Protegidas)**:
+  - `/dashboard` -> Visão geral, saldo e extrato unificado
+  - `/pix` -> Área Pix com QR Code dinâmico, leitor de câmera e extrato exclusivo
+  - `/boletos` -> Emissão e quitação de boletos
+  - `/cartoes` -> Cartões virtuais de débito e crédito
+  - `/settlement` -> Simulador de liquidação de duplicatas de e-commerce
+  - `/dev` -> Painel do desenvolvedor, API Keys e Webhook Logs
+  - `/meus-dados` -> Perfil do operador autenticado e contas vinculadas
+  - `/settings` -> Reset de dados e configurações
+
+---
+
+## 4. Integrações Externas
+- **Formulário de Contato**: Formspree endpoint `https://formspree.io/f/mljrvyga` com destino `optmapay.faleconosco@optmaidea.com.br`.
+- **E-mails Transacionais / Auth**: SMTP customizado (Brevo / Supabase Auth) com templates localizados em `docs/email-templates/`.
+- **Domínios de Produção**:
+  - `https://optmapay.optmaidea.com.br`
+  - `https://www.optmapay.optmaidea.com.br`
+  - `https://optmapay.vercel.app`
+- **SPA Rewrites**: `vercel.json` configurado para evitar 404 em recarregamento de página.
+
+---
+
+## 5. Padrão de Codificação de Instrução Pix OptmaPay
+Instrução gerada em QR Codes e Copia e Cola:
+`OPTMAPAY://PIX/v1?to={chave}&name={nome}&amount={valor}&ref={pedido}&desc={descricao}&env=sandbox`
+- Permite que a aplicação receptora preencha automaticamente pagador, recebedor, valor e referência sem depender de APIs externas.

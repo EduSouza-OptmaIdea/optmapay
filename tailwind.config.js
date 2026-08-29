@@ -8,13 +8,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        optma: {
-          700: '#0F766E', // Primary Teal-700
-          800: '#115E59',
-          900: '#134E4A',
-          50: '#F0FDFA',
-          100: '#CCFBF1',
+        brand: {
+          navy: '#29324E',
+          orange: '#F1613A',
+          teal: '#19A999',
+          mustard: '#FAA832',
+          purple: '#7B2D8E',
+          lightBg: '#F8F6F2',
+          darkBg: '#0F172A',
         },
+      },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'Segoe UI', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
       },
     },
   },

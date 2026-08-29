@@ -1,0 +1,27 @@
+{
+  "short_name": "OptmaPay",
+  "name": "OptmaPay Sandbox Dev Bank",
+  "description": "Internet Banking Fictício para Testes de APIs, Webhooks e Duplicatas",
+  "icons": [
+    {
+      "src": "/optmapay-ico.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/1024x1024.png",
+      "type": "image/png",
+      "sizes": "1024x1024"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0F172A",
+  "theme_color": "#29324E",
+  "display": "standalone",
+  "orientation": "portrait"
+}
