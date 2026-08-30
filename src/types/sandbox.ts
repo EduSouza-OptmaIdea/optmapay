@@ -32,6 +32,8 @@ export interface SandboxTransaction {
   description?: string;
   external_reference?: string; // Order ID / Duplicata ID
   status: TransactionStatus;
+  refunded_amount?: number;
+  related_transaction_id?: string;
   real_money: boolean; // Golden Rule: always false
   environment: string; // Golden Rule: always 'sandbox'
   created_at: string;

@@ -23,14 +23,17 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  TrendingUp,
   Wallet,
+  Check,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface TransactionWithRunningBalance extends SandboxTransaction {
   balanceBefore: number;
   balanceAfter: number;
+  alreadyRefunded: number;
+  remainingRefundable: number;
+  isFullyRefunded: boolean;
 }
 
 export const Dashboard: React.FC = () => {
@@ -50,10 +53,10 @@ export const Dashboard: React.FC = () => {
   const [dateWarning, setDateWarning] = useState<string | null>(null);
 
   // Modal Devolução / Reembolso Pix
-  const [selectedTxForRefund, setSelectedTxForRefund] = useState<SandboxTransaction | null>(null);
+  const [selectedTxForRefund, setSelectedTxForRefund] = useState<TransactionWithRunningBalance | null>(null);
   const [refundMode, setRefundMode] = useState<'total' | 'partial'>('total');
   const [partialAmount, setPartialAmount] = useState('');
-  const [refundReason, setRefundReason] = useState('Cancelamento / Acordo');
+  const [refundReason, setRefundReason] = useState('Cancelamento de compra');
   const [processingRefund, setProcessingRefund] = useState(false);
   const [refundSuccessMessage, setRefundSuccessMessage] = useState<string | null>(null);
   const [refundErrorMessage, setRefundErrorMessage] = useState<string | null>(null);
@@ -140,17 +143,33 @@ export const Dashboard: React.FC = () => {
       fetchTransactions();
     };
 
+    // Polling ativo a cada 2.5s para garantir conciliação em tempo real entre abas
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && activeAccount?.id) {
+        fetchTransactions();
+      }
+    }, 2500);
+
     window.addEventListener('optmapay:realtime_update', handleRealtime);
     return () => {
       window.removeEventListener('optmapay:realtime_update', handleRealtime);
+      clearInterval(interval);
     };
   }, [activeAccount?.id, periodFilter, customStartDate, customEndDate]);
 
-  // Agrupamento de Transações por Dia COM EVOLUÇÃO DO SALDO A PARTIR DO SALDO ANTERIOR
+  // Agrupamento de Transações por Dia COM EVOLUÇÃO DO SALDO E CÁLCULO DE DEVOLUÇÕES
   const groupedTransactions = useMemo(() => {
     if (!activeAccount) return [];
 
-    // 1. Calcula o saldo corrente regressivo a partir do saldo atual da conta
+    // Mapeamento de estornos já ocorridos para conciliação precisa
+    const refundMap = new Map<string, number>();
+    transactions.forEach((tx) => {
+      if (tx.type === 'pix' && tx.direction === 'out' && tx.related_transaction_id) {
+        const current = refundMap.get(tx.related_transaction_id) || 0;
+        refundMap.set(tx.related_transaction_id, current + Number(tx.amount));
+      }
+    });
+
     let runningBalance = Number(activeAccount.balance);
     const enrichedTransactions: TransactionWithRunningBalance[] = [];
 
@@ -166,16 +185,25 @@ export const Dashboard: React.FC = () => {
         before = after + txAmount;
       }
 
+      // Calcula quanto já foi devolvido
+      const colRefunded = Number(tx.refunded_amount || 0);
+      const mapRefunded = refundMap.get(tx.id) || 0;
+      const alreadyRefunded = Math.max(colRefunded, mapRefunded);
+      const remainingRefundable = Math.max(0, txAmount - alreadyRefunded);
+      const isFullyRefunded = tx.status === 'refunded' || remainingRefundable <= 0.009;
+
       enrichedTransactions.push({
         ...tx,
         balanceBefore: before,
         balanceAfter: after,
+        alreadyRefunded,
+        remainingRefundable,
+        isFullyRefunded,
       });
 
       runningBalance = before;
     }
 
-    // 2. Agrupa por data (DD/MM/AAAA)
     const groups: {
       dateKey: string;
       formattedDate: string;
@@ -208,9 +236,7 @@ export const Dashboard: React.FC = () => {
         }
       });
 
-      // O saldo final do dia é o balanceAfter do item mais recente do dia (index 0)
       const closingBalance = items[0].balanceAfter;
-      // O saldo inicial do dia é o balanceBefore do item mais antigo do dia (último index)
       const openingBalance = items[items.length - 1].balanceBefore;
 
       const sampleDate = new Date(items[0].created_at);
@@ -265,14 +291,25 @@ export const Dashboard: React.FC = () => {
     await fetchTransactions();
   };
 
+  // Abre modal de devolução preenchendo o saldo restante correto
+  const handleOpenRefundModal = (tx: TransactionWithRunningBalance) => {
+    if (tx.isFullyRefunded) return;
+    setSelectedTxForRefund(tx);
+    setRefundMode('total');
+    setPartialAmount(tx.remainingRefundable.toFixed(2));
+    setRefundErrorMessage(null);
+    setRefundSuccessMessage(null);
+  };
+
   // Processa a Devolução / Reembolso Pix
   const handleExecuteRefund = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTxForRefund || !activeAccount) return;
 
+    const maxRefundable = selectedTxForRefund.remainingRefundable;
     const refundAmountNum =
       refundMode === 'total'
-        ? Number(selectedTxForRefund.amount)
+        ? maxRefundable
         : parseFloat(partialAmount);
 
     if (isNaN(refundAmountNum) || refundAmountNum <= 0) {
@@ -280,9 +317,9 @@ export const Dashboard: React.FC = () => {
       return;
     }
 
-    if (refundAmountNum > Number(selectedTxForRefund.amount)) {
+    if (refundAmountNum > maxRefundable + 0.001) {
       setRefundErrorMessage(
-        `O valor de devolução não pode exceder o valor original de R$ ${Number(selectedTxForRefund.amount).toFixed(2)}.`
+        `O valor solicitado (R$ ${refundAmountNum.toFixed(2)}) excede o saldo restante disponível para estorno de R$ ${maxRefundable.toFixed(2)}.`
       );
       return;
     }
@@ -568,7 +605,7 @@ export const Dashboard: React.FC = () => {
         <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 flex items-center gap-2.5">
           <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
           <span>
-            <strong>Extrato Oficial Sandbox:</strong> Conciliação completa com <strong>Saldo Anterior</strong> e <strong>Saldo do Dia</strong> para cada período de até 60 dias. Clique em qualquer Pix recebido para efetuar devoluções totais ou parciais.
+            <strong>Extrato Oficial Sandbox:</strong> Conciliação completa com <strong>Saldo Anterior</strong> e <strong>Saldo do Dia</strong> para cada período de até 60 dias. Clique em qualquer Pix recebido com saldo remanescente para efetuar devoluções.
           </span>
         </div>
 
@@ -622,21 +659,18 @@ export const Dashboard: React.FC = () => {
                   {group.items.map((tx) => {
                     const isIn = tx.direction === 'in';
                     const isPixIn = tx.type === 'pix' && isIn;
+                    const canRefund = isPixIn && !tx.isFullyRefunded;
 
                     return (
                       <div
                         key={tx.id}
                         onClick={() => {
-                          if (isPixIn) {
-                            setSelectedTxForRefund(tx);
-                            setRefundMode('total');
-                            setPartialAmount(Number(tx.amount).toFixed(2));
-                            setRefundErrorMessage(null);
-                            setRefundSuccessMessage(null);
+                          if (canRefund) {
+                            handleOpenRefundModal(tx);
                           }
                         }}
                         className={`p-4 flex items-center justify-between gap-4 text-xs transition ${
-                          isPixIn
+                          canRefund
                             ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer'
                             : ''
                         }`}
@@ -655,10 +689,22 @@ export const Dashboard: React.FC = () => {
                           <div className="space-y-0.5">
                             <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                               <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
+
+                              {/* Badges de Status de Devolução */}
                               {isPixIn && (
-                                <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
-                                  Clique para Devolver
-                                </span>
+                                tx.isFullyRefunded ? (
+                                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded text-[10px] font-semibold">
+                                    Devolvido Integralmente
+                                  </span>
+                                ) : tx.alreadyRefunded > 0 ? (
+                                  <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
+                                    Devolver Restante (R$ {tx.remainingRefundable.toFixed(2)})
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
+                                    Clique para Devolver
+                                  </span>
+                                )
                               )}
                             </p>
                             <p className="text-[11px] text-slate-500">
@@ -687,7 +733,7 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* MODAL DEVOLUÇÃO / ESTORNO PIX (PARCIAL OU TOTAL) */}
+      {/* MODAL DEVOLUÇÃO / ESTORNO PIX (COM CONTROLE DO SALDO RESTANTE) */}
       {selectedTxForRefund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200 dark:border-slate-700">
@@ -719,14 +765,30 @@ export const Dashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Detalhes do Pix Original */}
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Pix Original Recebido</span>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                    R$ {Number(selectedTxForRefund.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {/* Detalhes do Pix Original e Saldo Restante */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Pix Original Recebido</span>
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                      R$ {Number(selectedTxForRefund.amount).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {selectedTxForRefund.alreadyRefunded > 0 && (
+                    <div className="flex justify-between items-center text-rose-600 dark:text-rose-400">
+                      <span>Já Devolvido Anteriormente:</span>
+                      <span className="font-mono font-bold">- R$ {selectedTxForRefund.alreadyRefunded.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 font-bold">
+                    <span>Saldo Restante Disponível:</span>
+                    <span className="font-mono text-sm">R$ {selectedTxForRefund.remainingRefundable.toFixed(2)}</span>
+                  </div>
+
+                  <p className="text-slate-500 text-[11px] pt-1">
+                    De: <strong>{selectedTxForRefund.counterparty_name || 'Conta Pagadora'}</strong> • {new Date(selectedTxForRefund.created_at).toLocaleString('pt-BR')}
                   </p>
-                  <p className="text-slate-500">De: <strong>{selectedTxForRefund.counterparty_name || 'Conta Pagadora'}</strong></p>
-                  <p className="text-slate-400 text-[10px]">Data: {new Date(selectedTxForRefund.created_at).toLocaleString('pt-BR')}</p>
                 </div>
 
                 {/* Seleção Total vs Parcial */}
@@ -744,12 +806,15 @@ export const Dashboard: React.FC = () => {
                           : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
                       }`}
                     >
-                      Devolução Total (100%)
+                      Devolver Restante (R$ {selectedTxForRefund.remainingRefundable.toFixed(2)})
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setRefundMode('partial')}
+                      onClick={() => {
+                        setRefundMode('partial');
+                        setPartialAmount((selectedTxForRefund.remainingRefundable / 2).toFixed(2));
+                      }}
                       className={`py-2 px-3 rounded-xl border font-bold transition ${
                         refundMode === 'partial'
                           ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-[#19A999]'
@@ -764,13 +829,13 @@ export const Dashboard: React.FC = () => {
                 {refundMode === 'partial' && (
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Valor a Devolver (R$)
+                      Valor a Devolver (Máximo R$ {selectedTxForRefund.remainingRefundable.toFixed(2)})
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       min="0.01"
-                      max={Number(selectedTxForRefund.amount)}
+                      max={selectedTxForRefund.remainingRefundable}
                       value={partialAmount}
                       onChange={(e) => setPartialAmount(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-rose-600 outline-none focus:ring-2 focus:ring-rose-500"

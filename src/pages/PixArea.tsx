@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { MobileQrScannerModal } from '../components/MobileQrScannerModal';
@@ -48,6 +48,12 @@ interface StoredPixCharge {
   paidAt?: string;
 }
 
+interface EnrichedPixTransaction extends SandboxTransaction {
+  alreadyRefunded: number;
+  remainingRefundable: number;
+  isFullyRefunded: boolean;
+}
+
 export const PixArea: React.FC = () => {
   const { activeAccount, refreshAccounts } = useAuth();
   const [activeTab, setActiveTab] = useState<'pay' | 'receive' | 'generate' | 'charges'>('pay');
@@ -86,7 +92,7 @@ export const PixArea: React.FC = () => {
   } | null>(null);
 
   // Modal Devolução Pix
-  const [selectedTxForRefund, setSelectedTxForRefund] = useState<SandboxTransaction | null>(null);
+  const [selectedTxForRefund, setSelectedTxForRefund] = useState<EnrichedPixTransaction | null>(null);
   const [refundMode, setRefundMode] = useState<'total' | 'partial'>('total');
   const [partialAmount, setPartialAmount] = useState('');
   const [refundReason, setRefundReason] = useState('Cancelamento de compra');
@@ -124,6 +130,66 @@ export const PixArea: React.FC = () => {
     }
   };
 
+  // Reconciliação em Tempo Real: Minhas Cobranças vs Transações
+  const reconciledCharges = useMemo(() => {
+    return storedCharges.map((ch) => {
+      // Se já está marcada como paga, preserva
+      if (ch.paid) return ch;
+
+      // Procura transação de entrada correspondente
+      const matchedTx = pixTransactions.find(
+        (tx) => tx.direction === 'in' && tx.external_reference === ch.txRef
+      );
+
+      if (matchedTx) {
+        return {
+          ...ch,
+          paid: true,
+          payerName: matchedTx.counterparty_name || 'Cliente Pagador',
+          paidAt: matchedTx.created_at,
+        };
+      }
+
+      return ch;
+    });
+  }, [storedCharges, pixTransactions]);
+
+  // Se houver mudanças na reconciliação, salva de volta no storage
+  useEffect(() => {
+    if (!activeAccount?.id || storedCharges.length === 0) return;
+    const hasDiff = reconciledCharges.some((r, i) => r.paid !== storedCharges[i]?.paid);
+    if (hasDiff) {
+      saveCharges(reconciledCharges);
+    }
+  }, [reconciledCharges, activeAccount?.id]);
+
+  // Transações Pix Enriquecidas com Controle de Devoluções
+  const enrichedPixTransactions: EnrichedPixTransaction[] = useMemo(() => {
+    const refundMap = new Map<string, number>();
+    pixTransactions.forEach((tx) => {
+      if (tx.type === 'pix' && tx.direction === 'out' && tx.related_transaction_id) {
+        const current = refundMap.get(tx.related_transaction_id) || 0;
+        refundMap.set(tx.related_transaction_id, current + Number(tx.amount));
+      }
+    });
+
+    return pixTransactions.map((tx) => {
+      const txAmount = Number(tx.amount);
+      const colRefunded = Number(tx.refunded_amount || 0);
+      const mapRefunded = refundMap.get(tx.id) || 0;
+      const alreadyRefunded = Math.max(colRefunded, mapRefunded);
+      const remainingRefundable = Math.max(0, txAmount - alreadyRefunded);
+      const isFullyRefunded = tx.status === 'refunded' || remainingRefundable <= 0.009;
+
+      return {
+        ...tx,
+        alreadyRefunded,
+        remainingRefundable,
+        isFullyRefunded,
+      };
+    });
+  }, [pixTransactions]);
+
   // Timer de Contagem Regressiva de 10 Minutos (600 segundos)
   useEffect(() => {
     if (!generatedExpiresAt || dynamicChargePaid?.paid) return;
@@ -139,12 +205,27 @@ export const PixArea: React.FC = () => {
     return () => clearInterval(interval);
   }, [generatedExpiresAt, dynamicChargePaid?.paid]);
 
-  // BAIXA AUTOMÁTICA ULTRA-RÁPIDA (POLLING ATIVO A CADA 800MS ENQUANTO QR CODE ABERTO)
+  // BAIXA AUTOMÁTICA ULTRA-RÁPIDA (POLLING ATIVO A CADA 500MS ENQUANTO QR CODE ABERTO)
   useEffect(() => {
     if (!generatedTxRef || !activeAccount?.id || dynamicChargePaid?.paid) return;
 
     const pollSettlement = async () => {
       try {
+        // Verifica na memória
+        const memMatch = pixTransactions.find(
+          (t) => t.direction === 'in' && t.external_reference === generatedTxRef
+        );
+        if (memMatch) {
+          setDynamicChargePaid({
+            paid: true,
+            payerName: memMatch.counterparty_name || 'Cliente Pagador',
+            amount: Number(memMatch.amount),
+            paidAt: memMatch.created_at,
+          });
+          return;
+        }
+
+        // Verifica no Supabase
         const { data } = await supabase
           .from('transactions')
           .select('*')
@@ -161,24 +242,6 @@ export const PixArea: React.FC = () => {
             paidAt: data.created_at,
           });
 
-          // Atualiza lista de cobranças persistidas
-          setStoredCharges((prev) => {
-            const updated = prev.map((ch) =>
-              ch.txRef === generatedTxRef
-                ? {
-                    ...ch,
-                    paid: true,
-                    payerName: data.counterparty_name || 'Cliente Pagador',
-                    paidAt: data.created_at,
-                  }
-                : ch
-            );
-            if (activeAccount?.id) {
-              localStorage.setItem(`optmapay_pix_charges_${activeAccount.id}`, JSON.stringify(updated));
-            }
-            return updated;
-          });
-
           fetchPixTransactions();
           refreshAccounts();
         }
@@ -187,11 +250,11 @@ export const PixArea: React.FC = () => {
       }
     };
 
-    const interval = setInterval(pollSettlement, 800);
+    const interval = setInterval(pollSettlement, 500);
     pollSettlement();
 
     return () => clearInterval(interval);
-  }, [generatedTxRef, activeAccount?.id, dynamicChargePaid?.paid]);
+  }, [generatedTxRef, activeAccount?.id, dynamicChargePaid?.paid, pixTransactions]);
 
   const fetchPixTransactions = async () => {
     if (!activeAccount) return;
@@ -215,6 +278,13 @@ export const PixArea: React.FC = () => {
   useEffect(() => {
     fetchPixTransactions();
 
+    // Polling ativo a cada 1.5s para sincronizar extrato Pix e baixas em tempo real
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && activeAccountRef.current?.id) {
+        fetchPixTransactions();
+      }
+    }, 1500);
+
     const handleRealtime = (e: any) => {
       fetchPixTransactions();
 
@@ -233,26 +303,6 @@ export const PixArea: React.FC = () => {
               paidAt: row.created_at,
             });
           }
-
-          setStoredCharges((prev) => {
-            const updated = prev.map((ch) =>
-              ch.txRef === row.external_reference
-                ? {
-                    ...ch,
-                    paid: true,
-                    payerName: row.counterparty_name || 'Cliente Pagador',
-                    paidAt: row.created_at,
-                  }
-                : ch
-            );
-            if (activeAccountRef.current?.id) {
-              localStorage.setItem(
-                `optmapay_pix_charges_${activeAccountRef.current.id}`,
-                JSON.stringify(updated)
-              );
-            }
-            return updated;
-          });
         }
       }
     };
@@ -260,6 +310,7 @@ export const PixArea: React.FC = () => {
     window.addEventListener('optmapay:realtime_update', handleRealtime);
     return () => {
       window.removeEventListener('optmapay:realtime_update', handleRealtime);
+      clearInterval(interval);
     };
   }, [activeAccount?.id, generatedTxRef]);
 
@@ -330,7 +381,6 @@ export const PixArea: React.FC = () => {
   };
 
   const handleCopyDynamicPayload = () => {
-    // Bloqueia cópia se já foi paga ou expirou
     if (!generatedPayload || dynamicChargePaid?.paid || countdownSeconds <= 0) return;
     navigator.clipboard.writeText(generatedPayload);
     setCopiedDynamicPayload(true);
@@ -360,7 +410,6 @@ export const PixArea: React.FC = () => {
     setCountdownSeconds(600);
     setDynamicChargePaid(null);
 
-    // Salva na lista de cobranças gerenciadas
     const newCharge: StoredPixCharge = {
       id: crypto.randomUUID ? crypto.randomUUID() : `ch_${Date.now()}`,
       txRef: randomTxRef,
@@ -425,14 +474,25 @@ export const PixArea: React.FC = () => {
     }
   };
 
+  // Abre modal de devolução preenchendo o saldo restante correto
+  const handleOpenRefundModal = (tx: EnrichedPixTransaction) => {
+    if (tx.isFullyRefunded) return;
+    setSelectedTxForRefund(tx);
+    setRefundMode('total');
+    setPartialAmount(tx.remainingRefundable.toFixed(2));
+    setRefundErrorMessage(null);
+    setRefundSuccessMessage(null);
+  };
+
   // Execução de Devolução Pix
   const handleExecuteRefund = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTxForRefund || !activeAccount) return;
 
+    const maxRefundable = selectedTxForRefund.remainingRefundable;
     const refundAmountNum =
       refundMode === 'total'
-        ? Number(selectedTxForRefund.amount)
+        ? maxRefundable
         : parseFloat(partialAmount);
 
     if (isNaN(refundAmountNum) || refundAmountNum <= 0) {
@@ -440,9 +500,9 @@ export const PixArea: React.FC = () => {
       return;
     }
 
-    if (refundAmountNum > Number(selectedTxForRefund.amount)) {
+    if (refundAmountNum > maxRefundable + 0.001) {
       setRefundErrorMessage(
-        `O valor de devolução não pode exceder o valor original de R$ ${Number(selectedTxForRefund.amount).toFixed(2)}.`
+        `O valor solicitado (R$ ${refundAmountNum.toFixed(2)}) excede o saldo restante disponível para estorno de R$ ${maxRefundable.toFixed(2)}.`
       );
       return;
     }
@@ -954,13 +1014,13 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             </button>
           </div>
 
-          {storedCharges.length === 0 ? (
+          {reconciledCharges.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
               Nenhuma cobrança gerada nesta sessão. Gere uma cobrança na aba "Cobrança com Valor".
             </div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/60 overflow-x-auto text-xs">
-              {storedCharges.map((ch) => {
+              {reconciledCharges.map((ch) => {
                 const isExpired = Date.now() > ch.expiresAt && !ch.paid;
                 const statusBadge = ch.paid ? (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 font-bold text-[10px]">
@@ -1009,10 +1069,11 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                         </button>
                       ) : (
                         <div
-                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center gap-1 font-semibold text-[10px]"
                           title={ch.paid ? 'Cobrança já foi paga' : 'Cobrança expirada'}
                         >
                           <Lock className="w-3.5 h-3.5" />
+                          <span>{ch.paid ? 'Paga' : 'Expirada'}</span>
                         </div>
                       )}
                     </div>
@@ -1024,7 +1085,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       )}
 
-      {/* EXTRATO EXCLUSIVO DE PIX COM BOTÃO DE DEVOLUÇÃO */}
+      {/* EXTRATO EXCLUSIVO DE PIX COM CONTROLE DE DEVOLUÇÕES */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -1033,7 +1094,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               Extrato Exclusivo de Pix ({activeAccount.name})
             </h2>
             <p className="text-xs text-slate-500">
-              Histórico de transferências Pix enviadas e recebidas (Clique em um Pix recebido para estornar/devolver)
+              Histórico de transferências Pix enviadas e recebidas (Clique em um Pix recebido com saldo restante para estornar)
             </p>
           </div>
           <button
@@ -1045,28 +1106,26 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
           </button>
         </div>
 
-        {pixTransactions.length === 0 ? (
+        {enrichedPixTransactions.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
             Nenhuma transferência Pix realizada ou recebida por esta conta nos últimos 60 dias.
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700/60 overflow-x-auto">
-            {pixTransactions.map((tx) => {
+            {enrichedPixTransactions.map((tx) => {
               const isIn = tx.direction === 'in';
+              const canRefund = isIn && !tx.isFullyRefunded;
+
               return (
                 <div
                   key={tx.id}
                   onClick={() => {
-                    if (isIn) {
-                      setSelectedTxForRefund(tx);
-                      setRefundMode('total');
-                      setPartialAmount(Number(tx.amount).toFixed(2));
-                      setRefundErrorMessage(null);
-                      setRefundSuccessMessage(null);
+                    if (canRefund) {
+                      handleOpenRefundModal(tx);
                     }
                   }}
                   className={`py-3 flex items-center justify-between gap-4 text-xs transition ${
-                    isIn ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer' : ''
+                    canRefund ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer' : ''
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1083,9 +1142,19 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                       <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                         <span>{isIn ? `Pix Recebido de ${tx.counterparty_name || 'Conta Externa'}` : `Pix Enviado para ${tx.counterparty_name || 'Conta Externa'}`}</span>
                         {isIn && (
-                          <span className="px-1.5 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[9px] font-semibold">
-                            Devolver Pix
-                          </span>
+                          tx.isFullyRefunded ? (
+                            <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded text-[9px] font-semibold">
+                              Devolvido Integralmente
+                            </span>
+                          ) : tx.alreadyRefunded > 0 ? (
+                            <span className="px-1.5 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[9px] font-semibold border border-teal-500/20">
+                              Devolver Restante (R$ {tx.remainingRefundable.toFixed(2)})
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[9px] font-semibold">
+                              Devolver Pix
+                            </span>
+                          )
                         )}
                       </p>
                       <p className="text-[11px] text-slate-400">
@@ -1111,7 +1180,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         )}
       </div>
 
-      {/* MODAL DEVOLUÇÃO / ESTORNO PIX (PARCIAL OU TOTAL) */}
+      {/* MODAL DEVOLUÇÃO / ESTORNO PIX (COM CONTROLE DO SALDO RESTANTE) */}
       {selectedTxForRefund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200 dark:border-slate-700">
@@ -1143,15 +1212,33 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                   </div>
                 )}
 
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Pix Original Recebido</span>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
-                    R$ {Number(selectedTxForRefund.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {/* Detalhes do Pix Original e Saldo Restante */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Pix Original Recebido</span>
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                      R$ {Number(selectedTxForRefund.amount).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {selectedTxForRefund.alreadyRefunded > 0 && (
+                    <div className="flex justify-between items-center text-rose-600 dark:text-rose-400">
+                      <span>Já Devolvido Anteriormente:</span>
+                      <span className="font-mono font-bold">- R$ {selectedTxForRefund.alreadyRefunded.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 font-bold">
+                    <span>Saldo Restante Disponível:</span>
+                    <span className="font-mono text-sm">R$ {selectedTxForRefund.remainingRefundable.toFixed(2)}</span>
+                  </div>
+
+                  <p className="text-slate-500 text-[11px] pt-1">
+                    De: <strong>{selectedTxForRefund.counterparty_name || 'Conta Pagadora'}</strong> • {new Date(selectedTxForRefund.created_at).toLocaleString('pt-BR')}
                   </p>
-                  <p className="text-slate-500">De: <strong>{selectedTxForRefund.counterparty_name || 'Conta Pagadora'}</strong></p>
-                  <p className="text-slate-400 text-[10px]">Data: {new Date(selectedTxForRefund.created_at).toLocaleString('pt-BR')}</p>
                 </div>
 
+                {/* Seleção Total vs Parcial */}
                 <div className="space-y-2">
                   <label className="block font-semibold text-slate-700 dark:text-slate-300">
                     Tipo de Devolução
@@ -1166,12 +1253,15 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                           : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
                       }`}
                     >
-                      Devolução Total (100%)
+                      Devolver Restante (R$ {selectedTxForRefund.remainingRefundable.toFixed(2)})
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setRefundMode('partial')}
+                      onClick={() => {
+                        setRefundMode('partial');
+                        setPartialAmount((selectedTxForRefund.remainingRefundable / 2).toFixed(2));
+                      }}
                       className={`py-2 px-3 rounded-xl border font-bold transition ${
                         refundMode === 'partial'
                           ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-[#19A999]'
@@ -1186,13 +1276,13 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                 {refundMode === 'partial' && (
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Valor a Devolver (R$)
+                      Valor a Devolver (Máximo R$ {selectedTxForRefund.remainingRefundable.toFixed(2)})
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       min="0.01"
-                      max={Number(selectedTxForRefund.amount)}
+                      max={selectedTxForRefund.remainingRefundable}
                       value={partialAmount}
                       onChange={(e) => setPartialAmount(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-rose-600 outline-none focus:ring-2 focus:ring-rose-500"
