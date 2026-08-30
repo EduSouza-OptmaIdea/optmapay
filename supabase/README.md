@@ -52,6 +52,7 @@ Seguindo a mesma arquitetura validada do **OptmaSMSGate**, dividimos os e-mails 
    - `20260829000000_initial_schema.sql`
    - `20260829000001_rpc_functions.sql`
    - `20260829000002_data_retention_and_warnings.sql`
+   - `20260829000003_security_hardening.sql` (Limpeza completa de avisos do Supabase Advisors)
 4. Na aba **Database** -> **Replication**, certifique-se de que as tabelas `accounts`, `transactions` e `boletos` estão com o **Realtime ativado**.
 
 ---
