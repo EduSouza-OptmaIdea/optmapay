@@ -87,13 +87,13 @@ VITE_SUPABASE_URL=https://sua-instancia.supabase.co
 VITE_SUPABASE_ANON_KEY=sua_chave_publica_anon
 
 # Servidor SMTP (Server-side / Vercel)
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
+SMTP_HOST=smtp_host_do_seu_provedor
+SMTP_PORT=smtp_port_do_seu_provedor
 SMTP_USER=seu_usuario_smtp
 SMTP_PASSWORD=sua_senha_ou_api_key_smtp
 SMTP_SECURE=false
 SMTP_REQUIRE_TLS=true
-SMTP_FROM_EMAIL=naoresponda@auth.optmapay.optmaidea.com.br
+SMTP_FROM_EMAIL=email_de_remetente@email.com.br
 SMTP_FROM_NAME="OptmaPay | Banco Sandbox para Devs"
 ```
 
