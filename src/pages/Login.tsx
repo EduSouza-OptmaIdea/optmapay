@@ -12,7 +12,10 @@ import {
   AlertCircle,
   Sparkles,
   KeyRound,
-  ExternalLink,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -25,6 +28,8 @@ export const Login: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -33,6 +38,60 @@ export const Login: React.FC = () => {
       navigate('/dashboard');
     }
   }, [user, navigate]);
+
+  // Gerador de Senha Forte
+  const generateStrongPassword = () => {
+    const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$%&*?_';
+
+    let generated = '';
+    // Garante pelo menos um de cada
+    generated += uppercase[Math.floor(Math.random() * uppercase.length)];
+    generated += lowercase[Math.floor(Math.random() * lowercase.length)];
+    generated += numbers[Math.floor(Math.random() * numbers.length)];
+    generated += symbols[Math.floor(Math.random() * symbols.length)];
+
+    const allChars = uppercase + lowercase + numbers + symbols;
+    for (let i = 4; i < 14; i++) {
+      generated += allChars[Math.floor(Math.random() * allChars.length)];
+    }
+
+    // Embaralha
+    const shuffled = generated
+      .split('')
+      .sort(() => 0.5 - Math.random())
+      .join('');
+
+    setPassword(shuffled);
+    setShowPassword(true);
+    setCopiedPassword(true);
+    navigator.clipboard.writeText(shuffled);
+    setTimeout(() => setCopiedPassword(false), 2500);
+  };
+
+  // Cálculo da Força da Senha
+  const calculatePasswordStrength = (pass: string) => {
+    let score = 0;
+    if (pass.length >= 8) score += 1;
+    if (/[A-Z]/.test(pass)) score += 1;
+    if (/[0-9]/.test(pass)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pass)) score += 1;
+    return score;
+  };
+
+  const passwordStrength = calculatePasswordStrength(password);
+
+  const getStrengthLabel = (score: number) => {
+    if (!password) return { label: '', color: 'bg-slate-200 dark:bg-slate-700', text: '' };
+    if (score <= 1) return { label: 'Fraca', color: 'bg-rose-500', text: 'text-rose-500' };
+    if (score === 2) return { label: 'Razoável', color: 'bg-amber-500', text: 'text-amber-500' };
+    if (score === 3) return { label: 'Forte', color: 'bg-teal-500', text: 'text-teal-500' };
+    return { label: 'Muito Forte', color: 'bg-[#19A999]', text: 'text-[#19A999]' };
+  };
+
+  const strength = getStrengthLabel(passwordStrength);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +122,7 @@ export const Login: React.FC = () => {
         } else {
           setMessage({
             type: 'success',
-            text: 'Conta criada! Se a confirmação de e-mail estiver ativa no Supabase, verifique sua caixa de entrada.',
+            text: 'Conta criada! Verifique seu e-mail para confirmar seu cadastro.',
           });
         }
       } else if (mode === 'magiclink') {
@@ -118,7 +177,7 @@ export const Login: React.FC = () => {
             </h1>
             <p className="text-xs text-slate-500">
               {mode === 'signin'
-                ? 'Entre com seu e-mail e senha cadastrados no Supabase'
+                ? 'Entre com seu e-mail e senha cadastrados'
                 : mode === 'signup'
                 ? 'Cadastre seu e-mail para operar o banco digital sandbox'
                 : 'Enviaremos um link de acesso rápido ao seu e-mail'}
@@ -209,22 +268,79 @@ export const Login: React.FC = () => {
             </div>
 
             {mode !== 'magiclink' && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Senha
-                </label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Senha
+                  </label>
+
+                  {/* Sugerir Senha Forte (exibido na aba Criar Conta) */}
+                  {mode === 'signup' && (
+                    <button
+                      type="button"
+                      onClick={generateStrongPassword}
+                      className="text-[11px] font-bold text-[#19A999] hover:text-[#158f81] flex items-center gap-1 transition"
+                      title="Gerar e copiar senha forte segura"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{copiedPassword ? 'Copiada para área de transferência!' : 'Sugerir Senha Forte'}</span>
+                    </button>
+                  )}
+                </div>
+
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Mínimo 6 caracteres"
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#F1613A] outline-none"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#F1613A] outline-none"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+
+                {/* Medidor de Força de Senha no Cadastro */}
+                {mode === 'signup' && password.length > 0 && (
+                  <div className="space-y-1.5 pt-1 animate-fadeIn">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Força da senha:</span>
+                      <span className={`font-bold ${strength.text}`}>{strength.label}</span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                      <div className={`rounded-full transition-all ${passwordStrength >= 1 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
+                      <div className={`rounded-full transition-all ${passwordStrength >= 2 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
+                      <div className={`rounded-full transition-all ${passwordStrength >= 3 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
+                      <div className={`rounded-full transition-all ${passwordStrength >= 4 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
+                    </div>
+
+                    {/* Requisitos mínimos */}
+                    <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500 pt-1">
+                      <div className={`flex items-center gap-1 ${password.length >= 8 ? 'text-emerald-500 font-semibold' : ''}`}>
+                        <span>• 8+ caracteres</span>
+                      </div>
+                      <div className={`flex items-center gap-1 ${/[A-Z]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
+                        <span>• Letra maiúscula</span>
+                      </div>
+                      <div className={`flex items-center gap-1 ${/[0-9]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
+                        <span>• Número (0-9)</span>
+                      </div>
+                      <div className={`flex items-center gap-1 ${/[^A-Za-z0-9]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
+                        <span>• Símbolo (@#$!%)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
