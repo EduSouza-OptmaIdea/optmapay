@@ -208,9 +208,20 @@ export const Login: React.FC = () => {
         });
       }
     } catch (err: any) {
+      let friendlyMessage = err.message || 'Erro ao realizar autenticação.';
+      if (friendlyMessage.includes('Invalid login credentials')) {
+        friendlyMessage = 'E-mail ou senha incorretos. Verifique os dados digitados ou confirme se sua conta já foi ativada por e-mail.';
+      } else if (friendlyMessage.includes('Email not confirmed')) {
+        friendlyMessage = 'Seu endereço de e-mail ainda não foi confirmado. Verifique sua caixa de entrada e clique no link recebido.';
+      } else if (friendlyMessage.includes('User already registered')) {
+        friendlyMessage = 'Este e-mail já possui cadastro. Faça login ou recupere sua senha.';
+      } else if (friendlyMessage.includes('security') || friendlyMessage.includes('429') || friendlyMessage.includes('rate limit')) {
+        friendlyMessage = 'Muitas tentativas em curto intervalo. Por segurança, aguarde cerca de 30 segundos.';
+      }
+
       setMessage({
         type: 'error',
-        text: err.message || 'Erro ao realizar autenticação.',
+        text: friendlyMessage,
       });
     } finally {
       setLoading(false);

@@ -18,14 +18,17 @@ export async function fetchUserAccounts(userId?: string): Promise<{ accounts: Sa
     return { accounts: [], isUnauthorized: true };
   }
 
+  // Isolamento estrito: só busca contas do usuário autenticado logado
+  if (!userId || userId.trim() === '' || userId === '00000000-0000-0000-0000-000000000001') {
+    return { accounts: [], isUnauthorized: false };
+  }
+
   try {
-    let query = client.from('accounts').select('*');
-
-    if (userId && userId.trim() !== '' && userId !== '00000000-0000-0000-0000-000000000001') {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: true });
+    const { data, error } = await client
+      .from('accounts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
 
     if (error) {
       if (error.code === 'PGRST301' || error.message?.includes('Invalid API key') || error.message?.includes('JWT')) {
@@ -44,9 +47,9 @@ export async function fetchUserAccounts(userId?: string): Promise<{ accounts: Sa
 export async function createBankAccount(userId: string | undefined, input: CreateAccountInput): Promise<SandboxAccount | null> {
   const client = getSupabaseClient();
 
-  const validUserId = (userId && userId.trim() !== '' && userId !== '00000000-0000-0000-0000-000000000001')
-    ? userId
-    : null;
+  if (!userId || userId.trim() === '') {
+    throw new Error('É necessário estar autenticado para criar uma conta bancária.');
+  }
 
   const agency = '0001';
   const accountNumber = `${Math.floor(10000 + Math.random() * 90000)}-${Math.floor(1 + Math.random() * 9)}`;
@@ -57,7 +60,7 @@ export async function createBankAccount(userId: string | undefined, input: Creat
     : `pix.${input.cpf_cnpj.replace(/[^0-9]/g, '')}@optmapay.fake`;
 
   const newAccount = {
-    user_id: validUserId,
+    user_id: userId,
     name: input.name,
     type: input.type,
     cpf_cnpj: input.cpf_cnpj,
@@ -85,14 +88,13 @@ export async function createBankAccount(userId: string | undefined, input: Creat
 export async function deleteSandboxAccountRPC(accountId: string): Promise<any> {
   const client = getSupabaseClient();
   
-  // Tenta via RPC atômica
   const { data, error } = await client.rpc('delete_sandbox_account', {
     p_account_id: accountId,
   });
 
   if (error) {
-    // Fallback: se a RPC ainda não tiver sido criada no Supabase SQL Editor, realiza exclusões diretas em cascata
-    console.warn('RPC delete_sandbox_account não encontrada. Executando fallback em cascata...', error.message);
+    // Fallback client-side
+    console.warn('RPC delete_sandbox_account não encontrada. Executando exclusão direta...', error.message);
     await client.from('transactions').delete().or(`account_id.eq.${accountId},counterparty_account_id.eq.${accountId}`);
     await client.from('boletos').delete().eq('account_id', accountId);
     await client.from('cartoes').delete().eq('account_id', accountId);
@@ -116,7 +118,6 @@ export async function exportAccountDataJson(accountId: string): Promise<any> {
   });
 
   if (error || !data) {
-    // Fallback client query
     const { data: account } = await client.from('accounts').select('*').eq('id', accountId).single();
     const { data: transactions } = await client.from('transactions').select('*').eq('account_id', accountId);
     const { data: boletos } = await client.from('boletos').select('*').eq('account_id', accountId);
@@ -151,7 +152,6 @@ export async function depositFundsRPC(accountId: string, amount: number, descrip
   });
 
   if (error) {
-    // Fallback: update account balance and insert transaction
     const { data: acc } = await client.from('accounts').select('balance').eq('id', accountId).single();
     const newBal = (acc?.balance || 0) + amount;
     await client.from('accounts').update({ balance: newBal }).eq('id', accountId);

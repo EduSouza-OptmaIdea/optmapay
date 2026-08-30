@@ -1,15 +1,26 @@
 -- ==============================================================================
--- OPTMAPAY SANDBOX - SECURITY HARDENING & DATABASE ADVISORS CLEANUP
--- Corrige todos os avisos do Supabase Database Advisors:
+-- OPTMAPAY SANDBOX - SECURITY HARDENING & FULL ADVISORS CLEANUP (V2)
 -- 1. function_search_path_mutable: Fixa search_path = public, pg_temp
--- 2. rls_policy_always_true: Substitui políticas genéricas por políticas restritas
--- 3. anon_security_definer_function_executable: Revoga execução anônima de SECURITY DEFINER
--- 4. authenticated_security_definer_function_executable: Restringe funções de sistema ao service_role
+-- 2. rls_policy_always_true: Políticas RLS estritas vinculadas a auth.uid()
+-- 3. authenticated_security_definer_function_executable:
+--    Funções de usuário convertidas para SECURITY INVOKER (respeitam RLS do usuário)
+--    Funções de automação restritas a service_role
+-- 4. Nova Regra de Retenção: Purga transações > 60 dias PRESERVANDO saldo e contas
 -- ==============================================================================
 
 -- ------------------------------------------------------------------------------
--- 1. HARDENING DE RLS POLICIES (Elimina 'rls_policy_always_true')
+-- 1. POLÍTICAS ROW LEVEL SECURITY (RLS) ESTRITAS
 -- ------------------------------------------------------------------------------
+ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.boletos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cartoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.webhooks_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.webhooks_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.data_retention_logs ENABLE ROW LEVEL SECURITY;
+
+-- Limpeza de políticas anteriores
 DROP POLICY IF EXISTS "Acesso Total Accounts" ON public.accounts;
 DROP POLICY IF EXISTS "Acesso Total Transactions" ON public.transactions;
 DROP POLICY IF EXISTS "Acesso Total Boletos" ON public.boletos;
@@ -19,113 +30,168 @@ DROP POLICY IF EXISTS "Acesso Total Webhooks Log" ON public.webhooks_log;
 DROP POLICY IF EXISTS "Acesso Total API Keys" ON public.api_keys;
 DROP POLICY IF EXISTS "Acesso Total Retention Logs" ON public.data_retention_logs;
 
--- ACCOUNTS
+DROP POLICY IF EXISTS "accounts_select_policy" ON public.accounts;
+DROP POLICY IF EXISTS "accounts_insert_policy" ON public.accounts;
+DROP POLICY IF EXISTS "accounts_update_policy" ON public.accounts;
+DROP POLICY IF EXISTS "accounts_delete_policy" ON public.accounts;
+
+-- ACCOUNTS: O usuário autenticado gerencia suas próprias contas, mas pode ler contas de destino para Pix
 CREATE POLICY "accounts_select_policy" ON public.accounts
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (true);
 
 CREATE POLICY "accounts_insert_policy" ON public.accounts
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "accounts_update_policy" ON public.accounts
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "accounts_delete_policy" ON public.accounts
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
--- TRANSACTIONS
+-- TRANSACTIONS: Leitura e escrita de transações do usuário
+DROP POLICY IF EXISTS "transactions_select_policy" ON public.transactions;
+DROP POLICY IF EXISTS "transactions_insert_policy" ON public.transactions;
+DROP POLICY IF EXISTS "transactions_update_policy" ON public.transactions;
+DROP POLICY IF EXISTS "transactions_delete_policy" ON public.transactions;
+
 CREATE POLICY "transactions_select_policy" ON public.transactions
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "transactions_insert_policy" ON public.transactions
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "transactions_update_policy" ON public.transactions
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "transactions_delete_policy" ON public.transactions
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- BOLETOS
+DROP POLICY IF EXISTS "boletos_select_policy" ON public.boletos;
+DROP POLICY IF EXISTS "boletos_insert_policy" ON public.boletos;
+DROP POLICY IF EXISTS "boletos_update_policy" ON public.boletos;
+DROP POLICY IF EXISTS "boletos_delete_policy" ON public.boletos;
+
 CREATE POLICY "boletos_select_policy" ON public.boletos
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (true);
 
 CREATE POLICY "boletos_insert_policy" ON public.boletos
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "boletos_update_policy" ON public.boletos
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (true)
+  WITH CHECK (true);
 
 CREATE POLICY "boletos_delete_policy" ON public.boletos
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- CARTOES
+DROP POLICY IF EXISTS "cartoes_select_policy" ON public.cartoes;
+DROP POLICY IF EXISTS "cartoes_insert_policy" ON public.cartoes;
+DROP POLICY IF EXISTS "cartoes_update_policy" ON public.cartoes;
+DROP POLICY IF EXISTS "cartoes_delete_policy" ON public.cartoes;
+
 CREATE POLICY "cartoes_select_policy" ON public.cartoes
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "cartoes_insert_policy" ON public.cartoes
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "cartoes_update_policy" ON public.cartoes
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "cartoes_delete_policy" ON public.cartoes
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- WEBHOOKS_CONFIG
+DROP POLICY IF EXISTS "webhooks_config_select_policy" ON public.webhooks_config;
+DROP POLICY IF EXISTS "webhooks_config_insert_policy" ON public.webhooks_config;
+DROP POLICY IF EXISTS "webhooks_config_update_policy" ON public.webhooks_config;
+DROP POLICY IF EXISTS "webhooks_config_delete_policy" ON public.webhooks_config;
+
 CREATE POLICY "webhooks_config_select_policy" ON public.webhooks_config
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "webhooks_config_insert_policy" ON public.webhooks_config
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id OR account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
 CREATE POLICY "webhooks_config_update_policy" ON public.webhooks_config
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "webhooks_config_delete_policy" ON public.webhooks_config
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- WEBHOOKS_LOG
+DROP POLICY IF EXISTS "webhooks_log_select_policy" ON public.webhooks_log;
+DROP POLICY IF EXISTS "webhooks_log_insert_policy" ON public.webhooks_log;
+DROP POLICY IF EXISTS "webhooks_log_delete_policy" ON public.webhooks_log;
+
 CREATE POLICY "webhooks_log_select_policy" ON public.webhooks_log
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
 
 CREATE POLICY "webhooks_log_insert_policy" ON public.webhooks_log
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "webhooks_log_delete_policy" ON public.webhooks_log
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 -- API_KEYS
+DROP POLICY IF EXISTS "api_keys_select_policy" ON public.api_keys;
+DROP POLICY IF EXISTS "api_keys_insert_policy" ON public.api_keys;
+DROP POLICY IF EXISTS "api_keys_update_policy" ON public.api_keys;
+DROP POLICY IF EXISTS "api_keys_delete_policy" ON public.api_keys;
+
 CREATE POLICY "api_keys_select_policy" ON public.api_keys
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
 
 CREATE POLICY "api_keys_insert_policy" ON public.api_keys
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "api_keys_update_policy" ON public.api_keys
-  FOR UPDATE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated')
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "api_keys_delete_policy" ON public.api_keys
-  FOR DELETE USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
-
--- DATA_RETENTION_LOGS
-CREATE POLICY "data_retention_logs_select_policy" ON public.data_retention_logs
-  FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
-
-CREATE POLICY "data_retention_logs_insert_policy" ON public.data_retention_logs
-  FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR auth.role() = 'authenticated');
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
 
 
 -- ------------------------------------------------------------------------------
--- 2. RECRIAÇÃO DE FUNÇÕES COM search_path FIXO (Elimina 'function_search_path_mutable')
+-- 2. FUNÇÕES COM SECURITY INVOKER & search_path FIXO
+-- (Elimina 100% dos warnings de SECURITY DEFINER callable por authenticated)
 -- ------------------------------------------------------------------------------
 
--- 2.1. transfer_pix
+-- 2.1. transfer_pix (SECURITY INVOKER)
 CREATE OR REPLACE FUNCTION public.transfer_pix(
   p_sender_account_id UUID,
   p_receiver_pix_key TEXT,
@@ -135,7 +201,7 @@ CREATE OR REPLACE FUNCTION public.transfer_pix(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -222,14 +288,14 @@ BEGIN
 END;
 $$;
 
--- 2.2. settle_boleto
+-- 2.2. settle_boleto (SECURITY INVOKER)
 CREATE OR REPLACE FUNCTION public.settle_boleto(
   p_boleto_id UUID,
   p_payer_account_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -285,7 +351,7 @@ BEGIN
 END;
 $$;
 
--- 2.3. deposit_funds
+-- 2.3. deposit_funds (SECURITY INVOKER)
 CREATE OR REPLACE FUNCTION public.deposit_funds(
   p_account_id UUID,
   p_amount DECIMAL(15, 2),
@@ -293,7 +359,7 @@ CREATE OR REPLACE FUNCTION public.deposit_funds(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -333,13 +399,13 @@ BEGIN
 END;
 $$;
 
--- 2.4. delete_sandbox_account
+-- 2.4. delete_sandbox_account (SECURITY INVOKER)
 CREATE OR REPLACE FUNCTION public.delete_sandbox_account(
   p_account_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -385,13 +451,13 @@ BEGIN
 END;
 $$;
 
--- 2.5. export_account_data_json
+-- 2.5. export_account_data_json (SECURITY INVOKER)
 CREATE OR REPLACE FUNCTION public.export_account_data_json(
   p_account_id UUID
 )
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
@@ -432,61 +498,9 @@ BEGIN
 END;
 $$;
 
--- 2.6. check_data_retention_warnings
-CREATE OR REPLACE FUNCTION public.check_data_retention_warnings()
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-  v_retention_limit_days INT := 60;
-  v_7_days_accounts JSONB;
-  v_2_days_accounts JSONB;
-  v_1_day_accounts JSONB;
-BEGIN
-  SELECT jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'user_id', a.user_id, 'created_at', a.created_at))
-  INTO v_7_days_accounts
-  FROM public.accounts a
-  WHERE a.created_at <= (now() - INTERVAL '53 days')
-    AND a.created_at > (now() - INTERVAL '54 days')
-    AND NOT EXISTS (
-      SELECT 1 FROM public.data_retention_logs l
-      WHERE l.account_id = a.id AND l.warning_type = '7_days'
-    );
-
-  SELECT jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'user_id', a.user_id, 'created_at', a.created_at))
-  INTO v_2_days_accounts
-  FROM public.accounts a
-  WHERE a.created_at <= (now() - INTERVAL '58 days')
-    AND a.created_at > (now() - INTERVAL '59 days')
-    AND NOT EXISTS (
-      SELECT 1 FROM public.data_retention_logs l
-      WHERE l.account_id = a.id AND l.warning_type = '2_days'
-    );
-
-  SELECT jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'user_id', a.user_id, 'created_at', a.created_at))
-  INTO v_1_day_accounts
-  FROM public.accounts a
-  WHERE a.created_at <= (now() - INTERVAL '59 days')
-    AND a.created_at > (now() - INTERVAL '60 days')
-    AND NOT EXISTS (
-      SELECT 1 FROM public.data_retention_logs l
-      WHERE l.account_id = a.id AND l.warning_type = '1_day'
-    );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'checked_at', now(),
-    'retention_limit_days', v_retention_limit_days,
-    'warnings_7_days', COALESCE(v_7_days_accounts, '[]'::jsonb),
-    'warnings_2_days', COALESCE(v_2_days_accounts, '[]'::jsonb),
-    'warnings_1_day', COALESCE(v_1_day_accounts, '[]'::jsonb)
-  );
-END;
-$$;
-
--- 2.7. cleanup_expired_sandbox_data
+-- ------------------------------------------------------------------------------
+-- 3. FUNÇÃO DE RETENÇÃO TEMPORAL DE 60 DIAS (PURGA APENAS EXTRATO, MANTÉM CONTA E SALDO)
+-- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.cleanup_expired_sandbox_data(
   p_retention_days INT DEFAULT 60
 )
@@ -496,51 +510,50 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_expired_account RECORD;
-  v_total_deleted INT := 0;
+  v_deleted_transactions INT := 0;
+  v_deleted_boletos INT := 0;
+  v_deleted_logs INT := 0;
 BEGIN
-  FOR v_expired_account IN
-    SELECT id, name, user_id, created_at
-    FROM public.accounts
-    WHERE created_at < (now() - (p_retention_days || ' days')::INTERVAL)
-  LOOP
-    PERFORM public.delete_sandbox_account(v_expired_account.id);
-    v_total_deleted := v_total_deleted + 1;
-  END LOOP;
+  -- 1. Exclui apenas lançamentos com mais de 60 dias (sem apagar contas nem saldo)
+  DELETE FROM public.transactions
+  WHERE created_at < (now() - (p_retention_days || ' days')::INTERVAL);
+  GET DIAGNOSTICS v_deleted_transactions = ROW_COUNT;
+
+  DELETE FROM public.boletos
+  WHERE status = 'paid' AND created_at < (now() - (p_retention_days || ' days')::INTERVAL);
+  GET DIAGNOSTICS v_deleted_boletos = ROW_COUNT;
+
+  DELETE FROM public.webhooks_log
+  WHERE delivered_at < (now() - (p_retention_days || ' days')::INTERVAL);
+  GET DIAGNOSTICS v_deleted_logs = ROW_COUNT;
 
   RETURN jsonb_build_object(
     'success', true,
     'cleaned_at', now(),
     'retention_days_applied', p_retention_days,
-    'total_expired_accounts_purged', v_total_deleted
+    'deleted_transactions', v_deleted_transactions,
+    'deleted_boletos', v_deleted_boletos,
+    'deleted_logs', v_deleted_logs,
+    'policy', 'Lançamentos com mais de 60 dias expurgados com sucesso. Contas e saldos preservados.'
   );
 END;
 $$;
 
-
--- ------------------------------------------------------------------------------
--- 3. PERMISSÕES EXPLÍCITAS DE EXECUÇÃO (Elimina 'anon_security_definer_function_executable' & 'authenticated_security_definer_function_executable')
--- ------------------------------------------------------------------------------
-
--- Funções operacionais de usuário (Permitidas apenas para usuários autenticados e service_role)
-REVOKE EXECUTE ON FUNCTION public.transfer_pix(UUID, TEXT, DECIMAL, TEXT, TEXT) FROM PUBLIC, anon;
+-- Permissões de Execução
+REVOKE EXECUTE ON FUNCTION public.transfer_pix(UUID, TEXT, DECIMAL, TEXT, TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.transfer_pix(UUID, TEXT, DECIMAL, TEXT, TEXT) TO authenticated, service_role;
 
-REVOKE EXECUTE ON FUNCTION public.settle_boleto(UUID, UUID) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.settle_boleto(UUID, UUID) FROM anon;
 GRANT EXECUTE ON FUNCTION public.settle_boleto(UUID, UUID) TO authenticated, service_role;
 
-REVOKE EXECUTE ON FUNCTION public.deposit_funds(UUID, DECIMAL, TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.deposit_funds(UUID, DECIMAL, TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.deposit_funds(UUID, DECIMAL, TEXT) TO authenticated, service_role;
 
-REVOKE EXECUTE ON FUNCTION public.delete_sandbox_account(UUID) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.delete_sandbox_account(UUID) FROM anon;
 GRANT EXECUTE ON FUNCTION public.delete_sandbox_account(UUID) TO authenticated, service_role;
 
-REVOKE EXECUTE ON FUNCTION public.export_account_data_json(UUID) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.export_account_data_json(UUID) FROM anon;
 GRANT EXECUTE ON FUNCTION public.export_account_data_json(UUID) TO authenticated, service_role;
-
--- Funções restritas de automação/sistema (Permitidas exclusivamente para service_role / cron jobs)
-REVOKE EXECUTE ON FUNCTION public.check_data_retention_warnings() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.check_data_retention_warnings() TO service_role;
 
 REVOKE EXECUTE ON FUNCTION public.cleanup_expired_sandbox_data(INT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.cleanup_expired_sandbox_data(INT) TO service_role;

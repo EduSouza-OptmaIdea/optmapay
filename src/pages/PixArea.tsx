@@ -60,13 +60,17 @@ export const PixArea: React.FC = () => {
   const fetchPixTransactions = async () => {
     if (!activeAccount) return;
     setLoadingPixTx(true);
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
     const { data } = await supabase
       .from('transactions')
       .select('*')
       .eq('account_id', activeAccount.id)
       .eq('type', 'pix')
+      .gte('created_at', sixtyDaysAgo.toISOString())
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     setPixTransactions((data || []) as SandboxTransaction[]);
     setLoadingPixTx(false);
@@ -604,9 +608,17 @@ export const PixArea: React.FC = () => {
           </button>
         </div>
 
+        {/* 60-Day Notice */}
+        <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 flex items-center gap-2.5">
+          <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+          <span>
+            <strong>Extrato Pix Sandbox:</strong> Exibe transferências dos últimos <strong>60 dias</strong> da data atual. O saldo da conta permanece preservado.
+          </span>
+        </div>
+
         {pixTransactions.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-            Nenhuma transferência Pix realizada ou recebida por esta conta ainda.
+            Nenhuma transferência Pix realizada ou recebida por esta conta nos últimos 60 dias.
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700/60 overflow-x-auto">

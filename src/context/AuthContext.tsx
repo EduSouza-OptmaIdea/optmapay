@@ -26,6 +26,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAccounts = async (userId?: string) => {
     const targetUserId = userId !== undefined ? userId : user?.id || '';
+    if (!targetUserId) {
+      setAccounts([]);
+      setActiveAccount(null);
+      return;
+    }
+
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
@@ -43,6 +49,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return matched ? { ...matched } : { ...fetched[0] };
       });
+    } else {
+      // Usuário autenticado ainda não possui contas vinculadas
+      setAccounts([]);
+      setActiveAccount(null);
     }
   };
 
@@ -50,16 +60,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user || null;
       setUser(currentUser);
-      loadAccounts(currentUser?.id).finally(() => setLoading(false));
+      if (currentUser) {
+        loadAccounts(currentUser.id).finally(() => setLoading(false));
+      } else {
+        setAccounts([]);
+        setActiveAccount(null);
+        setLoading(false);
+      }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user || null;
       setUser(currentUser);
-      await loadAccounts(currentUser?.id);
+      if (currentUser) {
+        await loadAccounts(currentUser.id);
+      } else {
+        setAccounts([]);
+        setActiveAccount(null);
+      }
     });
 
-    // Supabase Realtime Listener on accounts and transactions tables
+    // Supabase Realtime Listener
     const realtimeChannel = supabase
       .channel('optmapay_global_realtime')
       .on(
@@ -78,7 +99,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return prev;
             });
           }
-          loadAccounts(user?.id);
+          if (user?.id) {
+            loadAccounts(user.id);
+          }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
@@ -86,7 +109,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
-          loadAccounts(user?.id);
+          if (user?.id) {
+            loadAccounts(user.id);
+          }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
@@ -94,7 +119,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'postgres_changes',
         { event: '*', schema: 'public', table: 'boletos' },
         (payload) => {
-          loadAccounts(user?.id);
+          if (user?.id) {
+            loadAccounts(user.id);
+          }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
@@ -115,12 +142,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshAccounts = async () => {
-    await loadAccounts(user?.id);
+    if (user?.id) {
+      await loadAccounts(user.id);
+    }
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setAccounts([]);
+    setActiveAccount(null);
+    localStorage.removeItem('optmapay_active_account_id');
   };
 
   return (

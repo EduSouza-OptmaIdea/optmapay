@@ -15,7 +15,7 @@ import {
   Download,
   Trash2,
   Clock,
-  Lock,
+  Sparkles,
 } from 'lucide-react';
 
 export const MyProfile: React.FC = () => {
@@ -155,14 +155,14 @@ export const MyProfile: React.FC = () => {
           </div>
         </div>
 
-        {/* 60 Days Retention Alert Banner */}
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 space-y-2">
-          <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
-            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            Política de Retenção de 60 Dias & Backup em JSON
+        {/* 60 Days Statement Notice Banner */}
+        <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 space-y-1.5">
+          <p className="font-bold flex items-center gap-1.5 text-teal-800 dark:text-teal-300">
+            <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+            Política do Extrato de Transações (60 Dias) & Backup em JSON
           </p>
-          <p className="text-[11px] text-amber-800/90 dark:text-amber-200/90 leading-relaxed">
-            No plano gratuito, dados de testes permanecem salvos por <strong>60 dias</strong>. Dispararemos avisos por e-mail com 7, 2 e 1 dia de antecedência. Você pode exportar o arquivo de backup em JSON a qualquer momento abaixo para preservar seus extratos e configurações.
+          <p className="text-[11px] text-teal-800/90 dark:text-teal-200/90 leading-relaxed">
+            Para manter a eficiência do ambiente de testes, o histórico do extrato armazena lançamentos de até <strong>60 dias</strong>. O saldo e as configurações da sua conta permanecem intactos. Você pode baixar seu backup completo em JSON a qualquer momento abaixo.
           </p>
         </div>
 
@@ -237,7 +237,7 @@ export const MyProfile: React.FC = () => {
               Contas Bancárias Sandbox Vinculadas
             </h2>
             <p className="text-xs text-slate-500">
-              Alterne a conta ativa, baixe backups em JSON ou exclua contas definitivamente
+              Contas digitais associadas exclusivamente ao seu e-mail de operador
             </p>
           </div>
 
@@ -250,82 +250,103 @@ export const MyProfile: React.FC = () => {
           </button>
         </div>
 
-        <div className="space-y-3 pt-2">
-          {accounts.map((acc) => {
-            const isActive = acc.id === activeAccount?.id;
-            return (
-              <div
-                key={acc.id}
-                className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  isActive
-                    ? 'bg-teal-50/50 dark:bg-teal-950/40 border-[#19A999] ring-2 ring-[#19A999]/20'
-                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl text-white ${acc.type === 'merchant' ? 'bg-[#19A999]' : 'bg-blue-600'}`}>
-                    {acc.type === 'merchant' ? <Building2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+        {accounts.length === 0 ? (
+          <div className="p-8 text-center border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
+            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-400 mx-auto flex items-center justify-center">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Nenhuma conta bancária vinculada ao seu e-mail ainda.
+            </p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+              Crie uma conta de Empresa (Merchant) ou Cliente (Customer) para emitir cobranças Pix, boletos e testar vendas.
+            </p>
+            <button
+              onClick={() => navigate('/onboarding')}
+              className="py-2 px-4 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition shadow-md shadow-teal-950/20 inline-flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Abrir Minha Primeira Conta</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-2">
+            {accounts.map((acc) => {
+              const isActive = acc.id === activeAccount?.id;
+              return (
+                <div
+                  key={acc.id}
+                  className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isActive
+                      ? 'bg-teal-50/50 dark:bg-teal-950/40 border-[#19A999] ring-2 ring-[#19A999]/20'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl text-white ${acc.type === 'merchant' ? 'bg-[#19A999]' : 'bg-blue-600'}`}>
+                      {acc.type === 'merchant' ? <Building2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{acc.name}</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {acc.type === 'merchant' ? 'Empresa (Merchant)' : 'Cliente (Customer)'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        Agência: {acc.agency} • Conta: {acc.account_number} • Chave Pix: {acc.pix_key}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{acc.name}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        {acc.type === 'merchant' ? 'Empresa (Merchant)' : 'Cliente (Customer)'}
+
+                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 dark:border-slate-800">
+                    <div className="text-left sm:text-right mr-2">
+                      <span className="text-[10px] text-slate-400 uppercase block">Saldo</span>
+                      <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                        R$ {acc.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 font-mono mt-0.5">
-                      Agência: {acc.agency} • Conta: {acc.account_number} • Chave Pix: {acc.pix_key}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200 dark:border-slate-800">
-                  <div className="text-left sm:text-right mr-2">
-                    <span className="text-[10px] text-slate-400 uppercase block">Saldo</span>
-                    <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
-                      R$ {acc.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Backup JSON button */}
-                  <button
-                    type="button"
-                    onClick={() => handleExportBackup(acc.id, acc.name)}
-                    disabled={exportingId === acc.id}
-                    className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
-                    title="Baixar Backup Completo em JSON (LGPD / Portabilidade)"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-
-                  {/* Delete Account button */}
-                  <button
-                    type="button"
-                    onClick={() => setAccountToDelete(acc.id)}
-                    className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 text-xs font-semibold transition"
-                    title="Excluir Conta e Dados em Cascata (LGPD)"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-
-                  {isActive ? (
-                    <span className="py-1 px-2.5 rounded-lg bg-[#19A999]/20 text-[#19A999] text-xs font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Ativa
-                    </span>
-                  ) : (
+                    {/* Backup JSON button */}
                     <button
-                      onClick={() => setActiveAccountId(acc.id)}
-                      className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition"
+                      type="button"
+                      onClick={() => handleExportBackup(acc.id, acc.name)}
+                      disabled={exportingId === acc.id}
+                      className="p-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
+                      title="Baixar Backup Completo em JSON (LGPD / Portabilidade)"
                     >
-                      Tornar Ativa
+                      <Download className="w-4 h-4" />
                     </button>
-                  )}
+
+                    {/* Delete Account button */}
+                    <button
+                      type="button"
+                      onClick={() => setAccountToDelete(acc.id)}
+                      className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 text-xs font-semibold transition"
+                      title="Excluir Conta e Dados em Cascata (LGPD)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    {isActive ? (
+                      <span className="py-1 px-2.5 rounded-lg bg-[#19A999]/20 text-[#19A999] text-xs font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Ativa
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setActiveAccountId(acc.id)}
+                        className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition"
+                      >
+                        Tornar Ativa
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Confirmation Modal for Account Deletion */}
