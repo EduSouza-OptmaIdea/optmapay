@@ -173,16 +173,19 @@ export interface PixTransferResult {
   amount: number;
   senderName: string;
   receiverName: string;
+  senderPixKey?: string;
+  receiverPixKey?: string;
   senderBalanceAfter: number;
-  receiverBalanceAfter: number;
   transactionOutId?: string;
   transactionInId?: string;
+  transactionDate: string;
+  externalReference: string;
   webhooksDispatched: number;
 }
 
 /**
  * Executes a simulated Pix transfer from sender account to receiver account.
- * Updates balances in real-time and creates mirror entries in transactions table.
+ * Uses PostgreSQL RPC transfer_pix to guarantee atomic multi-account execution without RLS 403 Forbidden.
  */
 export async function executePixTransfer(input: PixTransferInput): Promise<PixTransferResult> {
   const { senderAccountId, destPixKeyOrPayload, amount, description, externalReference } = input;
@@ -220,135 +223,77 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     );
   }
 
-  // 2. Fetch Receiver Account
-  let { data: receivers } = await supabase
-    .from('accounts')
-    .select('*')
-    .or(`pix_key.eq."${targetKey}",pix_key.ilike."%${targetKey}%",cpf_cnpj.eq."${targetKey}"`);
+  const finalDesc = description || parsed.description || 'Transferência Pix Sandbox';
+  const finalRef = externalReference || parsed.orderId || `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
 
-  let receiver: SandboxAccount | null = receivers && receivers.length > 0 ? receivers[0] : null;
+  // 2. Tenta executar via RPC transfer_pix (SECURITY DEFINER no PostgreSQL para contornar RLS entre contas)
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc('transfer_pix', {
+    p_sender_account_id: senderAccountId,
+    p_receiver_pix_key: targetKey,
+    p_amount: amount,
+    p_description: finalDesc,
+    p_external_reference: finalRef,
+  });
 
-  if (!receiver) {
-    const cleanNumbers = targetKey.replace(/\D/g, '');
-    if (cleanNumbers.length >= 11) {
-      const { data: numMatch } = await supabase
+  if (!rpcErr && rpcResult && rpcResult.success) {
+    const receiverAccountId = rpcResult.receiver_account_id;
+    const receiverName = rpcResult.receiver_name;
+    const outTxId = rpcResult.transaction_out_id;
+    const inTxId = rpcResult.transaction_in_id;
+
+    // Dispara Webhook para a conta recebedora (se houver webhook cadastrado)
+    let dispatched = 0;
+    try {
+      const { data: receiverAcc } = await supabase
         .from('accounts')
-        .select('*')
-        .or(`cpf_cnpj.ilike."%${cleanNumbers}%",pix_key.ilike."%${cleanNumbers}%"`);
-      if (numMatch && numMatch.length > 0) {
-        receiver = numMatch[0];
-      }
+        .select('user_id, pix_key')
+        .eq('id', receiverAccountId)
+        .single();
+
+      dispatched = await triggerWebhookEvents({
+        userId: receiverAcc?.user_id || '',
+        accountId: receiverAccountId,
+        event: 'pix.paid',
+        payloadData: {
+          transactionId: inTxId || `tx_pix_${Date.now()}`,
+          orderId: finalRef,
+          externalReference: finalRef,
+          amount,
+          status: 'paid',
+          senderName: sender.name,
+          senderPixKey: sender.pix_key,
+          receiverName,
+          receiverPixKey: receiverAcc?.pix_key || targetKey,
+          realMoney: false,
+          environment: 'sandbox',
+          paidAt: new Date().toISOString(),
+        },
+      });
+    } catch (whErr) {
+      console.warn('Falha no webhook Pix:', whErr);
     }
-  }
 
-  if (!receiver) {
-    throw new Error(`Chave Pix "${targetKey}" não foi encontrada no banco de dados.`);
-  }
-
-  if (receiver.id === sender.id) {
-    throw new Error('A conta de origem e a conta de destino não podem ser a mesma.');
-  }
-
-  const senderNewBalance = senderBalance - amount;
-  const receiverNewBalance = Number(receiver.balance) + amount;
-
-  // 3. Execute Balance Updates
-  const { error: updSenderErr } = await supabase
-    .from('accounts')
-    .update({ balance: senderNewBalance, updated_at: new Date().toISOString() })
-    .eq('id', sender.id);
-
-  if (updSenderErr) {
-    throw new Error(`Falha ao debitar saldo: ${updSenderErr.message}`);
-  }
-
-  const { error: updReceiverErr } = await supabase
-    .from('accounts')
-    .update({ balance: receiverNewBalance, updated_at: new Date().toISOString() })
-    .eq('id', receiver.id);
-
-  if (updReceiverErr) {
-    await supabase.from('accounts').update({ balance: senderBalance }).eq('id', sender.id);
-    throw new Error(`Falha ao creditar saldo de destino: ${updReceiverErr.message}`);
-  }
-
-  // 4. Create Transaction Records
-  const finalDesc = description || parsed.description || `Transferência Pix para ${receiver.name}`;
-  const finalRef = externalReference || parsed.orderId || `PIX-${Date.now().toString().slice(-6)}`;
-
-  const { data: outTx } = await supabase
-    .from('transactions')
-    .insert({
-      user_id: sender.user_id || null,
-      account_id: sender.id,
-      counterparty_account_id: receiver.id,
-      counterparty_name: receiver.name,
-      type: 'pix',
-      direction: 'out',
+    return {
+      success: true,
+      message: `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${receiverName}!`,
       amount,
-      description: finalDesc,
-      external_reference: finalRef,
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    })
-    .select('id')
-    .single();
-
-  const { data: inTx } = await supabase
-    .from('transactions')
-    .insert({
-      user_id: receiver.user_id || null,
-      account_id: receiver.id,
-      counterparty_account_id: sender.id,
-      counterparty_name: sender.name,
-      type: 'pix',
-      direction: 'in',
-      amount,
-      description: `Recebimento Pix de ${sender.name}`,
-      external_reference: finalRef,
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    })
-    .select('id')
-    .single();
-
-  // 5. Trigger Webhooks
-  let dispatched = 0;
-  try {
-    dispatched = await triggerWebhookEvents({
-      userId: receiver.user_id || '',
-      accountId: receiver.id,
-      event: 'pix.paid',
-      payloadData: {
-        orderId: finalRef,
-        externalReference: finalRef,
-        amount,
-        status: 'paid',
-        senderName: sender.name,
-        senderPixKey: sender.pix_key,
-        receiverName: receiver.name,
-        receiverPixKey: receiver.pix_key,
-        realMoney: false,
-        environment: 'sandbox',
-        transactionId: inTx?.id || `tx_pix_${Date.now()}`,
-      },
-    });
-  } catch (webhookErr) {
-    console.warn('Falha no disparo do webhook Pix:', webhookErr);
+      senderName: sender.name,
+      receiverName,
+      senderPixKey: sender.pix_key,
+      receiverPixKey: targetKey,
+      senderBalanceAfter: senderBalance - amount,
+      transactionOutId: outTxId,
+      transactionInId: inTxId,
+      transactionDate: new Date().toISOString(),
+      externalReference: finalRef,
+      webhooksDispatched: dispatched,
+    };
   }
 
-  return {
-    success: true,
-    message: `Transferência Pix de R$ ${amount.toFixed(2)} concluída com sucesso para ${receiver.name}!`,
-    amount,
-    senderName: sender.name,
-    receiverName: receiver.name,
-    senderBalanceAfter: senderNewBalance,
-    receiverBalanceAfter: receiverNewBalance,
-    transactionOutId: outTx?.id,
-    transactionInId: inTx?.id,
-    webhooksDispatched: dispatched,
-  };
+  // Se o RPC retornou erro de negócio (ex: chave não encontrada, saldo insuficiente)
+  if (rpcErr) {
+    throw new Error(rpcErr.message || 'Erro ao processar transferência Pix via banco de dados.');
+  }
+
+  throw new Error('Falha ao concluir transferência Pix.');
 }
