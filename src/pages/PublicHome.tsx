@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   ShieldCheck,
@@ -22,7 +21,6 @@ import {
 
 export const PublicHome: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
 
   const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -143,31 +141,22 @@ export const PublicHome: React.FC = () => {
               {theme === 'light' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-teal-400" />}
             </button>
 
-            {user ? (
+            {/* Ações Públicas: Acessar Conta & Criar Conta */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => navigate('/dashboard')}
-                className="py-2 px-4 rounded-xl bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs shadow-md transition flex items-center gap-2"
+                onClick={() => navigate('/login')}
+                className="py-2 px-3.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition border border-slate-200 dark:border-slate-700"
               >
-                <span>Ir para o Banco Digital</span>
-                <ArrowRight className="w-4 h-4" />
+                Acessar Conta
               </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate('/login')}
-                  className="py-2 px-3.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition"
-                >
-                  Entrar
-                </button>
-                <button
-                  onClick={() => navigate('/login?signup=true')}
-                  className="py-2 px-3.5 sm:px-4 rounded-xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs shadow-md shadow-orange-950/20 transition flex items-center gap-1.5"
-                >
-                  <span>Criar Conta</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+              <button
+                onClick={() => navigate('/signup')}
+                className="py-2 px-3.5 sm:px-4 rounded-xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs shadow-md shadow-orange-950/20 transition flex items-center gap-1.5"
+              >
+                <span>Criar Conta</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -190,32 +179,20 @@ export const PublicHome: React.FC = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              {user ? (
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="py-3.5 px-6 rounded-2xl bg-[#19A999] hover:bg-[#158f81] text-white font-extrabold text-sm shadow-xl shadow-teal-950/20 transition flex items-center justify-center gap-2"
-                >
-                  <span>Acessar Internet Banking</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => navigate('/login?signup=true')}
-                    className="py-3.5 px-6 rounded-2xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-extrabold text-sm shadow-xl shadow-orange-950/20 transition flex items-center justify-center gap-2"
-                  >
-                    <span>Criar Conta de Teste Grátis</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+              <button
+                onClick={() => navigate('/signup')}
+                className="py-3.5 px-6 rounded-2xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-extrabold text-sm shadow-xl shadow-orange-950/20 transition flex items-center justify-center gap-2"
+              >
+                <span>Criar Conta</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
 
-                  <button
-                    onClick={() => navigate('/login')}
-                    className="py-3.5 px-6 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-sm transition flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <span>Já possuo cadastro (Entrar)</span>
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => navigate('/login')}
+                className="py-3.5 px-6 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-sm transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>Acessar Conta</span>
+              </button>
             </div>
 
             <div className="flex items-center gap-6 pt-4 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-800">

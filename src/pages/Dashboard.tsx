@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { SandboxTransaction, AccountType } from '../types/sandbox';
-import { createBankAccount } from '../lib/supabase/accountService';
+import { SandboxTransaction } from '../types/sandbox';
 import { sendWelcomeEmail } from '../lib/email/app-email';
 import {
   Eye,
@@ -17,13 +16,11 @@ import {
   Building2,
   User,
   Clock,
-  ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
-  const { user, accounts, activeAccount, refreshAccounts } = useAuth();
+  const { user, activeAccount, refreshAccounts } = useAuth();
 
   const [showBalance, setShowBalance] = useState(true);
   const [transactions, setTransactions] = useState<SandboxTransaction[]>([]);
@@ -31,20 +28,6 @@ export const Dashboard: React.FC = () => {
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState('500');
   const [depositDesc, setDepositDesc] = useState('Aporte Fictício Sandbox');
-
-  // Form de criação rápida de primeira conta se o usuário não tiver nenhuma
-  const [newAccType, setNewAccType] = useState<AccountType>('merchant');
-  const [newAccName, setNewAccName] = useState('Minha Empresa Sandbox LTDA');
-  const [newAccCpfCnpj, setNewAccCpfCnpj] = useState('45.892.102/0001-90');
-  const [newAccBalanceFormatted, setNewAccBalanceFormatted] = useState('10.000,00');
-  const [newAccPixKey, setNewAccPixKey] = useState(user?.email || 'vendas@optmaidea.com.br');
-  const [creatingAccount, setCreatingAccount] = useState(false);
-
-  useEffect(() => {
-    if (user?.email) {
-      setNewAccPixKey(user.email);
-    }
-  }, [user?.email]);
 
   // Dispara e-mail de boas-vindas na primeira vez que o operador autenticado acessa
   useEffect(() => {
@@ -54,7 +37,7 @@ export const Dashboard: React.FC = () => {
       if (!alreadySent) {
         sendWelcomeEmail({
           to: user.email,
-          fullName: user.user_metadata?.full_name || user.email.split('@')[0],
+          fullName: user.user_metadata?.account_name || user.email.split('@')[0],
         }).then((res) => {
           if (res.success) {
             localStorage.setItem(welcomeKey, 'true');
@@ -63,20 +46,6 @@ export const Dashboard: React.FC = () => {
       }
     }
   }, [user?.id, user?.email]);
-
-  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value.replace(/\D/g, '');
-    if (!raw) raw = '0';
-    const num = parseFloat(raw) / 100;
-    setNewAccBalanceFormatted(
-      num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    );
-  };
-
-  const parseFormattedBalance = (formatted: string): number => {
-    const clean = formatted.replace(/\./g, '').replace(',', '.');
-    return parseFloat(clean) || 0;
-  };
 
   const fetchTransactions = async () => {
     if (!activeAccount) return;
@@ -143,181 +112,11 @@ export const Dashboard: React.FC = () => {
     await fetchTransactions();
   };
 
-  const handleCreateInitialAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setCreatingAccount(true);
-
-    try {
-      const initialBal = parseFormattedBalance(newAccBalanceFormatted);
-      await createBankAccount(user.id, {
-        name: newAccName,
-        type: newAccType,
-        cpf_cnpj: newAccCpfCnpj,
-        initialBalance: initialBal,
-        pixKey: newAccPixKey.trim(),
-      });
-
-      await refreshAccounts();
-    } catch (err: any) {
-      alert(err.message || 'Erro ao criar conta sandbox.');
-    } finally {
-      setCreatingAccount(false);
-    }
-  };
-
-  // Se o usuário autenticado não possui nenhuma conta cadastrada ainda:
-  if (!activeAccount && accounts.length === 0) {
-    return (
-      <div className="max-w-2xl mx-auto py-6 space-y-6">
-        <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 space-y-6 shadow-xl text-center">
-          <div className="w-16 h-16 rounded-2xl bg-teal-500/10 text-[#19A999] mx-auto flex items-center justify-center">
-            <Sparkles className="w-8 h-8" />
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              Bem-vindo ao OptmaPay Sandbox!
-            </h1>
-            <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              Você está autenticado como <strong className="text-slate-700 dark:text-slate-300 font-mono">{user?.email}</strong>. Abra sua conta digital de testes para começar a simular transferências Pix, boletos e webhooks.
-            </p>
-          </div>
-
-          <form onSubmit={handleCreateInitialAccount} className="space-y-4 text-left pt-2">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Qual o Perfil da Conta?
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAccType('merchant');
-                    setNewAccName('Minha Empresa Sandbox LTDA');
-                    setNewAccCpfCnpj('45.892.102/0001-90');
-                    setNewAccBalanceFormatted('10.000,00');
-                    setNewAccPixKey(user?.email || 'vendas@optmaidea.com.br');
-                  }}
-                  className={`p-3.5 rounded-2xl border text-xs font-bold transition flex items-center gap-2.5 ${
-                    newAccType === 'merchant'
-                      ? 'bg-teal-500/10 border-[#19A999] text-[#19A999]'
-                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4" />
-                  <div>
-                    <p>Pessoa Jurídica (PJ)</p>
-                    <p className="text-[10px] font-normal text-slate-400">Recebedor de vendas & duplicatas</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAccType('customer');
-                    setNewAccName('Cliente Teste Comprador');
-                    setNewAccCpfCnpj('824.636.200-65');
-                    setNewAccBalanceFormatted('2.500,00');
-                    setNewAccPixKey(user?.email || 'cliente@optmapay.fake');
-                  }}
-                  className={`p-3.5 rounded-2xl border text-xs font-bold transition flex items-center gap-2.5 ${
-                    newAccType === 'customer'
-                      ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500'
-                  }`}
-                >
-                  <User className="w-4 h-4" />
-                  <div>
-                    <p>Pessoa Física (PF)</p>
-                    <p className="text-[10px] font-normal text-slate-400">Pagador de compras & testes</p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Nome do Titular ou Razão Social
-              </label>
-              <input
-                type="text"
-                required
-                value={newAccName}
-                onChange={(e) => setNewAccName(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none font-bold"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {newAccType === 'merchant' ? 'CNPJ Fictício' : 'CPF Fictício'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newAccCpfCnpj}
-                  onChange={(e) => setNewAccCpfCnpj(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Saldo Inicial Fictício (R$)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">R$</span>
-                  <input
-                    type="text"
-                    required
-                    value={newAccBalanceFormatted}
-                    onChange={handleBalanceChange}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-emerald-600 dark:text-emerald-400 font-extrabold focus:ring-2 focus:ring-[#19A999] outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Chave Pix Padrão (E-mail do Cadastro)
-              </label>
-              <input
-                type="text"
-                required
-                value={newAccPixKey}
-                onChange={(e) => setNewAccPixKey(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={creatingAccount}
-              className="w-full py-3.5 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-lg shadow-orange-950/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
-            >
-              {creatingAccount && <RefreshCw className="w-4 h-4 animate-spin" />}
-              <span>{creatingAccount ? 'Criando Conta...' : 'Abrir Minha Conta Digital e Acessar Banco'}</span>
-            </button>
-          </form>
-
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-2 text-left">
-            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span>
-              Todas as contas criadas operam exclusivamente em ambiente sandbox com saldo e dados simulados (realMoney: false).
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (!activeAccount) {
     return (
-      <div className="p-8 text-center text-slate-500">
-        Carregando dados da conta no Supabase...
+      <div className="min-h-[350px] flex flex-col items-center justify-center p-8 text-center text-slate-500 gap-3 font-mono text-xs">
+        <RefreshCw className="w-6 h-6 text-[#19A999] animate-spin" />
+        <span>Carregando sua conta no Internet Banking Sandbox...</span>
       </div>
     );
   }
@@ -349,7 +148,7 @@ export const Dashboard: React.FC = () => {
               {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-mono">
             {showBalance ? (
               `R$ ${activeAccount.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
             ) : (

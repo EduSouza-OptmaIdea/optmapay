@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
-import { fetchUserAccounts } from '../lib/supabase/accountService';
+import { fetchUserAccounts, createBankAccount } from '../lib/supabase/accountService';
 import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accounts, setAccounts] = useState<SandboxAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
 
-  const loadAccounts = async (userId?: string) => {
+  const loadAccounts = async (userId?: string, currentUser?: User | null) => {
     const targetUserId = userId !== undefined ? userId : user?.id || '';
     if (!targetUserId) {
       setAccounts([]);
@@ -50,7 +50,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return matched ? { ...matched } : { ...fetched[0] };
       });
     } else {
-      // Usuário autenticado ainda não possui contas vinculadas
+      // Se o usuário está autenticado mas não tem conta no banco ainda:
+      // Tenta provisionar a conta com base nos metadados preenchidos no cadastro
+      const authUser = currentUser || user;
+      if (authUser && authUser.id) {
+        const meta = authUser.user_metadata || {};
+        if (meta.account_name || authUser.email) {
+          try {
+            const initialBal = typeof meta.initial_balance === 'number' ? meta.initial_balance : 1000.00;
+            const created = await createBankAccount(authUser.id, {
+              name: meta.account_name || 'Conta Sandbox',
+              type: meta.account_type || 'merchant',
+              cpf_cnpj: meta.cpf_cnpj || '45.892.102/0001-90',
+              initialBalance: initialBal,
+              pixKey: meta.pix_key || authUser.email || 'pix@optmapay.fake',
+            });
+
+            if (created) {
+              setAccounts([created]);
+              setActiveAccount(created);
+              return;
+            }
+          } catch (err) {
+            console.warn('Auto-provisioning de conta inicial falhou:', err);
+          }
+        }
+      }
+
       setAccounts([]);
       setActiveAccount(null);
     }
@@ -61,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = session?.user || null;
       setUser(currentUser);
       if (currentUser) {
-        loadAccounts(currentUser.id).finally(() => setLoading(false));
+        loadAccounts(currentUser.id, currentUser).finally(() => setLoading(false));
       } else {
         setAccounts([]);
         setActiveAccount(null);
@@ -73,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = session?.user || null;
       setUser(currentUser);
       if (currentUser) {
-        await loadAccounts(currentUser.id);
+        await loadAccounts(currentUser.id, currentUser);
       } else {
         setAccounts([]);
         setActiveAccount(null);
@@ -100,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           }
           if (user?.id) {
-            loadAccounts(user.id);
+            loadAccounts(user.id, user);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
@@ -110,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
           if (user?.id) {
-            loadAccounts(user.id);
+            loadAccounts(user.id, user);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
@@ -120,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { event: '*', schema: 'public', table: 'boletos' },
         (payload) => {
           if (user?.id) {
-            loadAccounts(user.id);
+            loadAccounts(user.id, user);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
@@ -143,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshAccounts = async () => {
     if (user?.id) {
-      await loadAccounts(user.id);
+      await loadAccounts(user.id, user);
     }
   };
 

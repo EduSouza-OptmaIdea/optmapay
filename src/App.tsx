@@ -19,7 +19,7 @@ import { DevPanel } from './pages/DevPanel';
 import { SettingsReset } from './pages/SettingsReset';
 import { MyProfile } from './pages/MyProfile';
 import { Login } from './pages/Login';
-import { Onboarding } from './pages/Onboarding';
+import { Signup } from './pages/Signup';
 import { ResetPassword } from './pages/ResetPassword';
 import { RefreshCw } from 'lucide-react';
 
@@ -57,7 +57,6 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
             <Route path="/settings" element={<SettingsReset />} />
-            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
@@ -80,8 +79,10 @@ export function App() {
             <Route path="/termos-de-uso" element={<TermsOfUse />} />
             <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
 
-            {/* Autenticação & Recuperação de Senha */}
+            {/* Acessar Conta & Criar Conta */}
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/criar-conta" element={<Signup />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Rotas Privadas Estritamente Protegidas */}
