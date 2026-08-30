@@ -1,25 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
-import { useTheme, ThemeMode } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   ShieldCheck,
   Sparkles,
   QrCode,
   FileText,
-  CreditCard,
   RefreshCw,
   Code2,
   ArrowRight,
   Sun,
   Moon,
-  Monitor,
   Send,
   CheckCircle2,
   ExternalLink,
-  Lock,
   Mail,
+  ChevronUp,
 } from 'lucide-react';
 
 export const PublicHome: React.FC = () => {
@@ -32,6 +30,27 @@ export const PublicHome: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formSubject, setFormSubject] = useState('');
   const [formMessage, setFormMessage] = useState('');
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 250) {
+        setShowBackToTop(true);
+      } else {
+        setShowBackToTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  };
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +87,7 @@ export const PublicHome: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-[#F1613A] selection:text-white">
+    <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-[#F1613A] selection:text-white relative">
       {/* Top Notification Bar */}
       <div className="bg-[#29324E] text-white px-4 py-2 text-xs font-medium flex items-center justify-between gap-2 overflow-x-auto shadow-sm">
         <div className="flex items-center gap-2 mx-auto max-w-6xl w-full justify-between">
@@ -76,7 +95,7 @@ export const PublicHome: React.FC = () => {
             <span className="px-2 py-0.5 rounded bg-[#F1613A] text-white text-[10px] font-bold uppercase tracking-wider">
               Sandbox
             </span>
-            <span className="text-slate-200">
+            <span className="text-slate-200 text-[11px] sm:text-xs">
               Ambiente Fictício para Testes de APIs, Webhooks e Liquidação de Vendas Online.
             </span>
           </div>
@@ -84,7 +103,7 @@ export const PublicHome: React.FC = () => {
             href="https://optmaidea.com.br"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:flex items-center gap-1 text-[11px] text-teal-300 hover:text-teal-200 transition font-semibold"
+            className="hidden sm:flex items-center gap-1 text-[11px] text-teal-300 hover:text-teal-200 transition font-semibold shrink-0"
           >
             <span>Conhecer Ecossistema OptmaIdea</span>
             <ExternalLink className="w-3 h-3" />
@@ -114,7 +133,7 @@ export const PublicHome: React.FC = () => {
             </a>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Theme Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark')}
@@ -129,7 +148,7 @@ export const PublicHome: React.FC = () => {
                 onClick={() => navigate('/dashboard')}
                 className="py-2 px-4 rounded-xl bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs shadow-md transition flex items-center gap-2"
               >
-                <span>Acessar Painel</span>
+                <span>Ir para o Banco Digital</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -142,9 +161,9 @@ export const PublicHome: React.FC = () => {
                 </button>
                 <button
                   onClick={() => navigate('/login?signup=true')}
-                  className="py-2 px-4 rounded-xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs shadow-md shadow-orange-950/20 transition flex items-center gap-1.5"
+                  className="py-2 px-3.5 sm:px-4 rounded-xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs shadow-md shadow-orange-950/20 transition flex items-center gap-1.5"
                 >
-                  <span>Criar Conta Sandbox</span>
+                  <span>Criar Conta</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -171,21 +190,32 @@ export const PublicHome: React.FC = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                onClick={() => navigate(user ? '/dashboard' : '/login?signup=true')}
-                className="py-3.5 px-6 rounded-2xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-extrabold text-sm shadow-xl shadow-orange-950/20 transition flex items-center justify-center gap-2"
-              >
-                <span>{user ? 'Ir para o Internet Banking' : 'Abrir Conta de Teste Grátis'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {user ? (
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="py-3.5 px-6 rounded-2xl bg-[#19A999] hover:bg-[#158f81] text-white font-extrabold text-sm shadow-xl shadow-teal-950/20 transition flex items-center justify-center gap-2"
+                >
+                  <span>Acessar Internet Banking</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => navigate('/login?signup=true')}
+                    className="py-3.5 px-6 rounded-2xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-extrabold text-sm shadow-xl shadow-orange-950/20 transition flex items-center justify-center gap-2"
+                  >
+                    <span>Criar Conta de Teste Grátis</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
 
-              <a
-                href="#recursos"
-                className="py-3.5 px-6 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-sm transition flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Code2 className="w-4 h-4 text-[#19A999]" />
-                <span>Explorar Recursos</span>
-              </a>
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="py-3.5 px-6 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-sm transition flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <span>Já possuo cadastro (Entrar)</span>
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-6 pt-4 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-800">
@@ -232,7 +262,7 @@ export const PublicHome: React.FC = () => {
                 Simule Compras e Baixas entre Empresas e Clientes
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                Alterne instantaneamente o papel da conta ativa: visualize a visão do cliente pagador que escaneia o QR Code ou a visão da empresa recebedora que confere o extrato e recebe o webhook.
+                Cada operador gerencia sua própria conta digital no Supabase: visualize transações, emita cobranças por Pix ou boletos, confira o extrato e teste disparos de webhook em tempo real.
               </p>
               <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2">
                 <li className="flex items-center gap-2">
@@ -418,6 +448,18 @@ export const PublicHome: React.FC = () => {
         </section>
       </main>
 
+      {/* Botão Flutuante Voltar ao Topo */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 z-50 p-3 rounded-2xl bg-[#19A999] hover:bg-[#158f81] text-white shadow-xl shadow-teal-950/30 transition-all transform hover:scale-110 flex items-center justify-center animate-fadeIn"
+          title="Voltar ao topo da página"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Public Footer */}
       <footer className="bg-white dark:bg-[#0B1120] border-t border-slate-200 dark:border-slate-800 py-8 px-4 text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -454,4 +496,3 @@ export const PublicHome: React.FC = () => {
     </div>
   );
 };
-

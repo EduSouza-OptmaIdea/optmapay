@@ -15,6 +15,7 @@ import {
   EyeOff,
   RefreshCw,
   Inbox,
+  KeyRound,
 } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -23,7 +24,11 @@ export const Login: React.FC = () => {
   const { user } = useAuth();
 
   const isSignupDefault = searchParams.get('signup') === 'true';
-  const [mode, setMode] = useState<'signin' | 'signup' | 'magiclink'>(isSignupDefault ? 'signup' : 'signin');
+  const isForgotDefault = searchParams.get('forgot') === 'true';
+  
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(
+    isForgotDefault ? 'forgot' : isSignupDefault ? 'signup' : 'signin'
+  );
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -181,30 +186,27 @@ export const Login: React.FC = () => {
         }
 
         if (data.session) {
-          navigate('/onboarding');
+          navigate('/dashboard');
         } else {
           // Confirmação de e-mail requerida pelo Supabase
           setSignupSubmittedEmail(email.trim());
           setResendCooldown(60);
         }
-      } else if (mode === 'magiclink') {
-        const { error } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-          },
+      } else if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/reset-password`,
         });
 
         if (error) {
           if (error.message.includes('security') || error.message.includes('429') || error.status === 429) {
-            throw new Error('Muitas tentativas em curto intervalo. Aguarde cerca de 30 segundos antes de solicitar um novo link.');
+            throw new Error('Muitas tentativas em curto intervalo. Aguarde alguns instantes antes de solicitar novamente.');
           }
           throw error;
         }
 
         setMessage({
           type: 'success',
-          text: 'Link mágico enviado para seu e-mail! Clique no link recebido para acessar.',
+          text: 'Instruções de recuperação enviadas para seu e-mail! Verifique sua caixa de entrada (e pasta de spam) e clique no link recebido para cadastrar sua nova senha.',
         });
       }
     } catch (err: any) {
@@ -293,7 +295,6 @@ export const Login: React.FC = () => {
                 <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                   <li>Clique no botão <strong>"Confirmar minha conta"</strong> no e-mail recebido.</li>
                   <li>Verifique também sua caixa de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</li>
-                  <li>Se estiver utilizando o SMTP do Brevo, certifique-se de que o remetente está autorizado no painel do Brevo.</li>
                 </ul>
               </div>
 
@@ -334,62 +335,50 @@ export const Login: React.FC = () => {
                     ? 'Acessar Internet Banking'
                     : mode === 'signup'
                     ? 'Criar Conta de Operador'
-                    : 'Acesso com Link Mágico'}
+                    : 'Recuperar Minha Senha'}
                 </h1>
                 <p className="text-xs text-slate-500">
                   {mode === 'signin'
                     ? 'Entre com seu e-mail e senha cadastrados'
                     : mode === 'signup'
                     ? 'Cadastre seu e-mail para operar o banco digital sandbox'
-                    : 'Enviaremos um link de acesso rápido ao seu e-mail'}
+                    : 'Enviaremos um link de recuperação para seu e-mail'}
                 </p>
               </div>
 
-              {/* Mode Switcher */}
-              <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('signin');
-                    setMessage(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    mode === 'signin'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Entrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('signup');
-                    setMessage(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    mode === 'signup'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Criar Conta
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('magiclink');
-                    setMessage(null);
-                  }}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    mode === 'magiclink'
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Link Mágico
-                </button>
-              </div>
+              {/* Mode Switcher: Entrar vs Criar Conta */}
+              {mode !== 'forgot' && (
+                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signin');
+                      setMessage(null);
+                    }}
+                    className={`flex-1 py-2 rounded-lg transition ${
+                      mode === 'signin'
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Entrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setMessage(null);
+                    }}
+                    className={`flex-1 py-2 rounded-lg transition ${
+                      mode === 'signup'
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Criar Conta
+                  </button>
+                </div>
+              )}
 
               {/* Feedback Messages */}
               {message && (
@@ -428,7 +417,7 @@ export const Login: React.FC = () => {
                   </div>
                 </div>
 
-                {mode !== 'magiclink' && (
+                {mode !== 'forgot' && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -444,7 +433,7 @@ export const Login: React.FC = () => {
                           title="Gerar e copiar senha forte segura"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>{copiedPassword ? 'Copiada para área de transferência!' : 'Sugerir Senha Forte'}</span>
+                          <span>{copiedPassword ? 'Copiada!' : 'Sugerir Senha Forte'}</span>
                         </button>
                       )}
                     </div>
@@ -470,6 +459,23 @@ export const Login: React.FC = () => {
                       </button>
                     </div>
 
+                    {/* Link Esqueci Minha Senha */}
+                    {mode === 'signin' && (
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode('forgot');
+                            setMessage(null);
+                          }}
+                          className="text-[11px] text-[#19A999] hover:underline font-semibold flex items-center gap-1"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          <span>Esqueci minha senha</span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Medidor de Força de Senha no Cadastro */}
                     {mode === 'signup' && password.length > 0 && (
                       <div className="space-y-1.5 pt-1 animate-fadeIn">
@@ -484,22 +490,6 @@ export const Login: React.FC = () => {
                           <div className={`rounded-full transition-all ${passwordStrength >= 3 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
                           <div className={`rounded-full transition-all ${passwordStrength >= 4 ? strength.color : 'bg-slate-200 dark:bg-slate-700'}`} />
                         </div>
-
-                        {/* Requisitos mínimos */}
-                        <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-500 pt-1">
-                          <div className={`flex items-center gap-1 ${password.length >= 8 ? 'text-emerald-500 font-semibold' : ''}`}>
-                            <span>• 8+ caracteres</span>
-                          </div>
-                          <div className={`flex items-center gap-1 ${/[A-Z]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
-                            <span>• Letra maiúscula</span>
-                          </div>
-                          <div className={`flex items-center gap-1 ${/[0-9]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
-                            <span>• Número (0-9)</span>
-                          </div>
-                          <div className={`flex items-center gap-1 ${/[^A-Za-z0-9]/.test(password) ? 'text-emerald-500 font-semibold' : ''}`}>
-                            <span>• Símbolo (@#$!%)</span>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </div>
@@ -513,15 +503,30 @@ export const Login: React.FC = () => {
                   {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
                   <span>
                     {loading
-                      ? 'Processando cadastro...'
+                      ? 'Processando...'
                       : mode === 'signin'
                       ? 'Entrar no Internet Banking'
                       : mode === 'signup'
                       ? 'Concluir Cadastro de Operador'
-                      : 'Enviar Link Mágico por E-mail'}
+                      : 'Enviar Link de Recuperação'}
                   </span>
                   {!loading && <ArrowRight className="w-4 h-4" />}
                 </button>
+
+                {mode === 'forgot' && (
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('signin');
+                        setMessage(null);
+                      }}
+                      className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-semibold"
+                    >
+                      ← Voltar para a tela de Login
+                    </button>
+                  </div>
+                )}
               </form>
 
               {/* Sandbox Footer Disclaimer */}

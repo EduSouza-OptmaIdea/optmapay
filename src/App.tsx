@@ -20,26 +20,24 @@ import { SettingsReset } from './pages/SettingsReset';
 import { MyProfile } from './pages/MyProfile';
 import { Login } from './pages/Login';
 import { Onboarding } from './pages/Onboarding';
+import { ResetPassword } from './pages/ResetPassword';
+import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
-  const { user, loading, accounts } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8F6F2] dark:bg-[#0F172A] text-[#19A999] font-mono text-xs">
-        Carregando OptmaPay Sandbox...
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-600 dark:text-slate-300 gap-3 font-mono text-xs">
+        <RefreshCw className="w-6 h-6 text-[#19A999] animate-spin" />
+        <span>Autenticando sessão OptmaPay...</span>
       </div>
     );
   }
 
-  // Se não estiver logado, redireciona para a tela de login
+  // Se não estiver logado, redireciona estritamente para /login
   if (!user) {
     return <Navigate to="/login" replace />;
-  }
-
-  // Se o usuário não tem nenhuma conta criada ainda, exibe tela de onboarding para abrir a primeira
-  if (!accounts || accounts.length === 0) {
-    return <Onboarding />;
   }
 
   return (
@@ -59,6 +57,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
             <Route path="/settings" element={<SettingsReset />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
@@ -76,16 +75,16 @@ export function App() {
       <AuthProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
-            {/* Rotas Públicas Principais */}
+            {/* Rotas Públicas */}
             <Route path="/" element={<PublicHome />} />
             <Route path="/termos-de-uso" element={<TermsOfUse />} />
             <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
 
-            {/* Rotas de Autenticação e Onboarding */}
+            {/* Autenticação & Recuperação de Senha */}
             <Route path="/login" element={<Login />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Rotas Privadas do Banco Digital */}
+            {/* Rotas Privadas Estritamente Protegidas */}
             <Route path="/*" element={<ProtectedLayout />} />
           </Routes>
           <CookieBanner />
