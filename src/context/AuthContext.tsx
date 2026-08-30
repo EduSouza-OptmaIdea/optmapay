@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
 import { fetchUserAccounts, createBankAccount } from '../lib/supabase/accountService';
@@ -23,9 +23,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [accounts, setAccounts] = useState<SandboxAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
 
   const loadAccounts = async (userId?: string, currentUser?: User | null) => {
-    const targetUserId = userId !== undefined ? userId : user?.id || '';
+    const targetUserId = userId !== undefined ? userId : userRef.current?.id || '';
     if (!targetUserId) {
       setAccounts([]);
       setActiveAccount(null);
@@ -51,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     } else {
       // Se o usuário está autenticado e válido, auto-cria a conta se existirem metadados do cadastro
-      const authUser = currentUser || user;
+      const authUser = currentUser || userRef.current;
       if (authUser && authUser.id) {
         const meta = authUser.user_metadata || {};
         if (meta.account_name && meta.cpf_cnpj) {
@@ -72,9 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
             }
           } catch (err: any) {
-            // Se o usuário não existe mais no auth.users (foreign key error 23503), limpa a sessão zumbi
             if (err?.code === '23503' || err?.message?.includes('violates foreign key constraint') || err?.message?.includes('accounts_user_id_fkey')) {
-              console.warn('Sessão zumbi detectada (usuário deletado do Auth). Limpando sessão local...');
+              console.warn('Sessão zumbi detectada. Limpando sessão local...');
               await supabase.auth.signOut();
               setUser(null);
               setAccounts([]);
@@ -92,10 +93,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Validação real contra o servidor do Supabase para evitar sessões zumbis
+    // Validação real contra o servidor do Supabase
     supabase.auth.getUser().then(({ data: { user: currentUser }, error }) => {
       if (error || !currentUser) {
-        // Sessão inválida ou usuário excluído no backend
         supabase.auth.signOut().catch(() => {});
         setUser(null);
         setAccounts([]);
@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // Supabase Realtime Listener
+    // Supabase Realtime Listener Global
     const realtimeChannel = supabase
       .channel('optmapay_global_realtime')
       .on(
@@ -137,8 +137,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return prev;
             });
           }
-          if (user?.id) {
-            loadAccounts(user.id, user);
+          if (userRef.current?.id) {
+            loadAccounts(userRef.current.id, userRef.current);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
@@ -147,8 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
         (payload) => {
-          if (user?.id) {
-            loadAccounts(user.id, user);
+          if (userRef.current?.id) {
+            loadAccounts(userRef.current.id, userRef.current);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
@@ -157,17 +157,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'postgres_changes',
         { event: '*', schema: 'public', table: 'boletos' },
         (payload) => {
-          if (user?.id) {
-            loadAccounts(user.id, user);
+          if (userRef.current?.id) {
+            loadAccounts(userRef.current.id, userRef.current);
           }
           window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: payload }));
         }
       )
       .subscribe();
 
+    // Auto-sync ao focar na janela / mudar de aba
+    const handleFocus = () => {
+      if (userRef.current?.id) {
+        loadAccounts(userRef.current.id, userRef.current);
+        window.dispatchEvent(new CustomEvent('optmapay:realtime_update', { detail: {} }));
+      }
+    };
+
+    // Heartbeat de sincronização a cada 4 segundos se a página estiver visível
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState === 'visible' && userRef.current?.id) {
+        loadAccounts(userRef.current.id, userRef.current);
+      }
+    }, 4000);
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
     return () => {
       authListener.subscription.unsubscribe();
       supabase.removeChannel(realtimeChannel);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      clearInterval(heartbeat);
     };
   }, []);
 
@@ -180,8 +201,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshAccounts = async () => {
-    if (user?.id) {
-      await loadAccounts(user.id, user);
+    if (userRef.current?.id) {
+      await loadAccounts(userRef.current.id, userRef.current);
     }
   };
 

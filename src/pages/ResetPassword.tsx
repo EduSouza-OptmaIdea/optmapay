@@ -77,7 +77,15 @@ export const ResetPassword: React.FC = () => {
         navigate('/dashboard');
       }, 2000);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Erro ao redefinir a senha. Tente novamente.');
+      let friendly = err.message || 'Erro ao redefinir a senha. Tente novamente.';
+      if (friendly.includes('New password should be different')) {
+        friendly = 'A nova senha deve ser diferente da senha anterior.';
+      } else if (friendly.includes('Password should be at least')) {
+        friendly = 'A nova senha deve conter no mínimo 6 caracteres.';
+      } else if (friendly.includes('Auth session missing')) {
+        friendly = 'Sua sessão de recuperação expirou. Solicite um novo link na tela de login.';
+      }
+      setErrorMessage(friendly);
     } finally {
       setLoading(false);
     }

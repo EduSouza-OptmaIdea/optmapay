@@ -28,14 +28,28 @@ import {
   RefreshCw,
   Clock,
   Printer,
-  Share2,
   FileCheck2,
   X,
+  RotateCcw,
+  ListOrdered,
 } from 'lucide-react';
+
+interface StoredPixCharge {
+  id: string;
+  txRef: string;
+  amount: number;
+  description: string;
+  payload: string;
+  createdAt: number;
+  expiresAt: number;
+  paid: boolean;
+  payerName?: string;
+  paidAt?: string;
+}
 
 export const PixArea: React.FC = () => {
   const { activeAccount, refreshAccounts } = useAuth();
-  const [activeTab, setActiveTab] = useState<'pay' | 'receive' | 'generate'>('pay');
+  const [activeTab, setActiveTab] = useState<'pay' | 'receive' | 'generate' | 'charges'>('pay');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedInstruction, setCopiedInstruction] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -55,8 +69,13 @@ export const PixArea: React.FC = () => {
   const [pixDesc, setPixDesc] = useState('');
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
   const [generatedTxRef, setGeneratedTxRef] = useState<string | null>(null);
+  const [generatedExpiresAt, setGeneratedExpiresAt] = useState<number | null>(null);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(600);
   const [copiedDynamicPayload, setCopiedDynamicPayload] = useState(false);
-  
+
+  // Histórico de Cobranças Geradas
+  const [storedCharges, setStoredCharges] = useState<StoredPixCharge[]>([]);
+
   // Status de liquidação em tempo real do QR Code gerado
   const [dynamicChargePaid, setDynamicChargePaid] = useState<{
     paid: boolean;
@@ -65,9 +84,56 @@ export const PixArea: React.FC = () => {
     paidAt?: string;
   } | null>(null);
 
+  // Modal Devolução Pix
+  const [selectedTxForRefund, setSelectedTxForRefund] = useState<SandboxTransaction | null>(null);
+  const [refundMode, setRefundMode] = useState<'total' | 'partial'>('total');
+  const [partialAmount, setPartialAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('Cancelamento de compra');
+  const [processingRefund, setProcessingRefund] = useState(false);
+  const [refundSuccessMessage, setRefundSuccessMessage] = useState<string | null>(null);
+  const [refundErrorMessage, setRefundErrorMessage] = useState<string | null>(null);
+
   // Dedicated Pix Statement State
   const [pixTransactions, setPixTransactions] = useState<SandboxTransaction[]>([]);
   const [loadingPixTx, setLoadingPixTx] = useState(false);
+
+  // Carrega cobranças salvas do localStorage
+  useEffect(() => {
+    if (!activeAccount?.id) return;
+    const key = `optmapay_pix_charges_${activeAccount.id}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        setStoredCharges(JSON.parse(raw));
+      } catch {
+        setStoredCharges([]);
+      }
+    } else {
+      setStoredCharges([]);
+    }
+  }, [activeAccount?.id]);
+
+  const saveCharges = (newCharges: StoredPixCharge[]) => {
+    setStoredCharges(newCharges);
+    if (activeAccount?.id) {
+      localStorage.setItem(`optmapay_pix_charges_${activeAccount.id}`, JSON.stringify(newCharges));
+    }
+  };
+
+  // Timer de Contagem Regressiva de 10 Minutos (600 segundos)
+  useEffect(() => {
+    if (!generatedExpiresAt || dynamicChargePaid?.paid) return;
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.floor((generatedExpiresAt - Date.now()) / 1000));
+      setCountdownSeconds(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [generatedExpiresAt, dynamicChargePaid?.paid]);
 
   const fetchPixTransactions = async () => {
     if (!activeAccount) return;
@@ -93,20 +159,41 @@ export const PixArea: React.FC = () => {
 
     const handleRealtime = (e: any) => {
       fetchPixTransactions();
-      
-      // Se tiver um QR Code dinâmico na tela aguardando pagamento
-      if (generatedTxRef && e.detail?.new) {
+
+      // Monitoramento em tempo real do QR Code na tela
+      if (e.detail?.new) {
         const row = e.detail.new;
         if (
           row.account_id === activeAccount?.id &&
           row.direction === 'in' &&
-          row.external_reference === generatedTxRef
+          row.external_reference
         ) {
-          setDynamicChargePaid({
-            paid: true,
-            payerName: row.counterparty_name || 'Cliente Pagador',
-            amount: Number(row.amount),
-            paidAt: row.created_at,
+          // Atualiza o card aberto na tela
+          if (generatedTxRef && row.external_reference === generatedTxRef) {
+            setDynamicChargePaid({
+              paid: true,
+              payerName: row.counterparty_name || 'Cliente Pagador',
+              amount: Number(row.amount),
+              paidAt: row.created_at,
+            });
+          }
+
+          // Atualiza lista de cobranças persistidas
+          setStoredCharges((prev) => {
+            const updated = prev.map((ch) =>
+              ch.txRef === row.external_reference
+                ? {
+                    ...ch,
+                    paid: true,
+                    payerName: row.counterparty_name || 'Cliente Pagador',
+                    paidAt: row.created_at,
+                  }
+                : ch
+            );
+            if (activeAccount?.id) {
+              localStorage.setItem(`optmapay_pix_charges_${activeAccount.id}`, JSON.stringify(updated));
+            }
+            return updated;
           });
         }
       }
@@ -127,7 +214,7 @@ export const PixArea: React.FC = () => {
     receiverAccountId: activeAccount.id,
   });
 
-  // Handle Pix Key or BR Code / OptmaPay Code Input Changes
+  // Validação de entrada de Pix
   const handlePixInputChange = (val: string) => {
     setRawPixInput(val);
     setErrorMessage(null);
@@ -141,6 +228,23 @@ export const PixArea: React.FC = () => {
 
     const parsed = parsePixPayload(val);
     setParsedData(parsed);
+
+    // Valida se a instrução expirou (regra de 10 minutos)
+    if (parsed.isOptmaPayCode && val.includes('ts=')) {
+      try {
+        const urlParams = new URLSearchParams(val.split('?')[1]);
+        const tsStr = urlParams.get('ts');
+        if (tsStr) {
+          const creationTs = parseInt(tsStr, 10);
+          const tenMinutesMs = 10 * 60 * 1000;
+          if (Date.now() - creationTs > tenMinutesMs) {
+            setErrorMessage('Atenção: Esta instrução de cobrança Pix expirou após 10 minutos.');
+          }
+        }
+      } catch {
+        // Ignora
+      }
+    }
 
     if (parsed.amount && parsed.amount > 0) {
       setPayAmount(parsed.amount.toFixed(2));
@@ -179,6 +283,8 @@ export const PixArea: React.FC = () => {
     const val = parseFloat(pixAmount);
     const randomTxRef = `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
     const finalDescription = pixDesc.trim() || 'Cobrança Pix Sandbox';
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 Minutos
 
     const payload = generateOptmaPayPixPayload({
       receiverPixKey: activeAccount.pix_key,
@@ -191,10 +297,26 @@ export const PixArea: React.FC = () => {
 
     setGeneratedTxRef(randomTxRef);
     setGeneratedPayload(payload);
+    setGeneratedExpiresAt(expiresAt);
+    setCountdownSeconds(600);
     setDynamicChargePaid(null);
+
+    // Salva na lista de cobranças gerenciadas
+    const newCharge: StoredPixCharge = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `ch_${Date.now()}`,
+      txRef: randomTxRef,
+      amount: isNaN(val) ? 0 : val,
+      description: finalDescription,
+      payload,
+      createdAt: now,
+      expiresAt,
+      paid: false,
+    };
+
+    saveCharges([newCharge, ...storedCharges.slice(0, 49)]);
   };
 
-  // Perform Pix Payment Transfer
+  // Execução de Transferência Pix
   const handleExecuteTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -233,7 +355,6 @@ export const PixArea: React.FC = () => {
       await refreshAccounts();
       await fetchPixTransactions();
 
-      // Reset transfer form
       setRawPixInput('');
       setParsedData(null);
       setPayAmount('0.00');
@@ -245,7 +366,64 @@ export const PixArea: React.FC = () => {
     }
   };
 
-  // Copia o texto formatado do comprovante para o clipboard
+  // Execução de Devolução Pix
+  const handleExecuteRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTxForRefund || !activeAccount) return;
+
+    const refundAmountNum =
+      refundMode === 'total'
+        ? Number(selectedTxForRefund.amount)
+        : parseFloat(partialAmount);
+
+    if (isNaN(refundAmountNum) || refundAmountNum <= 0) {
+      setRefundErrorMessage('Informe um valor de devolução válido.');
+      return;
+    }
+
+    if (refundAmountNum > Number(selectedTxForRefund.amount)) {
+      setRefundErrorMessage(
+        `O valor de devolução não pode exceder o valor original de R$ ${Number(selectedTxForRefund.amount).toFixed(2)}.`
+      );
+      return;
+    }
+
+    if (activeAccount.balance < refundAmountNum) {
+      setRefundErrorMessage(
+        `Saldo insuficiente para realizar a devolução (Disponível: R$ ${activeAccount.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
+      );
+      return;
+    }
+
+    setProcessingRefund(true);
+    setRefundErrorMessage(null);
+
+    try {
+      const { data, error } = await supabase.rpc('refund_pix', {
+        p_original_transaction_id: selectedTxForRefund.id,
+        p_refund_amount: refundAmountNum,
+        p_reason: refundReason.trim() || 'Devolução Pix',
+      });
+
+      if (error) throw error;
+
+      setRefundSuccessMessage(
+        `Devolução de R$ ${refundAmountNum.toFixed(2)} concluída com sucesso para ${data.receiver_name}!`
+      );
+      await refreshAccounts();
+      await fetchPixTransactions();
+
+      setTimeout(() => {
+        setSelectedTxForRefund(null);
+        setRefundSuccessMessage(null);
+      }, 2500);
+    } catch (err: any) {
+      setRefundErrorMessage(err.message || 'Falha ao processar devolução Pix.');
+    } finally {
+      setProcessingRefund(false);
+    }
+  };
+
   const handleCopyReceiptText = () => {
     if (!transferReceipt) return;
     const text = `COMPROVANTE DE TRANSFERÊNCIA PIX - OPTMAPAY SANDBOX
@@ -269,8 +447,11 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
     setTimeout(() => setCopiedReceiptText(false), 2000);
   };
 
-  const handlePrintReceipt = () => {
-    window.print();
+  // Formata MM:SS
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -280,21 +461,21 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         <div>
           <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <QrCode className="w-5 h-5 text-[#19A999]" />
-            Área Pix Sandbox & Transferências
+            Área Pix Sandbox & Cobranças
           </h1>
           <p className="text-xs text-slate-500">
-            Transfira fundos instantaneamente entre contas via instrução Pix, Copia e Cola ou QR Code
+            Transfira fundos, emita QR Codes dinâmicos com validade de 10 minutos e gerencie cobranças
           </p>
         </div>
 
         {/* Action Tabs */}
-        <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl gap-1">
+        <div className="flex flex-wrap bg-slate-200 dark:bg-slate-800 p-1 rounded-xl gap-1 text-xs font-bold">
           <button
             onClick={() => {
               setActiveTab('pay');
               setErrorMessage(null);
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               activeTab === 'pay'
                 ? 'bg-[#19A999] text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -309,14 +490,14 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               setActiveTab('receive');
               setErrorMessage(null);
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               activeTab === 'receive'
                 ? 'bg-[#19A999] text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <QrCode className="w-3.5 h-3.5" />
-            <span>Receber (QR Code)</span>
+            <span>Receber (Estático)</span>
           </button>
 
           <button
@@ -324,7 +505,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               setActiveTab('generate');
               setErrorMessage(null);
             }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
               activeTab === 'generate'
                 ? 'bg-[#F1613A] text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -332,6 +513,21 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Cobrança com Valor</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('charges');
+              setErrorMessage(null);
+            }}
+            className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+              activeTab === 'charges'
+                ? 'bg-[#19A999] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
+            <span>Minhas Cobranças</span>
           </button>
         </div>
       </div>
@@ -363,8 +559,6 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
       {transferReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl space-y-0">
-            
-            {/* Header Comprovante */}
             <div className="bg-[#29324E] text-white p-6 text-center relative border-b-4 border-[#19A999]">
               <button
                 onClick={() => setTransferReceipt(null)}
@@ -379,7 +573,6 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               <p className="text-xs text-teal-300">OptmaPay Sandbox Dev Bank</p>
             </div>
 
-            {/* Conteúdo Comprovante */}
             <div className="p-6 space-y-5 text-xs text-slate-700 dark:text-slate-300">
               <div className="text-center py-2 border-b border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[11px] text-slate-400 font-semibold uppercase">Valor Transferido</span>
@@ -397,7 +590,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                   <p className="font-bold text-slate-900 dark:text-white text-xs">{transferReceipt.senderName}</p>
                   <p className="font-mono text-[10px] text-slate-500 truncate">{transferReceipt.senderPixKey}</p>
                   <p className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-bold pt-1">
-                    Seu Novo Saldo: R$ {transferReceipt.senderBalanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    Seu Saldo: R$ {transferReceipt.senderBalanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
 
@@ -420,7 +613,6 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                 </div>
               </div>
 
-              {/* Ações do Comprovante */}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -433,7 +625,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
 
                 <button
                   type="button"
-                  onClick={handlePrintReceipt}
+                  onClick={() => window.print()}
                   className="flex-1 py-3 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-md"
                 >
                   <Printer className="w-4 h-4" />
@@ -571,7 +763,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       )}
 
-      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM MONITORAMENTO EM TEMPO REAL */}
+      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM VALIDADE DE 10 MINUTOS */}
       {activeTab === 'generate' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -579,7 +771,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             Gerar Cobrança Pix com Valor
           </h2>
           <p className="text-xs text-slate-500">
-            Gera um QR Code Pix dinâmico com valor predefinido e monitoramento de baixa automática em tempo real.
+            Gera um QR Code dinâmico com valor predefinido válido por <strong>10 minutos</strong> e baixa automática em tempo real.
           </p>
 
           <form onSubmit={handleGenerateDynamic} className="space-y-4">
@@ -618,15 +810,13 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               className="w-full py-3 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-md shadow-orange-950/20 flex items-center justify-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Gerar Instrução de Cobrança Pix</span>
+              <span>Gerar Instrução de Cobrança Pix (Válida por 10 Minutos)</span>
             </button>
           </form>
 
-          {/* EXIBIÇÃO DO QR CODE GERADO COM STATUS EM TEMPO REAL */}
+          {/* EXIBIÇÃO DO QR CODE GERADO COM STATUS & TIMER */}
           {generatedPayload && (
             <div className="pt-6 border-t border-slate-200 dark:border-slate-700 space-y-4">
-              
-              {/* Badge de Status em Tempo Real */}
               <div className="flex items-center justify-center">
                 {dynamicChargePaid?.paid ? (
                   <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2 animate-bounce">
@@ -636,10 +826,17 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                       <p className="text-[11px]">Pagador: <strong>{dynamicChargePaid.payerName}</strong> • R$ {dynamicChargePaid.amount?.toFixed(2)}</p>
                     </div>
                   </div>
+                ) : countdownSeconds > 0 ? (
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500 animate-spin" />
+                    <span>
+                      Aguardando Pagamento do Cliente • Tempo restante: <strong>{formatCountdown(countdownSeconds)}</strong>
+                    </span>
+                  </div>
                 ) : (
-                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2 animate-pulse">
-                    <Clock className="w-4 h-4 text-amber-500" />
-                    <span>Aguardando Pagamento do Cliente (Monitorando em Tempo Real...)</span>
+                  <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 text-xs flex items-center gap-2">
+                    <X className="w-4 h-4 text-rose-500" />
+                    <span>Cobrança Pix Expirada após 10 minutos (Gere uma nova cobrança)</span>
                   </div>
                 )}
               </div>
@@ -670,7 +867,82 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       )}
 
-      {/* EXTRATO EXCLUSIVO DE PIX (ÚLTIMOS 60 DIAS) */}
+      {/* ABA 4: GERENCIAR COBRANÇAS PIX EMITIDAS */}
+      {activeTab === 'charges' && (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <ListOrdered className="w-4 h-4 text-[#19A999]" />
+              Minhas Cobranças Pix Emitidas
+            </h2>
+            <button
+              onClick={() => saveCharges([])}
+              className="text-xs text-slate-400 hover:text-rose-500"
+            >
+              Limpar Lista
+            </button>
+          </div>
+
+          {storedCharges.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+              Nenhuma cobrança gerada nesta sessão. Gere uma cobrança na aba "Cobrança com Valor".
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/60 overflow-x-auto text-xs">
+              {storedCharges.map((ch) => {
+                const isExpired = Date.now() > ch.expiresAt && !ch.paid;
+                const statusBadge = ch.paid ? (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 font-bold text-[10px]">
+                    Paga
+                  </span>
+                ) : isExpired ? (
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 font-bold text-[10px]">
+                    Expirada
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 font-bold text-[10px]">
+                    Aguardando Pagamento
+                  </span>
+                );
+
+                return (
+                  <div key={ch.id} className="py-3 flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{ch.description}</span>
+                        {statusBadge}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Ref: {ch.txRef} • Criada em: {new Date(ch.createdAt).toLocaleTimeString('pt-BR')}
+                        {ch.payerName ? ` • Paga por: ${ch.payerName}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="font-mono font-bold text-sm text-slate-800 dark:text-slate-100">
+                        R$ {ch.amount.toFixed(2)}
+                      </span>
+
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(ch.payload);
+                          alert('Código Pix copiado para a área de transferência!');
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition"
+                        title="Copiar Código Pix"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EXTRATO EXCLUSIVO DE PIX COM BOTÃO DE DEVOLUÇÃO */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -679,7 +951,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               Extrato Exclusivo de Pix ({activeAccount.name})
             </h2>
             <p className="text-xs text-slate-500">
-              Histórico de transferências Pix enviadas e recebidas em tempo real
+              Histórico de transferências Pix enviadas e recebidas (Clique em um Pix recebido para estornar/devolver)
             </p>
           </div>
           <button
@@ -691,14 +963,6 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
           </button>
         </div>
 
-        {/* 60-Day Policy Notice */}
-        <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 flex items-center gap-2.5">
-          <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-          <span>
-            <strong>Extrato Pix Sandbox:</strong> Exibe transferências dos últimos <strong>60 dias</strong> da data atual. O saldo da conta permanece preservado.
-          </span>
-        </div>
-
         {pixTransactions.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
             Nenhuma transferência Pix realizada ou recebida por esta conta nos últimos 60 dias.
@@ -708,7 +972,21 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             {pixTransactions.map((tx) => {
               const isIn = tx.direction === 'in';
               return (
-                <div key={tx.id} className="py-3 flex items-center justify-between gap-4 text-xs">
+                <div
+                  key={tx.id}
+                  onClick={() => {
+                    if (isIn) {
+                      setSelectedTxForRefund(tx);
+                      setRefundMode('total');
+                      setPartialAmount(Number(tx.amount).toFixed(2));
+                      setRefundErrorMessage(null);
+                      setRefundSuccessMessage(null);
+                    }
+                  }}
+                  className={`py-3 flex items-center justify-between gap-4 text-xs transition ${
+                    isIn ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer' : ''
+                  }`}
+                >
                   <div className="flex items-center gap-3">
                     <div
                       className={`p-2 rounded-xl shrink-0 ${
@@ -720,8 +998,13 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                       {isIn ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-800 dark:text-slate-200">
-                        {isIn ? `Pix Recebido de ${tx.counterparty_name || 'Conta Externa'}` : `Pix Enviado para ${tx.counterparty_name || 'Conta Externa'}`}
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <span>{isIn ? `Pix Recebido de ${tx.counterparty_name || 'Conta Externa'}` : `Pix Enviado para ${tx.counterparty_name || 'Conta Externa'}`}</span>
+                        {isIn && (
+                          <span className="px-1.5 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[9px] font-semibold">
+                            Devolver Pix
+                          </span>
+                        )}
                       </p>
                       <p className="text-[11px] text-slate-400">
                         {tx.description ? `${tx.description} • ` : ''}
@@ -733,7 +1016,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
 
                   <div className="text-right shrink-0">
                     <p className={`font-bold ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                      {isIn ? '+' : '-'} R$ {tx.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                     <span className="text-[10px] font-mono text-slate-400 uppercase">
                       PIX {tx.environment.toUpperCase()}
@@ -745,6 +1028,132 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
           </div>
         )}
       </div>
+
+      {/* MODAL DEVOLUÇÃO / ESTORNO PIX (PARCIAL OU TOTAL) */}
+      {selectedTxForRefund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-base">
+                <RotateCcw className="w-5 h-5" />
+                <h3>Devolução de Pix Recebido</h3>
+              </div>
+              <button
+                onClick={() => setSelectedTxForRefund(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {refundSuccessMessage ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-700 dark:text-emerald-300 text-center space-y-2 animate-fadeIn text-xs">
+                <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
+                <p className="font-bold text-sm">{refundSuccessMessage}</p>
+                <p className="text-[11px] text-slate-500">Saldo estornado e atualizado em tempo real.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleExecuteRefund} className="space-y-4 text-xs">
+                {refundErrorMessage && (
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-400 text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{refundErrorMessage}</span>
+                  </div>
+                )}
+
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-400">Pix Original Recebido</span>
+                  <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                    R$ {Number(selectedTxForRefund.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-slate-500">De: <strong>{selectedTxForRefund.counterparty_name || 'Conta Pagadora'}</strong></p>
+                  <p className="text-slate-400 text-[10px]">Data: {new Date(selectedTxForRefund.created_at).toLocaleString('pt-BR')}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Tipo de Devolução
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRefundMode('total')}
+                      className={`py-2 px-3 rounded-xl border font-bold transition ${
+                        refundMode === 'total'
+                          ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-[#19A999]'
+                          : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Devolução Total (100%)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRefundMode('partial')}
+                      className={`py-2 px-3 rounded-xl border font-bold transition ${
+                        refundMode === 'partial'
+                          ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-[#19A999]'
+                          : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Devolução Parcial
+                    </button>
+                  </div>
+                </div>
+
+                {refundMode === 'partial' && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Valor a Devolver (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={Number(selectedTxForRefund.amount)}
+                      value={partialAmount}
+                      onChange={(e) => setPartialAmount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-rose-600 outline-none focus:ring-2 focus:ring-rose-500"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Motivo da Devolução (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    placeholder="Ex: Cancelamento de pedido / Valor divergente"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-[#19A999]"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTxForRefund(null)}
+                    className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={processingRefund}
+                    className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {processingRefund && <RefreshCw className="w-4 h-4 animate-spin" />}
+                    <span>{processingRefund ? 'Processando...' : 'Confirmar Devolução'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal Scanner QR Code Câmera */}
       {isScannerOpen && (
