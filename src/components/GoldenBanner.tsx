@@ -36,10 +36,10 @@ export const GoldenBanner: React.FC = () => {
               Este é um banco sandbox usado apenas para testes de api e webhook em sites, apps etc.. As transações e dados aqui visualizados são todos fictícios.
             </span>
           </div>
-          <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-amber-700 dark:text-amber-400 shrink-0">
+          {/* <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-amber-700 dark:text-amber-400 shrink-0">
             <Terminal className="w-3.5 h-3.5" />
             <span>API /api/sandbox/v1</span>
-          </div>
+          </div> */}
         </div>
 
       )}
