@@ -9,7 +9,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  PlusCircle,
   Key,
   LogOut,
   User,
@@ -43,20 +42,8 @@ export const Header: React.FC = () => {
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Seletor de Conta Ativa (se autenticado) */}
+          {/* Badge da Conta Ativa do Usuário */}
           {user && <ActiveAccountSelector />}
-
-          {/* Abrir Nova Conta */}
-          {user && (
-            <button
-              onClick={() => navigate('/onboarding')}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs shadow-sm transition"
-              title="Abrir Nova Conta Digital Fictícia"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>+ Abrir Conta</span>
-            </button>
-          )}
 
           {/* Configuração Supabase Anon Key */}
           <button

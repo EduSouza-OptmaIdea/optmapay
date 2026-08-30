@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createBankAccount } from '../lib/supabase/accountService';
 import { Logo } from '../components/Logo';
-import { Building2, User, Sparkles, ArrowRight, ShieldCheck, Wallet, Key } from 'lucide-react';
+import { Building2, User, Sparkles, ShieldCheck, Wallet, Key, RefreshCw } from 'lucide-react';
 import { AccountType } from '../types/sandbox';
 import { getStoredAnonKey } from '../lib/supabase/client';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
@@ -14,57 +14,69 @@ export const Onboarding: React.FC = () => {
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('merchant');
-  const [name, setName] = useState('OptmaIdea Vendas & Soluções LTDA');
+  const [name, setName] = useState('Minha Empresa Sandbox LTDA');
   const [cpfCnpj, setCpfCnpj] = useState('45.892.102/0001-90');
   const [phone, setPhone] = useState('(11) 98877-6655');
-  const [initialBalance, setInitialBalance] = useState('10000');
-  const [pixKey, setPixKey] = useState('vendas@optmaidea.com.br');
+  const [initialBalanceFormatted, setInitialBalanceFormatted] = useState('10.000,00');
+  const [pixKey, setPixKey] = useState(user?.email || 'vendas@optmaidea.com.br');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.email) {
+      setPixKey(user.email);
+    }
+  }, [user?.email]);
 
   const handleTypeChange = (type: AccountType) => {
     setAccountType(type);
     if (type === 'merchant') {
-      setName('OptmaIdea Vendas & Soluções LTDA');
+      setName('Minha Empresa Sandbox LTDA');
       setCpfCnpj('45.892.102/0001-90');
-      setInitialBalance('10000');
-      setPixKey('vendas@optmaidea.com.br');
+      setInitialBalanceFormatted('10.000,00');
+      setPixKey(user?.email || 'vendas@optmaidea.com.br');
     } else {
-      setName('Carlos Eduardo Silva (Cliente Teste)');
-      setCpfCnpj('123.456.789-00');
-      setInitialBalance('3500');
-      setPixKey('carlos.silva.teste@optmapay.fake');
+      setName('Cliente Teste Comprador');
+      setCpfCnpj('824.636.200-65');
+      setInitialBalanceFormatted('2.500,00');
+      setPixKey(user?.email || 'cliente@optmapay.fake');
     }
   };
 
-  const generateFakeCpfCnpj = () => {
-    if (accountType === 'merchant') {
-      const random = Math.floor(10000000000000 + Math.random() * 90000000000000);
-      const str = random.toString().slice(0, 14);
-      setCpfCnpj(`${str.slice(0, 2)}.${str.slice(2, 5)}.${str.slice(5, 8)}/${str.slice(8, 12)}-${str.slice(12)}`);
-    } else {
-      const random = Math.floor(10000000000 + Math.random() * 90000000000);
-      const str = random.toString().slice(0, 11);
-      setCpfCnpj(`${str.slice(0, 3)}.${str.slice(3, 6)}.${str.slice(6, 9)}-${str.slice(9)}`);
-    }
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/\D/g, '');
+    if (!raw) raw = '0';
+    const num = parseFloat(raw) / 100;
+    setInitialBalanceFormatted(
+      num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    );
+  };
+
+  const parseFormattedBalance = (formatted: string): number => {
+    const clean = formatted.replace(/\./g, '').replace(',', '.');
+    return parseFloat(clean) || 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
 
-    const userId = user ? user.id : '00000000-0000-0000-0000-000000000001';
-    const val = parseFloat(initialBalance);
+    const val = parseFormattedBalance(initialBalanceFormatted);
 
     try {
-      const created = await createBankAccount(userId, {
+      const created = await createBankAccount(user.id, {
         name,
         type: accountType,
         cpf_cnpj: cpfCnpj,
         phone,
-        initialBalance: isNaN(val) ? 0 : val,
-        pixKey,
+        initialBalance: val,
+        pixKey: pixKey.trim(),
       });
 
       if (created) {
@@ -112,10 +124,10 @@ export const Onboarding: React.FC = () => {
               Internet Banking Sandbox
             </span>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-              Abra uma Conta Digital Fictícia para Testar Vendas
+              Abra sua Conta Digital Fictícia para Testar Vendas
             </h1>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-              Crie a conta da sua empresa recebedora ou de um cliente pagador. Saldo fictício, cartões virtuais e chave Pix salvos em tempo real no Supabase.
+              Crie a conta de Pessoa Jurídica (PJ) ou Pessoa Física (PF) vinculada exclusivamente ao seu e-mail de operador. Saldo fictício e chave Pix salvos em tempo real no Supabase.
             </p>
           </div>
 
@@ -129,7 +141,7 @@ export const Onboarding: React.FC = () => {
                   <User className="w-5 h-5 text-blue-400" />
                 )}
                 <span className="text-xs font-bold uppercase text-teal-200">
-                  Conta {accountType === 'merchant' ? 'Empresa (Merchant)' : 'Cliente (Customer)'}
+                  Conta {accountType === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}
                 </span>
               </div>
               <span className="text-[10px] font-mono font-bold bg-white/10 px-2 py-0.5 rounded text-[#FAA832]">
@@ -140,13 +152,14 @@ export const Onboarding: React.FC = () => {
             <div className="space-y-1">
               <p className="text-lg font-bold text-white truncate">{name || 'Nome do Titular'}</p>
               <p className="text-xs text-teal-200/80 font-mono">CPF/CNPJ: {cpfCnpj || '00.000.000/0000-00'}</p>
+              <p className="text-xs text-teal-300 font-mono truncate">Chave Pix: {pixKey || 'pix@email.com'}</p>
             </div>
 
             <div className="pt-3 border-t border-slate-700 flex items-center justify-between text-xs font-mono">
               <div>
                 <span className="text-[10px] text-teal-300/80 uppercase block">Saldo Inicial Fictício</span>
                 <span className="text-lg font-extrabold text-emerald-400">
-                  R$ {(parseFloat(initialBalance) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {initialBalanceFormatted}
                 </span>
               </div>
               <div className="text-right">
@@ -196,7 +209,7 @@ export const Onboarding: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Account Type Selector */}
+            {/* Account Type Selector: Pessoa Jurídica vs Pessoa Física */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
                 Qual o Perfil da Conta?
@@ -205,7 +218,7 @@ export const Onboarding: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleTypeChange('merchant')}
-                  className={`p-3 rounded-xl border text-left transition flex items-center gap-3 ${
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${
                     accountType === 'merchant'
                       ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-slate-900 dark:text-white font-bold ring-2 ring-[#19A999]/20'
                       : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400'
@@ -213,7 +226,7 @@ export const Onboarding: React.FC = () => {
                 >
                   <Building2 className={`w-5 h-5 ${accountType === 'merchant' ? 'text-[#19A999]' : 'text-slate-400'}`} />
                   <div>
-                    <p className="text-xs">Empresa (Merchant)</p>
+                    <p className="text-xs">Pessoa Jurídica (PJ)</p>
                     <p className="text-[10px] text-slate-500 font-normal">Recebedor de vendas & duplicatas</p>
                   </div>
                 </button>
@@ -221,7 +234,7 @@ export const Onboarding: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleTypeChange('customer')}
-                  className={`p-3 rounded-xl border text-left transition flex items-center gap-3 ${
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-center gap-3 ${
                     accountType === 'customer'
                       ? 'bg-blue-50 dark:bg-blue-950/80 border-blue-500 text-slate-900 dark:text-white font-bold ring-2 ring-blue-500/20'
                       : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400'
@@ -229,8 +242,8 @@ export const Onboarding: React.FC = () => {
                 >
                   <User className={`w-5 h-5 ${accountType === 'customer' ? 'text-blue-500' : 'text-slate-400'}`} />
                   <div>
-                    <p className="text-xs">Cliente (Customer)</p>
-                    <p className="text-[10px] text-slate-500 font-normal">Pagador PF/PJ de testes</p>
+                    <p className="text-xs">Pessoa Física (PF)</p>
+                    <p className="text-[10px] text-slate-500 font-normal">Pagador de compras & testes</p>
                   </div>
                 </button>
               </div>
@@ -246,24 +259,15 @@ export const Onboarding: React.FC = () => {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none font-bold"
                   required
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    {accountType === 'merchant' ? 'CNPJ Fictício' : 'CPF Fictício'}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={generateFakeCpfCnpj}
-                    className="text-[10px] text-[#19A999] hover:underline"
-                  >
-                    Gerar Novo
-                  </button>
-                </div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  {accountType === 'merchant' ? 'CNPJ Fictício' : 'CPF Fictício'}
+                </label>
                 <input
                   type="text"
                   value={cpfCnpj}
@@ -272,29 +276,34 @@ export const Onboarding: React.FC = () => {
                   required
                 />
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Saldo Inicial Fictício (R$)
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={initialBalance}
-                  onChange={(e) => setInitialBalance(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none"
-                  required
-                />
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">R$</span>
+                  <input
+                    type="text"
+                    value={initialBalanceFormatted}
+                    onChange={handleBalanceChange}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Chave Pix Padrão
+                  Chave Pix Padrão (E-mail do Cadastro)
                 </label>
                 <input
                   type="text"
                   value={pixKey}
                   onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="seu.email@empresa.com.br"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
                   required
                 />
@@ -304,28 +313,25 @@ export const Onboarding: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-xl shadow-orange-950/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+              className="w-full py-3.5 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-lg shadow-orange-950/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
-              <span>{loading ? 'Abrindo Conta no Supabase...' : 'Abrir Conta Digital e Acessar Banco'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {loading && <RefreshCw className="w-4 h-4 animate-spin" />}
+              <span>{loading ? 'Criando Conta no Supabase...' : 'Abrir Conta Digital e Acessar Banco'}</span>
             </button>
           </form>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="max-w-6xl w-full mx-auto text-center text-slate-500 text-[11px]">
-        OptmaPay Sandbox Dev Bank • Microcosmos OptmaIdea • Persistência em Tempo Real via PostgreSQL Supabase
+      {/* Footer Disclaimer */}
+      <footer className="max-w-6xl w-full mx-auto text-center text-slate-500 text-xs space-y-1">
+        <p>OptmaPay Sandbox Dev Bank • Ecossistema OptmaIdea</p>
+        <p>© 2026 Todos os direitos reservados. Ambiente estritamente simulado.</p>
       </footer>
 
-      {/* Supabase Config Modal */}
       <SupabaseConfigModal
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
-        onSaved={async () => {
-          await refreshAccounts();
-          setErrorMsg(null);
-        }}
+        onSaved={refreshAccounts}
       />
     </div>
   );

@@ -19,7 +19,7 @@ const navItems = [
   { to: '/settlement', label: 'Simulador Vendas', icon: ArrowLeftRight },
   { to: '/dev', label: 'Painel Dev & Webhooks', icon: Code2 },
   { to: '/meus-dados', label: 'Meus Dados', icon: User },
-  { to: '/settings', label: 'Config & Reset', icon: Settings },
+  { to: '/settings', label: 'Config & Exclusão', icon: Settings },
 ];
 
 export const Sidebar: React.FC = () => {

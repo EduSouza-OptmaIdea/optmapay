@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxTransaction, AccountType } from '../types/sandbox';
 import { createBankAccount } from '../lib/supabase/accountService';
+import { sendWelcomeEmail } from '../lib/email/app-email';
 import {
   Eye,
   EyeOff,
@@ -19,11 +20,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
   const { user, accounts, activeAccount, refreshAccounts } = useAuth();
-  const navigate = useNavigate();
 
   const [showBalance, setShowBalance] = useState(true);
   const [transactions, setTransactions] = useState<SandboxTransaction[]>([]);
@@ -36,8 +36,47 @@ export const Dashboard: React.FC = () => {
   const [newAccType, setNewAccType] = useState<AccountType>('merchant');
   const [newAccName, setNewAccName] = useState('Minha Empresa Sandbox LTDA');
   const [newAccCpfCnpj, setNewAccCpfCnpj] = useState('45.892.102/0001-90');
-  const [newAccBalance, setNewAccBalance] = useState('10000');
+  const [newAccBalanceFormatted, setNewAccBalanceFormatted] = useState('10.000,00');
+  const [newAccPixKey, setNewAccPixKey] = useState(user?.email || 'vendas@optmaidea.com.br');
   const [creatingAccount, setCreatingAccount] = useState(false);
+
+  useEffect(() => {
+    if (user?.email) {
+      setNewAccPixKey(user.email);
+    }
+  }, [user?.email]);
+
+  // Dispara e-mail de boas-vindas na primeira vez que o operador autenticado acessa
+  useEffect(() => {
+    if (user?.email) {
+      const welcomeKey = `optmapay_welcome_sent_${user.id}`;
+      const alreadySent = localStorage.getItem(welcomeKey);
+      if (!alreadySent) {
+        sendWelcomeEmail({
+          to: user.email,
+          fullName: user.user_metadata?.full_name || user.email.split('@')[0],
+        }).then((res) => {
+          if (res.success) {
+            localStorage.setItem(welcomeKey, 'true');
+          }
+        });
+      }
+    }
+  }, [user?.id, user?.email]);
+
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/\D/g, '');
+    if (!raw) raw = '0';
+    const num = parseFloat(raw) / 100;
+    setNewAccBalanceFormatted(
+      num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    );
+  };
+
+  const parseFormattedBalance = (formatted: string): number => {
+    const clean = formatted.replace(/\./g, '').replace(',', '.');
+    return parseFloat(clean) || 0;
+  };
 
   const fetchTransactions = async () => {
     if (!activeAccount) return;
@@ -110,11 +149,13 @@ export const Dashboard: React.FC = () => {
     setCreatingAccount(true);
 
     try {
+      const initialBal = parseFormattedBalance(newAccBalanceFormatted);
       await createBankAccount(user.id, {
         name: newAccName,
         type: newAccType,
         cpf_cnpj: newAccCpfCnpj,
-        initialBalance: parseFloat(newAccBalance) || 5000,
+        initialBalance: initialBal,
+        pixKey: newAccPixKey.trim(),
       });
 
       await refreshAccounts();
@@ -146,7 +187,7 @@ export const Dashboard: React.FC = () => {
           <form onSubmit={handleCreateInitialAccount} className="space-y-4 text-left pt-2">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Tipo da Conta
+                Qual o Perfil da Conta?
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -155,7 +196,8 @@ export const Dashboard: React.FC = () => {
                     setNewAccType('merchant');
                     setNewAccName('Minha Empresa Sandbox LTDA');
                     setNewAccCpfCnpj('45.892.102/0001-90');
-                    setNewAccBalance('10000');
+                    setNewAccBalanceFormatted('10.000,00');
+                    setNewAccPixKey(user?.email || 'vendas@optmaidea.com.br');
                   }}
                   className={`p-3.5 rounded-2xl border text-xs font-bold transition flex items-center gap-2.5 ${
                     newAccType === 'merchant'
@@ -164,7 +206,10 @@ export const Dashboard: React.FC = () => {
                   }`}
                 >
                   <Building2 className="w-4 h-4" />
-                  <span>Empresa (Merchant)</span>
+                  <div>
+                    <p>Pessoa Jurídica (PJ)</p>
+                    <p className="text-[10px] font-normal text-slate-400">Recebedor de vendas & duplicatas</p>
+                  </div>
                 </button>
 
                 <button
@@ -173,7 +218,8 @@ export const Dashboard: React.FC = () => {
                     setNewAccType('customer');
                     setNewAccName('Cliente Teste Comprador');
                     setNewAccCpfCnpj('824.636.200-65');
-                    setNewAccBalance('2500');
+                    setNewAccBalanceFormatted('2.500,00');
+                    setNewAccPixKey(user?.email || 'cliente@optmapay.fake');
                   }}
                   className={`p-3.5 rounded-2xl border text-xs font-bold transition flex items-center gap-2.5 ${
                     newAccType === 'customer'
@@ -182,7 +228,10 @@ export const Dashboard: React.FC = () => {
                   }`}
                 >
                   <User className="w-4 h-4" />
-                  <span>Cliente (Customer)</span>
+                  <div>
+                    <p>Pessoa Física (PF)</p>
+                    <p className="text-[10px] font-normal text-slate-400">Pagador de compras & testes</p>
+                  </div>
                 </button>
               </div>
             </div>
@@ -203,7 +252,7 @@ export const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  CPF ou CNPJ Fictício
+                  {newAccType === 'merchant' ? 'CNPJ Fictício' : 'CPF Fictício'}
                 </label>
                 <input
                   type="text"
@@ -218,15 +267,30 @@ export const Dashboard: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Saldo Inicial Fictício (R$)
                 </label>
-                <input
-                  type="number"
-                  required
-                  step="0.01"
-                  value={newAccBalance}
-                  onChange={(e) => setNewAccBalance(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none font-bold"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">R$</span>
+                  <input
+                    type="text"
+                    required
+                    value={newAccBalanceFormatted}
+                    onChange={handleBalanceChange}
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-emerald-600 dark:text-emerald-400 font-extrabold focus:ring-2 focus:ring-[#19A999] outline-none"
+                  />
+                </div>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Chave Pix Padrão (E-mail do Cadastro)
+              </label>
+              <input
+                type="text"
+                required
+                value={newAccPixKey}
+                onChange={(e) => setNewAccPixKey(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
+              />
             </div>
 
             <button
@@ -265,7 +329,7 @@ export const Dashboard: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-teal-200 text-xs font-semibold uppercase tracking-wider">
             {activeAccount.type === 'merchant' ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
-            <span>Conta {activeAccount.type === 'merchant' ? 'Empresa (Merchant)' : 'Cliente (Customer)'}</span>
+            <span>Conta {activeAccount.type === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold">{activeAccount.name}</h1>
           <p className="text-xs text-teal-200/80 font-mono">
