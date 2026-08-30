@@ -1,9 +1,9 @@
 import { supabase } from './supabase';
 import { triggerWebhookEvents } from './webhookEngine';
-import { SandboxAccount } from '../types/sandbox';
 
 export interface ParsedPixData {
   cleanKey: string;
+  accId?: string;
   amount?: number;
   description?: string;
   orderId?: string;
@@ -52,16 +52,18 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
     try {
       const queryString = trimmed.includes('?') ? trimmed.split('?')[1] : trimmed;
       const params = new URLSearchParams(queryString);
-      const to = params.get('to') || '';
-      const name = params.get('name') || '';
+      const to = decodeURIComponent(params.get('to') || '');
+      const accId = params.get('accId') || '';
+      const name = decodeURIComponent(params.get('name') || '');
       const amountStr = params.get('amount');
-      const ref = params.get('ref') || '';
-      const desc = params.get('desc') || '';
+      const ref = decodeURIComponent(params.get('ref') || '');
+      const desc = decodeURIComponent(params.get('desc') || '');
 
       const amount = amountStr ? parseFloat(amountStr) : undefined;
 
       return {
         cleanKey: to || trimmed,
+        accId: accId || undefined,
         amount: !isNaN(amount as number) && (amount as number) > 0 ? amount : undefined,
         description: desc || (name ? `Pagamento para ${name}` : 'Transferência OptmaPay Sandbox'),
         orderId: ref || undefined,
@@ -226,10 +228,13 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   const finalDesc = description || parsed.description || 'Transferência Pix Sandbox';
   const finalRef = externalReference || parsed.orderId || `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
 
-  // 2. Tenta executar via RPC transfer_pix (SECURITY DEFINER no PostgreSQL para contornar RLS entre contas)
+  // Chave a ser enviada para busca no banco (se tiver accId no payload, usa accId como prioridade de busca)
+  const lookupKey = parsed.accId || targetKey;
+
+  // 2. Tenta executar via RPC transfer_pix (SECURITY DEFINER no PostgreSQL)
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('transfer_pix', {
     p_sender_account_id: senderAccountId,
-    p_receiver_pix_key: targetKey,
+    p_receiver_pix_key: lookupKey,
     p_amount: amount,
     p_description: finalDesc,
     p_external_reference: finalRef,
@@ -290,7 +295,7 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     };
   }
 
-  // Se o RPC retornou erro de negócio (ex: chave não encontrada, saldo insuficiente)
+  // Se o RPC retornou erro de negócio
   if (rpcErr) {
     throw new Error(rpcErr.message || 'Erro ao processar transferência Pix via banco de dados.');
   }
