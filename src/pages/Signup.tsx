@@ -19,12 +19,12 @@ import {
   Inbox,
   Building2,
   User,
-  Wallet,
+  Phone,
 } from 'lucide-react';
 
 export const Signup: React.FC = () => {
   const navigate = useNavigate();
-  const { user, refreshAccounts } = useAuth();
+  const { user, loading: authLoading, refreshAccounts } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,8 +34,8 @@ export const Signup: React.FC = () => {
   const [accountType, setAccountType] = useState<AccountType>('merchant');
   const [name, setName] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
+  const [phone, setPhone] = useState('(11) 98877-6655');
   const [balanceFormatted, setBalanceFormatted] = useState('1.000,00');
-  const [pixKey, setPixKey] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -45,16 +45,10 @@ export const Signup: React.FC = () => {
   const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
-
-  // Sincroniza a chave Pix com o e-mail digitado
-  const handleEmailChange = (val: string) => {
-    setEmail(val);
-    setPixKey(val);
-  };
+  }, [authLoading, user, navigate]);
 
   // Timer de cooldown para reenvio de e-mail
   useEffect(() => {
@@ -197,6 +191,7 @@ export const Signup: React.FC = () => {
     setMessage(null);
 
     const initialBal = parseFormattedBalance(balanceFormatted);
+    const pixKey = email.trim();
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -208,8 +203,9 @@ export const Signup: React.FC = () => {
             account_name: name.trim(),
             account_type: accountType,
             cpf_cnpj: cpfCnpj.trim(),
+            phone: phone.trim(),
             initial_balance: initialBal,
-            pix_key: pixKey.trim() || email.trim(),
+            pix_key: pixKey,
           },
         },
       });
@@ -229,19 +225,20 @@ export const Signup: React.FC = () => {
         return;
       }
 
-      // Se autenticou imediatamente com sessão aberta (auto-confirm)
+      // Se autenticou com sessão ativa de imediato
       if (data.session && data.user) {
         await createBankAccount(data.user.id, {
           name: name.trim(),
           type: accountType,
           cpf_cnpj: cpfCnpj.trim(),
+          phone: phone.trim(),
           initialBalance: initialBal,
-          pixKey: pixKey.trim() || email.trim(),
+          pixKey,
         });
         await refreshAccounts();
         navigate('/dashboard');
       } else {
-        // Confirmação de e-mail requerida pelo Supabase
+        // Confirmação de e-mail requerida
         setSignupSubmittedEmail(email.trim());
         setResendCooldown(60);
       }
@@ -275,7 +272,7 @@ export const Signup: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Form Container */}
+      {/* Main Form Container (Sem menu lateral) */}
       <main className="max-w-xl w-full mx-auto my-8">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
           
@@ -321,7 +318,7 @@ export const Signup: React.FC = () => {
                 </p>
                 <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                   <li>Clique no botão <strong>"Confirmar minha conta"</strong> no e-mail recebido.</li>
-                  <li>Sua conta sandbox será ativada instantaneamente com os dados que você preencheu.</li>
+                  <li>Sua conta sandbox será aberta instantaneamente com o saldo de <strong>R$ {balanceFormatted}</strong> e os dados informados.</li>
                 </ul>
               </div>
 
@@ -344,7 +341,7 @@ export const Signup: React.FC = () => {
                   to="/login"
                   className="w-full py-3 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition shadow-lg shadow-teal-950/20 flex items-center justify-center gap-2"
                 >
-                  <span>Ir para o Login</span>
+                  <span>Ir para Acessar Conta</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
@@ -356,7 +353,7 @@ export const Signup: React.FC = () => {
                   Criar Conta de Operador Sandbox
                 </h1>
                 <p className="text-xs text-slate-500">
-                  Cadastre suas credenciais e os dados da sua conta bancária digital simulada
+                  Informe seus dados de acesso e configure sua conta bancária de testes
                 </p>
               </div>
 
@@ -378,7 +375,7 @@ export const Signup: React.FC = () => {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* 1. Credenciais */}
+                {/* 1. Credenciais de Acesso */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#F1613A]">
                     1. Credenciais de Acesso
@@ -394,7 +391,7 @@ export const Signup: React.FC = () => {
                         type="email"
                         required
                         value={email}
-                        onChange={(e) => handleEmailChange(e.target.value)}
+                        onChange={(e) => setEmail(e.target.value)}
                         placeholder="seu.email@empresa.com.br"
                         className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#F1613A] outline-none"
                       />
@@ -404,7 +401,7 @@ export const Signup: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        Senha
+                        Senha de Acesso
                       </label>
                       <button
                         type="button"
@@ -453,7 +450,7 @@ export const Signup: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 2. Dados da Conta Bancária */}
+                {/* 2. Dados da Conta Bancária Sandbox */}
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 space-y-3">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-[#19A999]">
                     2. Dados da Conta Bancária Sandbox
@@ -461,7 +458,7 @@ export const Signup: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Perfil da Conta
+                      Tipo de Pessoa
                     </label>
                     <div className="grid grid-cols-2 gap-3">
                       <button
@@ -538,6 +535,24 @@ export const Signup: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Telefone (Fictício)
+                      </label>
+                      <div className="relative">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                        <input
+                          type="text"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="(11) 98877-6655"
+                          className="w-full pl-8 pr-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                         Saldo Inicial Fictício (R$)
                       </label>
                       <div className="relative">
@@ -551,20 +566,18 @@ export const Signup: React.FC = () => {
                         />
                       </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Chave Pix Padrão
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={pixKey}
-                      onChange={(e) => setPixKey(e.target.value)}
-                      placeholder="seu.email@empresa.com.br"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#19A999] outline-none"
-                    />
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Chave Pix Padrão (E-mail)
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={email || 'Será o mesmo e-mail digitado'}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      />
+                    </div>
                   </div>
                 </div>
 

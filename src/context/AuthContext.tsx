@@ -50,20 +50,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return matched ? { ...matched } : { ...fetched[0] };
       });
     } else {
-      // Se o usuário está autenticado mas não tem conta no banco ainda:
-      // Tenta provisionar a conta com base nos metadados preenchidos no cadastro
+      // Se o usuário está autenticado e válido, auto-cria a conta se existirem metadados do cadastro
       const authUser = currentUser || user;
       if (authUser && authUser.id) {
         const meta = authUser.user_metadata || {};
-        if (meta.account_name || authUser.email) {
+        if (meta.account_name && meta.cpf_cnpj) {
           try {
             const initialBal = typeof meta.initial_balance === 'number' ? meta.initial_balance : 1000.00;
             const created = await createBankAccount(authUser.id, {
-              name: meta.account_name || 'Conta Sandbox',
+              name: meta.account_name,
               type: meta.account_type || 'merchant',
-              cpf_cnpj: meta.cpf_cnpj || '45.892.102/0001-90',
+              cpf_cnpj: meta.cpf_cnpj,
+              phone: meta.phone || '(11) 98877-6655',
               initialBalance: initialBal,
-              pixKey: meta.pix_key || authUser.email || 'pix@optmapay.fake',
+              pixKey: meta.pix_key || authUser.email || `pix.${Date.now()}@optmapay.fake`,
             });
 
             if (created) {
@@ -71,8 +71,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setActiveAccount(created);
               return;
             }
-          } catch (err) {
-            console.warn('Auto-provisioning de conta inicial falhou:', err);
+          } catch (err: any) {
+            // Se o usuário não existe mais no auth.users (foreign key error 23503), limpa a sessão zumbi
+            if (err?.code === '23503' || err?.message?.includes('violates foreign key constraint') || err?.message?.includes('accounts_user_id_fkey')) {
+              console.warn('Sessão zumbi detectada (usuário deletado do Auth). Limpando sessão local...');
+              await supabase.auth.signOut();
+              setUser(null);
+              setAccounts([]);
+              setActiveAccount(null);
+              return;
+            }
+            console.warn('Não foi possível auto-provisionar conta bancária:', err.message);
           }
         }
       }
@@ -83,15 +92,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user || null;
-      setUser(currentUser);
-      if (currentUser) {
-        loadAccounts(currentUser.id, currentUser).finally(() => setLoading(false));
-      } else {
+    // Validação real contra o servidor do Supabase para evitar sessões zumbis
+    supabase.auth.getUser().then(({ data: { user: currentUser }, error }) => {
+      if (error || !currentUser) {
+        // Sessão inválida ou usuário excluído no backend
+        supabase.auth.signOut().catch(() => {});
+        setUser(null);
         setAccounts([]);
         setActiveAccount(null);
         setLoading(false);
+      } else {
+        setUser(currentUser);
+        loadAccounts(currentUser.id, currentUser).finally(() => setLoading(false));
       }
     });
 
@@ -157,7 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       authListener.subscription.unsubscribe();
       supabase.removeChannel(realtimeChannel);
     };
-  }, [user?.id]);
+  }, []);
 
   const setActiveAccountId = (id: string) => {
     const matched = accounts.find((a) => a.id === id);

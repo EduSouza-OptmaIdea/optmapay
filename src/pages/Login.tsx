@@ -19,7 +19,7 @@ import {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -29,10 +29,10 @@ export const Login: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (!authLoading && user) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxTransaction } from '../types/sandbox';
 import { sendWelcomeEmail } from '../lib/email/app-email';
+import { createBankAccount } from '../lib/supabase/accountService';
 import {
   Eye,
   EyeOff,
@@ -114,9 +115,31 @@ export const Dashboard: React.FC = () => {
 
   if (!activeAccount) {
     return (
-      <div className="min-h-[350px] flex flex-col items-center justify-center p-8 text-center text-slate-500 gap-3 font-mono text-xs">
+      <div className="min-h-[350px] flex flex-col items-center justify-center p-8 text-center text-slate-500 gap-4 text-xs">
         <RefreshCw className="w-6 h-6 text-[#19A999] animate-spin" />
-        <span>Carregando sua conta no Internet Banking Sandbox...</span>
+        <span className="font-mono">Carregando sua conta no Internet Banking Sandbox...</span>
+        <button
+          onClick={async () => {
+            if (user?.id) {
+              try {
+                const meta = user.user_metadata || {};
+                await createBankAccount(user.id, {
+                  name: meta.account_name || user.email?.split('@')[0] || 'Conta Sandbox',
+                  type: meta.account_type || 'merchant',
+                  cpf_cnpj: meta.cpf_cnpj || '45.892.102/0001-90',
+                  initialBalance: 1000.00,
+                  pixKey: user.email || `pix.${Date.now()}@optmapay.fake`,
+                });
+                await refreshAccounts();
+              } catch (e: any) {
+                console.error(e);
+              }
+            }
+          }}
+          className="mt-2 py-2 px-4 bg-[#19A999] text-white rounded-xl font-bold hover:bg-[#158f81] transition shadow-md"
+        >
+          Inicializar Conta Sandbox Agora
+        </button>
       </div>
     );
   }
