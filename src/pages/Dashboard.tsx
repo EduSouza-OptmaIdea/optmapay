@@ -23,9 +23,15 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Send,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+interface TransactionWithRunningBalance extends SandboxTransaction {
+  balanceBefore: number;
+  balanceAfter: number;
+}
 
 export const Dashboard: React.FC = () => {
   const { user, activeAccount, refreshAccounts } = useAuth();
@@ -104,7 +110,6 @@ export const Dashboard: React.FC = () => {
       }
     }
 
-    // Se o filtro for mais antigo que 60 dias, trava no limite de 60 dias
     if (startDate < maxRetDate) {
       startDate = maxRetDate;
     }
@@ -141,19 +146,49 @@ export const Dashboard: React.FC = () => {
     };
   }, [activeAccount?.id, periodFilter, customStartDate, customEndDate]);
 
-  // Agrupamento de Transações por Dia com Saldo Diário
+  // Agrupamento de Transações por Dia COM EVOLUÇÃO DO SALDO A PARTIR DO SALDO ANTERIOR
   const groupedTransactions = useMemo(() => {
+    if (!activeAccount) return [];
+
+    // 1. Calcula o saldo corrente regressivo a partir do saldo atual da conta
+    let runningBalance = Number(activeAccount.balance);
+    const enrichedTransactions: TransactionWithRunningBalance[] = [];
+
+    // Ordenados de forma decrescente (mais recente primeiro)
+    for (const tx of transactions) {
+      const txAmount = Number(tx.amount);
+      const after = runningBalance;
+      let before = runningBalance;
+
+      if (tx.direction === 'in') {
+        before = after - txAmount;
+      } else {
+        before = after + txAmount;
+      }
+
+      enrichedTransactions.push({
+        ...tx,
+        balanceBefore: before,
+        balanceAfter: after,
+      });
+
+      runningBalance = before;
+    }
+
+    // 2. Agrupa por data (DD/MM/AAAA)
     const groups: {
       dateKey: string;
       formattedDate: string;
+      openingBalance: number;
+      closingBalance: number;
       totalIn: number;
       totalOut: number;
-      items: SandboxTransaction[];
+      items: TransactionWithRunningBalance[];
     }[] = [];
 
-    const dateMap = new Map<string, SandboxTransaction[]>();
+    const dateMap = new Map<string, TransactionWithRunningBalance[]>();
 
-    transactions.forEach((tx) => {
+    enrichedTransactions.forEach((tx) => {
       const dateKey = new Date(tx.created_at).toLocaleDateString('pt-BR');
       if (!dateMap.has(dateKey)) {
         dateMap.set(dateKey, []);
@@ -173,6 +208,11 @@ export const Dashboard: React.FC = () => {
         }
       });
 
+      // O saldo final do dia é o balanceAfter do item mais recente do dia (index 0)
+      const closingBalance = items[0].balanceAfter;
+      // O saldo inicial do dia é o balanceBefore do item mais antigo do dia (último index)
+      const openingBalance = items[items.length - 1].balanceBefore;
+
       const sampleDate = new Date(items[0].created_at);
       const isToday = sampleDate.toDateString() === new Date().toDateString();
       const isYesterday =
@@ -185,6 +225,8 @@ export const Dashboard: React.FC = () => {
       groups.push({
         dateKey,
         formattedDate,
+        openingBalance,
+        closingBalance,
         totalIn,
         totalOut,
         items,
@@ -192,7 +234,7 @@ export const Dashboard: React.FC = () => {
     });
 
     return groups;
-  }, [transactions]);
+  }, [transactions, activeAccount?.balance]);
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,7 +324,10 @@ export const Dashboard: React.FC = () => {
   };
 
   // Tradução amigável dos tipos de transação
-  const getFriendlyTypeName = (type: string, direction: string) => {
+  const getFriendlyTypeName = (type: string, direction: string, description?: string) => {
+    if (description?.toLowerCase().includes('devolução') || description?.toLowerCase().includes('reembolso')) {
+      return direction === 'in' ? 'Reembolso Pix Recebido' : 'Devolução Pix Enviada';
+    }
     if (type === 'pix') {
       return direction === 'in' ? 'Pix Recebido' : 'Pix Enviado';
     }
@@ -415,7 +460,7 @@ export const Dashboard: React.FC = () => {
         </Link>
       </div>
 
-      {/* EXTRATO BANCÁRIO COMPLETO COM FILTROS E AGRUPAMENTO DIÁRIO */}
+      {/* EXTRATO BANCÁRIO COMPLETO COM EVOLUÇÃO DO SALDO E SALDO ANTERIOR */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-6 shadow-sm">
         
         {/* Header do Extrato */}
@@ -426,7 +471,7 @@ export const Dashboard: React.FC = () => {
               Extrato Bancário da Conta
             </h2>
             <p className="text-xs text-slate-500">
-              Lançamentos financeiros detalhados por período e agrupamento diário
+              Acompanhe a evolução do saldo diário a partir do saldo anterior consolidado
             </p>
           </div>
 
@@ -523,11 +568,11 @@ export const Dashboard: React.FC = () => {
         <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 flex items-center gap-2.5">
           <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
           <span>
-            <strong>Extrato Oficial Sandbox:</strong> Todos os lançamentos financeiros dos últimos <strong>60 dias</strong> estão disponíveis para conciliação. Clique em qualquer Pix recebido para efetuar devoluções totais ou parciais.
+            <strong>Extrato Oficial Sandbox:</strong> Conciliação completa com <strong>Saldo Anterior</strong> e <strong>Saldo do Dia</strong> para cada período de até 60 dias. Clique em qualquer Pix recebido para efetuar devoluções totais ou parciais.
           </span>
         </div>
 
-        {/* Lista de Transações Agrupadas por Dia */}
+        {/* Lista de Transações Agrupadas por Dia com Saldo Anterior e Saldo do Dia */}
         {groupedTransactions.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
             Nenhum lançamento registrado nesta conta no período selecionado.
@@ -539,24 +584,36 @@ export const Dashboard: React.FC = () => {
                 key={group.dateKey}
                 className="border border-slate-200 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-sm"
               >
-                {/* Cabeçalho do Dia com Saldo do Dia */}
-                <div className="bg-slate-100 dark:bg-slate-900/80 px-4 py-3 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700/80">
-                  <span className="flex items-center gap-2 font-mono">
+                {/* Cabeçalho do Dia com Saldo Anterior, Movimentação e Saldo do Dia */}
+                <div className="bg-slate-100 dark:bg-slate-900/90 px-4 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs border-b border-slate-200 dark:border-slate-700/80">
+                  <div className="flex items-center gap-2 font-mono font-bold text-slate-800 dark:text-slate-100">
                     <Calendar className="w-4 h-4 text-[#19A999]" />
-                    {group.formattedDate}
-                  </span>
+                    <span>{group.formattedDate}</span>
+                  </div>
 
-                  <div className="flex items-center gap-3 font-mono text-[11px]">
-                    {group.totalIn > 0 && (
-                      <span className="text-emerald-600 dark:text-emerald-400">
-                        + R$ {group.totalIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    )}
-                    {group.totalOut > 0 && (
-                      <span className="text-rose-600 dark:text-rose-400">
-                        - R$ {group.totalOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    )}
+                  {/* Evolução de Saldo do Dia */}
+                  <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
+                    <div className="text-slate-500 dark:text-slate-400">
+                      Saldo Anterior: <strong>R$ {group.openingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {group.totalIn > 0 && (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                          + R$ {group.totalIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                      {group.totalOut > 0 && (
+                        <span className="text-rose-600 dark:text-rose-400 font-bold">
+                          - R$ {group.totalOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[#19A999] font-extrabold flex items-center gap-1">
+                      <Wallet className="w-3.5 h-3.5" />
+                      <span>Saldo do Dia: R$ {group.closingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -597,7 +654,7 @@ export const Dashboard: React.FC = () => {
 
                           <div className="space-y-0.5">
                             <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                              <span>{getFriendlyTypeName(tx.type, tx.direction)}</span>
+                              <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
                               {isPixIn && (
                                 <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
                                   Clique para Devolver
@@ -612,13 +669,13 @@ export const Dashboard: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0">
+                        <div className="text-right shrink-0 space-y-0.5">
                           <p className={`font-extrabold font-mono text-sm ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
-                          <span className="text-[10px] font-mono text-slate-400">
-                            {tx.external_reference || 'CONCLUÍDO'}
-                          </span>
+                          <p className="text-[10px] font-mono text-slate-400">
+                            Saldo após: R$ {tx.balanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </div>
                     );

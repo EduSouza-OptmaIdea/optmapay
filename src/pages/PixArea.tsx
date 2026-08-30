@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { MobileQrScannerModal } from '../components/MobileQrScannerModal';
@@ -32,6 +32,7 @@ import {
   X,
   RotateCcw,
   ListOrdered,
+  Lock,
 } from 'lucide-react';
 
 interface StoredPixCharge {
@@ -97,6 +98,9 @@ export const PixArea: React.FC = () => {
   const [pixTransactions, setPixTransactions] = useState<SandboxTransaction[]>([]);
   const [loadingPixTx, setLoadingPixTx] = useState(false);
 
+  const activeAccountRef = useRef(activeAccount);
+  activeAccountRef.current = activeAccount;
+
   // Carrega cobranças salvas do localStorage
   useEffect(() => {
     if (!activeAccount?.id) return;
@@ -135,6 +139,60 @@ export const PixArea: React.FC = () => {
     return () => clearInterval(interval);
   }, [generatedExpiresAt, dynamicChargePaid?.paid]);
 
+  // BAIXA AUTOMÁTICA ULTRA-RÁPIDA (POLLING ATIVO A CADA 800MS ENQUANTO QR CODE ABERTO)
+  useEffect(() => {
+    if (!generatedTxRef || !activeAccount?.id || dynamicChargePaid?.paid) return;
+
+    const pollSettlement = async () => {
+      try {
+        const { data } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('account_id', activeAccount.id)
+          .eq('external_reference', generatedTxRef)
+          .eq('direction', 'in')
+          .maybeSingle();
+
+        if (data) {
+          setDynamicChargePaid({
+            paid: true,
+            payerName: data.counterparty_name || 'Cliente Pagador',
+            amount: Number(data.amount),
+            paidAt: data.created_at,
+          });
+
+          // Atualiza lista de cobranças persistidas
+          setStoredCharges((prev) => {
+            const updated = prev.map((ch) =>
+              ch.txRef === generatedTxRef
+                ? {
+                    ...ch,
+                    paid: true,
+                    payerName: data.counterparty_name || 'Cliente Pagador',
+                    paidAt: data.created_at,
+                  }
+                : ch
+            );
+            if (activeAccount?.id) {
+              localStorage.setItem(`optmapay_pix_charges_${activeAccount.id}`, JSON.stringify(updated));
+            }
+            return updated;
+          });
+
+          fetchPixTransactions();
+          refreshAccounts();
+        }
+      } catch {
+        // Silencioso
+      }
+    };
+
+    const interval = setInterval(pollSettlement, 800);
+    pollSettlement();
+
+    return () => clearInterval(interval);
+  }, [generatedTxRef, activeAccount?.id, dynamicChargePaid?.paid]);
+
   const fetchPixTransactions = async () => {
     if (!activeAccount) return;
     setLoadingPixTx(true);
@@ -160,15 +218,13 @@ export const PixArea: React.FC = () => {
     const handleRealtime = (e: any) => {
       fetchPixTransactions();
 
-      // Monitoramento em tempo real do QR Code na tela
       if (e.detail?.new) {
         const row = e.detail.new;
         if (
-          row.account_id === activeAccount?.id &&
+          row.account_id === activeAccountRef.current?.id &&
           row.direction === 'in' &&
           row.external_reference
         ) {
-          // Atualiza o card aberto na tela
           if (generatedTxRef && row.external_reference === generatedTxRef) {
             setDynamicChargePaid({
               paid: true,
@@ -178,7 +234,6 @@ export const PixArea: React.FC = () => {
             });
           }
 
-          // Atualiza lista de cobranças persistidas
           setStoredCharges((prev) => {
             const updated = prev.map((ch) =>
               ch.txRef === row.external_reference
@@ -190,8 +245,11 @@ export const PixArea: React.FC = () => {
                   }
                 : ch
             );
-            if (activeAccount?.id) {
-              localStorage.setItem(`optmapay_pix_charges_${activeAccount.id}`, JSON.stringify(updated));
+            if (activeAccountRef.current?.id) {
+              localStorage.setItem(
+                `optmapay_pix_charges_${activeAccountRef.current.id}`,
+                JSON.stringify(updated)
+              );
             }
             return updated;
           });
@@ -238,7 +296,7 @@ export const PixArea: React.FC = () => {
           const creationTs = parseInt(tsStr, 10);
           const tenMinutesMs = 10 * 60 * 1000;
           if (Date.now() - creationTs > tenMinutesMs) {
-            setErrorMessage('Atenção: Esta instrução de cobrança Pix expirou após 10 minutos.');
+            setErrorMessage('Atenção: Esta instrução de cobrança Pix expirou após 10 minutos e não pode mais ser paga.');
           }
         }
       } catch {
@@ -272,7 +330,8 @@ export const PixArea: React.FC = () => {
   };
 
   const handleCopyDynamicPayload = () => {
-    if (!generatedPayload) return;
+    // Bloqueia cópia se já foi paga ou expirou
+    if (!generatedPayload || dynamicChargePaid?.paid || countdownSeconds <= 0) return;
     navigator.clipboard.writeText(generatedPayload);
     setCopiedDynamicPayload(true);
     setTimeout(() => setCopiedDynamicPayload(false), 2000);
@@ -447,7 +506,6 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
     setTimeout(() => setCopiedReceiptText(false), 2000);
   };
 
-  // Formata MM:SS
   const formatCountdown = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -464,7 +522,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             Área Pix Sandbox & Cobranças
           </h1>
           <p className="text-xs text-slate-500">
-            Transfira fundos, emita QR Codes dinâmicos com validade de 10 minutos e gerencie cobranças
+            Transfira fundos, emita QR Codes com baixa automática em tempo real e validade de 10 minutos
           </p>
         </div>
 
@@ -763,7 +821,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       )}
 
-      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM VALIDADE DE 10 MINUTOS */}
+      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM VALIDADE DE 10 MINUTOS & BAIXA INSTANTÂNEA */}
       {activeTab === 'generate' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -819,24 +877,24 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             <div className="pt-6 border-t border-slate-200 dark:border-slate-700 space-y-4">
               <div className="flex items-center justify-center">
                 {dynamicChargePaid?.paid ? (
-                  <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-2 animate-bounce">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-700 dark:text-emerald-300 text-xs flex items-center gap-3 shadow-md">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
                     <div>
-                      <p className="font-bold text-sm">PIX PAGO COM SUCESSO! (Baixa Realizada)</p>
+                      <p className="font-extrabold text-sm">PIX PAGO COM SUCESSO! (Baixa Realizada)</p>
                       <p className="text-[11px]">Pagador: <strong>{dynamicChargePaid.payerName}</strong> • R$ {dynamicChargePaid.amount?.toFixed(2)}</p>
                     </div>
                   </div>
                 ) : countdownSeconds > 0 ? (
-                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-500 animate-spin" />
                     <span>
                       Aguardando Pagamento do Cliente • Tempo restante: <strong>{formatCountdown(countdownSeconds)}</strong>
                     </span>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 text-xs flex items-center gap-2">
-                    <X className="w-4 h-4 text-rose-500" />
-                    <span>Cobrança Pix Expirada após 10 minutos (Gere uma nova cobrança)</span>
+                  <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 text-xs flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-rose-500" />
+                    <span>Cobrança Pix Expirada após 10 minutos (Não pode mais ser utilizada)</span>
                   </div>
                 )}
               </div>
@@ -847,21 +905,34 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
 
               <div className="space-y-1.5 max-w-lg mx-auto text-center">
                 <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Código Pix Copia e Cola (Instrução com Valor):
+                  Código Pix Copia e Cola:
                 </p>
                 <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 break-all bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 select-all text-left">
                   {generatedPayload}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCopyDynamicPayload}
-                className="py-2.5 px-6 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 mx-auto shadow-md"
-              >
-                {copiedDynamicPayload ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedDynamicPayload ? 'Código Copiado!' : 'Copiar Código de Cobrança'}</span>
-              </button>
+              {/* Botão de Cópia com Bloqueio Inteligente se Paga ou Expirada */}
+              {dynamicChargePaid?.paid ? (
+                <div className="py-2.5 px-6 bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 mx-auto w-fit">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>✓ Cobrança Liquidada (Código Desativado)</span>
+                </div>
+              ) : countdownSeconds <= 0 ? (
+                <div className="py-2.5 px-6 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 mx-auto w-fit">
+                  <Lock className="w-4 h-4 text-slate-400" />
+                  <span>Cobrança Expirada (Código Desativado)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCopyDynamicPayload}
+                  className="py-2.5 px-6 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 mx-auto shadow-md"
+                >
+                  {copiedDynamicPayload ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedDynamicPayload ? 'Código Copiado!' : 'Copiar Código de Cobrança'}</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -905,6 +976,8 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                   </span>
                 );
 
+                const canCopy = !ch.paid && !isExpired;
+
                 return (
                   <div key={ch.id} className="py-3 flex items-center justify-between gap-4">
                     <div className="space-y-0.5">
@@ -923,16 +996,25 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                         R$ {ch.amount.toFixed(2)}
                       </span>
 
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(ch.payload);
-                          alert('Código Pix copiado para a área de transferência!');
-                        }}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition"
-                        title="Copiar Código Pix"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                      {canCopy ? (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(ch.payload);
+                            alert('Código Pix copiado para a área de transferência!');
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition"
+                          title="Copiar Código Pix"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <div
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                          title={ch.paid ? 'Cobrança já foi paga' : 'Cobrança expirada'}
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
