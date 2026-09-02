@@ -61,13 +61,134 @@ export interface SandboxCard {
   account_id: string;
   tipo: 'debito' | 'credito';
   cardholder_name: string;
+  card_number?: string;
   masked_number: string;
+  brand?: string;
+  pin?: string;
   validade: string;
   cvv: string;
   credit_limit: number;
   current_balance: number;
+  due_day?: number; // Dia de vencimento da fatura (ex: 01, 05, 10, 15, 20, 25)
+  auto_debit?: boolean; // Débito automático em conta
   status: 'active' | 'blocked';
+  is_virtual?: boolean;
   created_at: string;
+}
+
+export interface CardInvoiceInfo {
+  cardId: string;
+  totalLimit: number;
+  usedLimit: number; // fatura atual
+  availableLimit: number;
+  dueDay: number;
+  dueDateStr: string; // Ex: 10/10/2026
+  closingDay: number; // Exatamente 7 dias antes do vencimento
+  closingDateStr: string; // Ex: 03/10/2026
+  bestDayToBuy: number; // Dia seguinte ao fechamento
+  bestDayStr: string; // Ex: 04/10/2026
+  autoDebit: boolean;
+  invoiceStatus: 'open' | 'closed' | 'paid';
+}
+
+export type SettlementPlanType =
+  | 'ontime'
+  | 'standard'
+  | 'nitro'
+  | 'd1'
+  | 'd7'
+  | 'd15'
+  | 'due_date';
+
+export interface OverdueChargesInfo {
+  principalAmount: number;
+  daysOverdue: number;
+  lateFeePercent: number; // 2.0%
+  lateFeeAmount: number;
+  monthlyMoraRate: number; // 1.0% a.m.
+  moraAmount: number;
+  monthlyRotativoRate: number; // 14.5% a.m.
+  rotativoAmount: number;
+  totalCharges: number;
+  totalDueAmount: number;
+  isBlockedByOverdue: boolean; // >= 7 dias de atraso
+}
+
+export interface InstallmentReceivable {
+  installmentNumber: number;
+  totalInstallments: number;
+  dueDate: string;
+  grossAmount: number;
+  feePercent: number;
+  feeAmount: number;
+  netAmount: number;
+  status: 'pending' | 'settled' | 'anticipated';
+  daysRemaining: number;
+  anticipationFeePercent?: number;
+  anticipationFeeAmount?: number;
+  anticipatedNetAmount?: number;
+}
+
+export interface CardFeeRates {
+  debit: number;
+  credit1x: number;
+  credit2x: number;
+  credit3x: number;
+  credit4x: number;
+  credit5x: number;
+  credit6x: number;
+  credit7x: number;
+  credit8x: number;
+  credit9x: number;
+  credit10x: number;
+  credit11x: number;
+  credit12x: number;
+}
+
+export interface CardPaymentInput {
+  merchantAccountId: string;
+  cardId?: string;
+  cardNumber: string;
+  cardholderName: string;
+  validade: string;
+  cvv: string;
+  amount: number;
+  tipo: 'debito' | 'credito';
+  installments?: number;
+  plan?: SettlementPlanType;
+  description?: string;
+  orderId?: string;
+  pin?: string;
+}
+
+export interface CardPaymentResult {
+  success: boolean;
+  status: 'approved' | 'declined';
+  message: string;
+  amountGross: number;
+  feePercent: number;
+  feeAmount: number;
+  amountNet: number;
+  installments: number;
+  plan: SettlementPlanType;
+  tipo: 'debito' | 'credito';
+  cardId?: string;
+  cardBrand: string;
+  cardMasked: string;
+  cardholderName: string;
+  payerAccountId?: string;
+  payerName?: string;
+  merchantAccountId: string;
+  merchantName: string;
+  nsu: string;
+  authorizationCode: string;
+  tid: string;
+  transactionOutId?: string;
+  transactionInId?: string;
+  webhooksDispatched: number;
+  createdAt: string;
+  realMoney: boolean;
+  environment: string;
 }
 
 export interface SandboxWebhookConfig {
