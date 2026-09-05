@@ -5,6 +5,7 @@ import { SupabaseConfigModal } from './SupabaseConfigModal';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAppMode } from '../context/AppModeContext';
 import {
   Sun,
   Moon,
@@ -14,12 +15,15 @@ import {
   User,
   ChevronDown,
   ExternalLink,
+  Code2,
+  GraduationCap,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
   const { user, signOut, refreshAccounts } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { mode, setMode } = useAppMode();
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -37,9 +41,50 @@ export const Header: React.FC = () => {
   return (
     <>
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-2.5 flex items-center justify-between gap-3 shadow-sm">
-        <Link to="/" className="flex items-center gap-2">
-          <Logo heightClass="h-8 sm:h-9" />
-        </Link>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Link to="/" className="flex items-center gap-2">
+            <Logo heightClass="h-8 sm:h-9" />
+          </Link>
+
+          {/* Alternador Dual: Dev Sandbox vs Edu Sandbox */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('dev');
+                navigate('/dashboard');
+              }}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl transition ${
+                mode === 'dev'
+                  ? 'bg-gradient-to-r from-[#1367A2] to-[#29324E] text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Modo Desenvolvedor: APIs, Maquininhas, Webhooks e Duplicatas"
+            >
+              <Code2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Dev Sandbox</span>
+              <span className="sm:hidden">Dev</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('edu');
+                navigate('/edu-dashboard');
+              }}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl transition ${
+                mode === 'edu'
+                  ? 'bg-gradient-to-r from-[#19A999] to-teal-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Modo Educacional: Poupança, Contas a Pagar, Empréstimos e Educação Financeira"
+            >
+              <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Educação</span>
+              <span className="sm:hidden">Edu</span>
+            </button>
+          </div>
+        </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Badge da Conta Ativa do Usuário */}

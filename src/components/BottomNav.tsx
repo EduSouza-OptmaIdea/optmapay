@@ -1,19 +1,41 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, QrCode, FileText, CreditCard, User } from 'lucide-react';
-
-const mobileNavItems = [
-  { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
-  { to: '/pix', label: 'Pix', icon: QrCode },
-  { to: '/boletos', label: 'Boletos', icon: FileText },
-  { to: '/cartoes', label: 'Cartões', icon: CreditCard },
-  { to: '/meus-dados', label: 'Perfil', icon: User },
-];
+import { useAppMode } from '../context/AppModeContext';
+import {
+  LayoutDashboard,
+  QrCode,
+  FileText,
+  CreditCard,
+  User,
+  GraduationCap,
+  PiggyBank,
+  Banknote,
+} from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
+  const { mode } = useAppMode();
+
+  const devMobileNavItems = [
+    { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
+    { to: '/pix', label: 'Pix', icon: QrCode },
+    { to: '/boletos', label: 'Boletos', icon: FileText },
+    { to: '/cartoes', label: 'Cartões', icon: CreditCard },
+    { to: '/meus-dados', label: 'Perfil', icon: User },
+  ];
+
+  const eduMobileNavItems = [
+    { to: '/edu-dashboard', label: 'Edu', icon: GraduationCap },
+    { to: '/contas-a-pagar', label: 'Contas', icon: FileText },
+    { to: '/investimentos', label: 'Poupança', icon: PiggyBank },
+    { to: '/emprestimos', label: 'Crédito', icon: Banknote },
+    { to: '/meus-dados', label: 'Perfil', icon: User },
+  ];
+
+  const items = mode === 'edu' ? eduMobileNavItems : devMobileNavItems;
+
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-2 py-1.5 flex items-center justify-around shadow-lg">
-      {mobileNavItems.map((item) => {
+      {items.map((item) => {
         const Icon = item.icon;
         return (
           <NavLink

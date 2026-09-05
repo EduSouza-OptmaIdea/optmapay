@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { triggerWebhookEvents } from '../lib/webhookEngine';
-import { ArrowLeftRight, Building2, User, CheckCircle2, Clock, QrCode, FileText, CreditCard } from 'lucide-react';
+import { ArrowLeftRight, Building2, User, CheckCircle2, Clock, QrCode, FileText, CreditCard, Zap } from 'lucide-react';
+import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
+import { getSettlementCountdown, SettlementPlan } from '../lib/businessDays';
+import { executeAnticipationSettlement } from '../lib/anticipationService';
 
 interface MockOrder {
   id: string;
@@ -13,6 +16,8 @@ interface MockOrder {
   payerName: string;
   payerId: string;
   merchantId: string;
+  plan: SettlementPlan;
+  saleDate: string;
 }
 
 export const SettlementSimulator: React.FC = () => {
@@ -21,28 +26,34 @@ export const SettlementSimulator: React.FC = () => {
     {
       id: '1',
       orderId: 'ORD-2026-9901',
-      title: 'Fatura Duplicata #9901 - Fornecimento de Software',
+      title: 'Fatura Duplicata #9901 - Fornecimento de Software (Plano D+15)',
       amount: 850.00,
       status: 'pending',
       payerName: 'Carlos Eduardo Silva (Cliente Teste)',
-      payerId: '', // populated below
+      payerId: '',
       merchantId: '',
+      plan: 'd15',
+      saleDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     },
     {
       id: '2',
       orderId: 'ORD-2026-9902',
-      title: 'Venda E-Commerce #9902 - Licença Anual',
+      title: 'Venda E-Commerce #9902 - Licença Anual (Plano D+7)',
       amount: 1490.00,
       status: 'pending',
       payerName: 'Lojas Venda Rápida EIRELI',
       payerId: '',
       merchantId: '',
+      plan: 'd7',
+      saleDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     },
   ]);
 
   const [settlingOrderId, setSettlingOrderId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'boleto' | 'card'>('pix');
   const [settleMsg, setSettleMsg] = useState<string | null>(null);
+  const [selectedOrderForAnticipation, setSelectedOrderForAnticipation] = useState<MockOrder | null>(null);
+  const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
 
   if (!activeAccount) return null;
 
@@ -184,6 +195,8 @@ export const SettlementSimulator: React.FC = () => {
         <div className="space-y-4">
           {visibleOrders.map((ord) => {
             const isPaid = ord.status === 'paid';
+            const countdown = getSettlementCountdown(ord.saleDate, ord.plan);
+
             return (
               <div
                 key={ord.id}
@@ -191,7 +204,7 @@ export const SettlementSimulator: React.FC = () => {
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
                         {ord.title}
                       </span>
@@ -204,6 +217,12 @@ export const SettlementSimulator: React.FC = () => {
                       >
                         {isPaid ? 'LIQUIDADO' : 'PENDENTE'}
                       </span>
+
+                      {!isPaid && (
+                        <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-full border flex items-center gap-1 ${countdown.badgeColorClass}`}>
+                          <Clock className="w-3 h-3" /> {countdown.badgeText} • {countdown.subText}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 font-mono mt-0.5">
                       ID Pedido: {ord.orderId} • Pagador: {ord.payerName}
@@ -211,12 +230,13 @@ export const SettlementSimulator: React.FC = () => {
                   </div>
 
                   <div className="text-right">
-                    <p className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                    <p className="text-lg font-extrabold text-slate-900 dark:text-slate-100 font-mono">
                       R$ {ord.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                 </div>
 
+                {/* Ações para o Cliente Pagador */}
                 {!isPaid && !isMerchant && (
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
                     {/* Select Payment Method */}
@@ -262,11 +282,70 @@ export const SettlementSimulator: React.FC = () => {
                     </button>
                   </div>
                 )}
+
+                {/* Ações para a Empresa Recebedora (Antecipação Pro Rata) */}
+                {!isPaid && isMerchant && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-slate-200 dark:border-slate-800">
+                    <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-amber-500" />
+                      <span>
+                        Recebimento padrão programado para <strong>{countdown.targetDateFormatted}</strong>.
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderForAnticipation(ord);
+                        setIsAnticipationModalOpen(true);
+                      }}
+                      className="w-full sm:w-auto py-2 px-4 bg-gradient-to-r from-[#F1613A] to-amber-600 hover:opacity-90 text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Antecipar Recebível (Simular & PIN)</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Modal de Simulação de Antecipação de Recebíveis com PIN */}
+      {selectedOrderForAnticipation && (
+        <AnticipationSimulationModal
+          isOpen={isAnticipationModalOpen}
+          onClose={() => {
+            setIsAnticipationModalOpen(false);
+            setSelectedOrderForAnticipation(null);
+          }}
+          title={selectedOrderForAnticipation.title}
+          externalReference={selectedOrderForAnticipation.orderId}
+          grossAmount={selectedOrderForAnticipation.amount}
+          saleDate={selectedOrderForAnticipation.saleDate}
+          settlementPlan={selectedOrderForAnticipation.plan}
+          expectedPin={activeAccount?.config?.pin || '1234'}
+          onConfirmAnticipation={async (calc) => {
+            if (!activeAccount) return;
+            const res = await executeAnticipationSettlement({
+              orderId: selectedOrderForAnticipation.orderId,
+              accountId: activeAccount.id,
+              userId: activeAccount.user_id,
+              calculation: calc,
+              description: selectedOrderForAnticipation.title,
+            });
+
+            // Atualiza status local do pedido
+            setOrders((prev) =>
+              prev.map((o) => (o.id === selectedOrderForAnticipation.id ? { ...o, status: 'paid' } : o))
+            );
+
+            await refreshAccounts();
+            setSettleMsg(`⚡ ${res.message}`);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Download,
   Lock,
+  KeyRound,
   Eye,
   EyeOff,
   Sparkles,
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const MyProfile: React.FC = () => {
-  const { user, activeAccount } = useAuth();
+  const { user, activeAccount, refreshAccounts } = useAuth();
   
   // Alteração de senha in-app direta via supabase.auth.updateUser
   const [newPassword, setNewPassword] = useState('');
@@ -28,6 +29,13 @@ export const MyProfile: React.FC = () => {
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  // Alteração de PIN Transacional de 4 Dígitos da Conta
+  const [newPin, setNewPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [updatingPin, setUpdatingPin] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -347,6 +355,115 @@ export const MyProfile: React.FC = () => {
           >
             {updatingPassword && <RefreshCw className="w-4 h-4 animate-spin" />}
             <span>{updatingPassword ? 'Atualizando Senha...' : 'Salvar Nova Senha'}</span>
+          </button>
+        </form>
+      </div>
+
+      {/* Configuração do PIN Transacional Geral da Conta (4 Dígitos) */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-[#19A999]" />
+              PIN Transacional da Conta (4 Dígitos)
+            </h2>
+            <p className="text-xs text-slate-500">
+              Utilizado para autorizar antecipações pro rata, pagamentos e operações financeiras
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-xl text-xs font-mono">
+            <span className="text-slate-400">PIN Atual:</span>
+            <strong className="text-slate-900 dark:text-slate-100">
+              {showPin ? (activeAccount?.config?.pin || '1234') : '••••'}
+            </strong>
+            <button
+              type="button"
+              onClick={() => setShowPin(!showPin)}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-1"
+            >
+              {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const clean = newPin.replace(/\D/g, '').slice(0, 4);
+            if (clean.length !== 4) {
+              setPinError('O PIN deve conter exatamente 4 dígitos numéricos.');
+              return;
+            }
+            if (!activeAccount) return;
+            setUpdatingPin(true);
+            setPinError(null);
+            setPinSuccess(false);
+
+            try {
+              const currentConfig = activeAccount.config || {};
+              const { error } = await supabase
+                .from('accounts')
+                .update({
+                  config: { ...currentConfig, pin: clean },
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', activeAccount.id);
+
+              if (error) throw error;
+
+              await refreshAccounts();
+              setPinSuccess(true);
+              setNewPin('');
+              setTimeout(() => setPinSuccess(false), 4000);
+            } catch (err: any) {
+              setPinError(err.message || 'Falha ao atualizar o PIN da conta.');
+            } finally {
+              setUpdatingPin(false);
+            }
+          }}
+          className="space-y-4 pt-2"
+        >
+          <div className="max-w-xs">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+              Definir Novo PIN de 4 Dígitos
+            </label>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={newPin}
+              onChange={(e) => {
+                setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                setPinError(null);
+              }}
+              placeholder="Ex: 5899"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-center tracking-[0.5em] text-base"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">Padrão sandbox inicial: 1234</p>
+          </div>
+
+          {pinSuccess && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-500 text-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>PIN transacional atualizado com sucesso! Use este código para antecipações.</span>
+            </div>
+          )}
+
+          {pinError && (
+            <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{pinError}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={updatingPin || newPin.length !== 4}
+            className="py-2.5 px-5 bg-[#19A999] hover:bg-teal-600 text-white font-bold text-xs rounded-xl transition shadow-md shadow-teal-950/20 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {updatingPin && <RefreshCw className="w-4 h-4 animate-spin" />}
+            <span>{updatingPin ? 'Salvando PIN...' : 'Salvar Novo PIN da Conta'}</span>
           </button>
         </form>
       </div>

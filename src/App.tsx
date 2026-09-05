@@ -21,10 +21,17 @@ import { MyProfile } from './pages/MyProfile';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ResetPassword } from './pages/ResetPassword';
+import { AppModeProvider, useAppMode } from './context/AppModeContext';
+import { ContasPagarArea } from './pages/ContasPagarArea';
+import { EduDashboard } from './pages/EduDashboard';
+import { InvestimentosEduArea } from './pages/InvestimentosEduArea';
+import { EmprestimosEduArea } from './pages/EmprestimosEduArea';
+import { CenariosEduArea } from './pages/CenariosEduArea';
 import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
   const { user, loading } = useAuth();
+  const { mode } = useAppMode();
 
   if (loading) {
     return (
@@ -50,6 +57,11 @@ const ProtectedLayout: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/edu-dashboard" element={<EduDashboard />} />
+            <Route path="/contas-a-pagar" element={<ContasPagarArea />} />
+            <Route path="/investimentos" element={<InvestimentosEduArea />} />
+            <Route path="/emprestimos" element={<EmprestimosEduArea />} />
+            <Route path="/cenarios" element={<CenariosEduArea />} />
             <Route path="/pix" element={<PixArea />} />
             <Route path="/boletos" element={<BoletosArea />} />
             <Route path="/cartoes" element={<CartoesArea />} />
@@ -57,7 +69,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
             <Route path="/settings" element={<SettingsReset />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to={mode === 'edu' ? '/edu-dashboard' : '/dashboard'} replace />} />
           </Routes>
         </main>
       </div>
@@ -72,24 +84,26 @@ export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Routes>
-            {/* Rotas Públicas */}
-            <Route path="/" element={<PublicHome />} />
-            <Route path="/termos-de-uso" element={<TermsOfUse />} />
-            <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
+        <AppModeProvider>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <Routes>
+              {/* Rotas Públicas */}
+              <Route path="/" element={<PublicHome />} />
+              <Route path="/termos-de-uso" element={<TermsOfUse />} />
+              <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
 
-            {/* Acessar Conta & Criar Conta */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/criar-conta" element={<Signup />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
+              {/* Acessar Conta & Criar Conta */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/criar-conta" element={<Signup />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Rotas Privadas Estritamente Protegidas */}
-            <Route path="/*" element={<ProtectedLayout />} />
-          </Routes>
-          <CookieBanner />
-        </BrowserRouter>
+              {/* Rotas Privadas Estritamente Protegidas */}
+              <Route path="/*" element={<ProtectedLayout />} />
+            </Routes>
+            <CookieBanner />
+          </BrowserRouter>
+        </AppModeProvider>
       </AuthProvider>
     </ThemeProvider>
   );

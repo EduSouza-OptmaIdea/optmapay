@@ -32,6 +32,9 @@ import { VirtualPosMachine } from '../components/VirtualPosMachine';
 import { CardRatesModal } from '../components/CardRatesModal';
 import { CardEcommerceSimulator } from '../components/CardEcommerceSimulator';
 import { CardInvoiceManager } from '../components/CardInvoiceManager';
+import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
+import { getSettlementCountdown, SettlementPlan } from '../lib/businessDays';
+import { executeAnticipationSettlement } from '../lib/anticipationService';
 import {
   generateOptmaCardNumber,
   OPTMAPAY_BIN_PREFIX,
@@ -43,6 +46,8 @@ export const CartoesArea: React.FC = () => {
   const { activeAccount, accounts, refreshAccounts } = useAuth();
   const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'pos' | 'rates' | 'ecommerce' | 'statement'>('wallet');
   const [cards, setCards] = useState<SandboxCard[]>([]);
+  const [selectedTxForAnticipation, setSelectedTxForAnticipation] = useState<SandboxTransaction | null>(null);
+  const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
   const [cardTransactions, setCardTransactions] = useState<SandboxTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [releasingTxId, setReleasingTxId] = useState<string | null>(null);
@@ -113,7 +118,7 @@ export const CartoesArea: React.FC = () => {
     setLoading(false);
   };
 
-  const fetchCardTransactions = async () => {
+  const fetchCardTransactions = async (skipAutoSweep = false) => {
     if (!activeAccount) return;
     const { data } = await supabase
       .from('transactions')
@@ -122,7 +127,52 @@ export const CartoesArea: React.FC = () => {
       .eq('type', 'card_payment')
       .order('created_at', { ascending: false });
 
-    setCardTransactions((data || []) as SandboxTransaction[]);
+    const txs = (data || []) as SandboxTransaction[];
+    setCardTransactions(txs);
+
+    // Auto-liquidação: se o estabelecimento tiver vendas pendentes cuja data/hora de corte (06:00) já passou
+    if (!skipAutoSweep && activeAccount.type === 'merchant') {
+      autoSettleDueTransactions(txs);
+    }
+  };
+
+  // Auto-settlement sweep: liquida automaticamente lançamentos cuja data de corte (06:00) já passou
+  const autoSettleDueTransactions = async (txs: SandboxTransaction[]) => {
+    if (!activeAccount || activeAccount.type !== 'merchant') return;
+    const dueTxs = txs.filter((tx) => {
+      if (tx.direction !== 'in' || tx.status !== 'pending') return false;
+      let plan: SettlementPlan = 'standard';
+      const d = tx.description || '';
+      if (d.includes('D+15')) plan = 'd15';
+      else if (d.includes('D+7')) plan = 'd7';
+      else if (d.includes('Vencimento')) plan = 'due_date';
+      const countdown = getSettlementCountdown(tx.created_at, plan);
+      return countdown.isDue;
+    });
+
+    if (dueTxs.length > 0) {
+      let settledCount = 0;
+      for (const tx of dueTxs) {
+        try {
+          await releaseD1Settlement(tx.id, activeAccount.id);
+          settledCount++;
+        } catch (e) {
+          console.warn('[Auto-Settlement Sweep Error]', e);
+        }
+      }
+      if (settledCount > 0) {
+        const { data } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('account_id', activeAccount.id)
+          .eq('type', 'card_payment')
+          .order('created_at', { ascending: false });
+        setCardTransactions((data || []) as SandboxTransaction[]);
+        await refreshAccounts();
+        setCopyToast(`⚡ ${settledCount} venda(s) com liquidação vencida às 06h00 creditada(s) automaticamente!`);
+        setTimeout(() => setCopyToast(null), 4000);
+      }
+    }
   };
 
   useEffect(() => {
@@ -136,9 +186,9 @@ export const CartoesArea: React.FC = () => {
     setReleasingTxId(txId);
     try {
       await releaseD1Settlement(txId, activeAccount.id);
-      await fetchCardTransactions();
+      await fetchCardTransactions(true);
       await refreshAccounts();
-      setCopyToast('⚡ Lançamento D+1 liquidado e creditado no saldo disponível!');
+      setCopyToast('⚡ Lançamento liquidado e creditado no saldo disponível!');
       setTimeout(() => setCopyToast(null), 3000);
     } catch (err: any) {
       alert(`Erro ao liquidar: ${err.message}`);
@@ -681,6 +731,14 @@ export const CartoesArea: React.FC = () => {
                     const isIn = tx.direction === 'in';
                     const isPending = tx.status === 'pending';
 
+                    // Detecta plano e calcula contagem regressiva
+                    let plan: SettlementPlan = 'standard';
+                    const d = tx.description || '';
+                    if (d.includes('D+15')) plan = 'd15';
+                    else if (d.includes('D+7')) plan = 'd7';
+                    else if (d.includes('Vencimento')) plan = 'due_date';
+                    const countdown = getSettlementCountdown(tx.created_at, plan);
+
                     return (
                       <div key={tx.id} className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
                         <div className="flex items-start gap-3">
@@ -709,13 +767,18 @@ export const CartoesArea: React.FC = () => {
                               {new Date(tx.created_at).toLocaleString('pt-BR')} • Ref: {tx.external_reference || 'N/A'}
                             </p>
 
-                            {/* Tags de status */}
-                            <div className="flex items-center gap-2 pt-0.5">
+                            {/* Tags de status com contagem regressiva D-N */}
+                            <div className="flex flex-wrap items-center gap-2 pt-0.5">
                               {isIn ? (
                                 isPending ? (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                                    <Clock className="w-3 h-3" /> Lançamento Futuro (D+1)
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border flex items-center gap-1 shadow-xs ${countdown.badgeColorClass}`}>
+                                      <Clock className="w-3 h-3" /> {countdown.badgeText}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-medium">
+                                      {countdown.subText}
+                                    </span>
+                                  </div>
                                 ) : (
                                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3" /> Creditado no Saldo
@@ -730,7 +793,7 @@ export const CartoesArea: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Coluna de Valores & Ação de Liquidação D+1 */}
+                        {/* Coluna de Valores & Ação de Antecipação ou Liberação */}
                         <div className="sm:text-right w-full sm:w-auto flex sm:flex-col justify-between items-end sm:items-end gap-1">
                           <div>
                             <p
@@ -749,17 +812,31 @@ export const CartoesArea: React.FC = () => {
                             </p>
                           </div>
 
-                          {/* Botão de antecipação/liberação para lançamentos D+1 */}
+                          {/* Se for entrada pendente: se já venceu (isDue), libera saldo 100%; se for futuro, antecipa com pro-rata */}
                           {isIn && isPending && (
-                            <button
-                              type="button"
-                              onClick={() => handleReleaseD1(tx.id)}
-                              disabled={releasingTxId === tx.id}
-                              className="mt-1 py-1.5 px-3 bg-gradient-to-r from-sky-600 to-indigo-600 hover:opacity-90 text-white font-bold text-[10px] rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-50"
-                            >
-                              <Zap className="w-3 h-3 fill-current" />
-                              <span>{releasingTxId === tx.id ? 'Liberando...' : 'Liberar Saldo D+1'}</span>
-                            </button>
+                            countdown.isDue ? (
+                              <button
+                                type="button"
+                                onClick={() => handleReleaseD1(tx.id)}
+                                disabled={releasingTxId === tx.id}
+                                className="mt-1 py-1.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 text-white font-bold text-[10px] rounded-xl transition flex items-center gap-1 shadow-sm disabled:opacity-50"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>{releasingTxId === tx.id ? 'Creditando...' : 'Liberar Saldo (Disponível às 06h)'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTxForAnticipation(tx);
+                                  setIsAnticipationModalOpen(true);
+                                }}
+                                className="mt-1 py-1.5 px-3 bg-gradient-to-r from-[#F1613A] to-amber-600 hover:opacity-90 text-white font-bold text-[10px] rounded-xl transition flex items-center gap-1 shadow-sm"
+                              >
+                                <Zap className="w-3 h-3 fill-current" />
+                                <span>Antecipar Recebível (Simular & PIN)</span>
+                              </button>
+                            )
                           )}
                         </div>
                       </div>
@@ -995,6 +1072,43 @@ export const CartoesArea: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal de Simulação de Antecipação de Recebíveis com PIN */}
+      {selectedTxForAnticipation && (
+        <AnticipationSimulationModal
+          isOpen={isAnticipationModalOpen}
+          onClose={() => {
+            setIsAnticipationModalOpen(false);
+            setSelectedTxForAnticipation(null);
+          }}
+          title={selectedTxForAnticipation.description || 'Recebível de Cartão'}
+          externalReference={selectedTxForAnticipation.external_reference}
+          grossAmount={Number(selectedTxForAnticipation.amount)}
+          saleDate={selectedTxForAnticipation.created_at}
+          settlementPlan={
+            selectedTxForAnticipation.description?.includes('D+15')
+              ? 'd15'
+              : selectedTxForAnticipation.description?.includes('D+7')
+              ? 'd7'
+              : selectedTxForAnticipation.description?.includes('Vencimento')
+              ? 'due_date'
+              : 'standard'
+          }
+          expectedPin={activeAccount?.config?.pin || cards[0]?.pin || '1234'}
+          onConfirmAnticipation={async (calc) => {
+            if (!activeAccount) return;
+            await executeAnticipationSettlement({
+              transactionId: selectedTxForAnticipation.id,
+              accountId: activeAccount.id,
+              userId: activeAccount.user_id,
+              calculation: calc,
+              description: selectedTxForAnticipation.description,
+            });
+            await fetchCardTransactions();
+            await refreshAccounts();
+          }}
+        />
       )}
     </div>
   );

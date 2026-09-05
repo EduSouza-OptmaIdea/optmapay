@@ -680,7 +680,62 @@ export async function releaseD1Settlement(transactionId: string, accountId: stri
   });
 
   if (error) {
-    throw new Error(error.message || 'Falha ao liquidar lançamento D+1.');
+    console.warn('[releaseD1Settlement] RPC falhou ou não existe, executando liquidação via fallback direto:', error.message);
+    // 1. Busca a transação
+    const { data: tx, error: txErr } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('account_id', accountId)
+      .single();
+
+    if (txErr || !tx) {
+      throw new Error(txErr?.message || 'Transação não encontrada para liquidação.');
+    }
+
+    if (tx.status === 'completed') {
+      return { success: true, message: 'Transação já havia sido liquidada.', amountCredited: Number(tx.amount || 0) };
+    }
+
+    // 2. Busca conta para somar saldo
+    const { data: acc, error: accErr } = await supabase
+      .from('accounts')
+      .select('balance')
+      .eq('id', accountId)
+      .single();
+
+    if (accErr || !acc) {
+      throw new Error(accErr?.message || 'Conta não encontrada.');
+    }
+
+    const newBalance = Number(acc.balance || 0) + Number(tx.amount || 0);
+
+    // 3. Atualiza saldo da conta
+    const { error: updAccErr } = await supabase
+      .from('accounts')
+      .update({ balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', accountId);
+
+    if (updAccErr) throw updAccErr;
+
+    // 4. Atualiza transação para completed
+    const rawDesc = tx.description || '';
+    const updatedDesc = rawDesc.includes('Lançamento Futuro')
+      ? rawDesc.replace(/Lançamento Futuro (D\+\d+|no Vencimento)/, 'Liquidado ($1)')
+      : `${rawDesc} (Liquidado)`;
+
+    const { error: updTxErr } = await supabase
+      .from('transactions')
+      .update({ status: 'completed', description: updatedDesc })
+      .eq('id', transactionId);
+
+    if (updTxErr) throw updTxErr;
+
+    return {
+      success: true,
+      message: 'Lançamento liquidado e creditado com sucesso!',
+      amountCredited: Number(tx.amount || 0),
+    };
   }
 
   return {
