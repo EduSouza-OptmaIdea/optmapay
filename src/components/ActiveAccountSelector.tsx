@@ -33,7 +33,7 @@ export const ActiveAccountSelector: React.FC = () => {
             ? 'bg-gradient-to-r from-amber-500/10 via-slate-100 to-amber-500/5 dark:from-amber-950/30 dark:via-slate-800 dark:to-amber-950/20 border-amber-500/40 hover:border-amber-500/70 text-slate-800 dark:text-slate-100'
             : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
         }`}
-        title="Alternar entre contas ou acessar Console do Super Admin"
+        title={isSuperAdmin ? 'Super Admin: Alternar visualização de contas ou acessar Console' : 'Minha conta bancária'}
       >
         <div
           className={`p-1.5 rounded-xl ${
@@ -53,21 +53,28 @@ export const ActiveAccountSelector: React.FC = () => {
           )}
         </div>
 
-        <div className="flex flex-col text-left max-w-[130px] sm:max-w-[190px]">
-          <div className="flex items-center gap-1.5">
+        {isSuperAdmin ? (
+          <div className="flex flex-col text-left max-w-[150px] sm:max-w-[210px]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-500 text-white uppercase tracking-wider flex items-center gap-1">
+                <Crown className="w-2.5 h-2.5" />
+                <span>Super Admin</span>
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-600 dark:text-slate-300 truncate">
+              Simulando: <strong>{activeAccount.name}</strong>
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col text-left max-w-[130px] sm:max-w-[190px]">
             <span className="font-bold truncate text-slate-900 dark:text-white">
               {activeAccount.name}
             </span>
-            {isSuperAdmin && (
-              <span className="hidden lg:inline-flex items-center text-[9px] font-black px-1.5 py-0.2 rounded-full bg-amber-500 text-white uppercase tracking-wider">
-                Root
-              </span>
-            )}
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+              {activeAccount.type === 'merchant' ? 'PJ • Estabelecimento' : 'PF • Cliente Pagador'}
+            </span>
           </div>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-            {activeAccount.type === 'merchant' ? 'PJ • Estabelecimento' : 'PF • Cliente Pagador'}
-          </span>
-        </div>
+        )}
 
         <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
       </button>
@@ -85,7 +92,7 @@ export const ActiveAccountSelector: React.FC = () => {
                     <Crown className="w-3 h-3" />
                     <span>Super Admin Master</span>
                   </span>
-                  <span className="text-[9px] font-mono text-slate-400">Acesso Irrestrito</span>
+                  <span className="text-[9px] font-mono text-slate-400">Gestão Global</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5 pt-1">
@@ -116,11 +123,22 @@ export const ActiveAccountSelector: React.FC = () => {
               </div>
             )}
 
-            {/* Lista de Contas Cadastradas no Sistema */}
+            {/* Lista de Contas Cadastradas */}
             <div className="p-2 space-y-1 max-h-64 overflow-y-auto">
-              <p className="text-[10px] font-bold text-slate-400 px-2 uppercase tracking-wider">
-                {isSuperAdmin ? 'Alternar / Impersonate Contas:' : 'Minhas Contas:'}
-              </p>
+              {isSuperAdmin ? (
+                <div className="px-2 py-1 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-1.5">
+                  <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                    Simular Contas de Clientes (Impersonate):
+                  </p>
+                  <p className="text-[9px] text-slate-400">
+                    Contas de terceiros para inspeção e testes operacionais.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[10px] font-bold text-slate-400 px-2 uppercase tracking-wider">
+                  Minhas Contas:
+                </p>
+              )}
 
               {accountList.map((acc) => {
                 const isCurrent = acc.id === activeAccount.id;

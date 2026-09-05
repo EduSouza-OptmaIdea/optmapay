@@ -17,11 +17,13 @@ import {
   ExternalLink,
   Code2,
   GraduationCap,
+  Crown,
+  ArrowRight,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
-  const { user, signOut, refreshAccounts } = useAuth();
+  const { user, signOut, refreshAccounts, isSuperAdmin, activeAccount } = useAuth();
   const { theme, setTheme } = useTheme();
   const { mode, setMode } = useAppMode();
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -40,6 +42,28 @@ export const Header: React.FC = () => {
 
   return (
     <>
+      {/* Banner de Simulação Exclusivo do Super Admin */}
+      {isSuperAdmin && activeAccount && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-xs flex items-center justify-between text-amber-950 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-wide flex items-center gap-1 shrink-0">
+              <Crown className="w-2.5 h-2.5" />
+              <span>Super Admin</span>
+            </span>
+            <span className="text-[11px] truncate">
+              Modo de Simulação ativo: Visualizando a conta cliente <strong>{activeAccount.name}</strong> ({activeAccount.type === 'merchant' ? 'PJ Lojista' : 'PF Cliente'}). Esta conta de cliente <strong>NÃO</strong> possui poderes administrativos.
+            </span>
+          </div>
+          <Link
+            to="/master-admin"
+            className="text-[11px] font-bold text-amber-800 dark:text-amber-300 underline hover:opacity-80 flex items-center gap-1 shrink-0 ml-2"
+          >
+            <span>Console Master</span>
+            <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
+
       <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-2.5 flex items-center justify-between gap-3 shadow-sm">
         <div className="flex items-center gap-3 sm:gap-4">
           <Link to="/" className="flex items-center gap-2">

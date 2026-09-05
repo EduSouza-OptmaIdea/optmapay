@@ -20,10 +20,17 @@ interface AuthContextType {
 export const checkIsSuperAdmin = (u: User | null): boolean => {
   if (!u || !u.email) return false;
   const email = u.email.toLowerCase().trim();
-  const registeredSuperEmail = (localStorage.getItem('optmapay_super_admin_email') || 'admin@optmaidea.com.br').toLowerCase().trim();
-  if (email === registeredSuperEmail || email === 'admin@optmapay.com.br' || email === 'root@optmapay.com.br') {
+  const registeredSuperEmail = (localStorage.getItem('optmapay_super_admin_email') || '').toLowerCase().trim();
+
+  // Super Admin se o email for explicitamente o email registrado no portal master
+  if (registeredSuperEmail && email === registeredSuperEmail) {
     return true;
   }
+  // Emails mestres de sistema padrão
+  if (email === 'admin@optmaidea.com.br' || email === 'admin@optmapay.com.br' || email === 'master@optmapay.com.br' || email === 'root@optmapay.com.br') {
+    return true;
+  }
+  // Ou se tiver metadados explícitos de super admin atribuídos no provisionamento mestre
   if (u.app_metadata?.role === 'super_admin' || u.user_metadata?.role === 'super_admin' || u.user_metadata?.is_super_admin === true) {
     return true;
   }
@@ -247,6 +254,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setIsSuperAdmin(false);
     setAccounts([]);
     setAllAccounts([]);
     setActiveAccount(null);
