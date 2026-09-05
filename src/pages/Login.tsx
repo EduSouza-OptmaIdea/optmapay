@@ -107,7 +107,7 @@ export const Login: React.FC = () => {
       {/* Main Card */}
       <main className="max-w-md w-full mx-auto my-8">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-          
+
           <div className="space-y-1 text-center">
             <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {mode === 'signin' ? 'Acessar Conta' : 'Recuperar Senha'}
@@ -122,11 +122,10 @@ export const Login: React.FC = () => {
           {/* Feedback Messages */}
           {message && (
             <div
-              className={`p-3.5 rounded-xl text-xs flex items-start gap-2 ${
-                message.type === 'success'
+              className={`p-3.5 rounded-xl text-xs flex items-start gap-2 ${message.type === 'success'
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
                   : 'bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-              }`}
+                }`}
             >
               {message.type === 'success' ? (
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
@@ -237,7 +236,7 @@ export const Login: React.FC = () => {
           <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
-              Ambiente de testes simulado com isolamento total de dados no Supabase.
+              Conta para testes de desenvolvimento e educativas. Não usa valores reais.
             </span>
           </div>
         </div>
