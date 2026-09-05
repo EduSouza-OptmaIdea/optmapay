@@ -230,6 +230,74 @@ export function isDebitAllowedForPlan(plan: SettlementPlanType): boolean {
   return plan === 'standard' || plan === 'd1' || plan === 'ontime' || plan === 'nitro';
 }
 
+/**
+ * Retorna o plano efetivo para a transação.
+ * Regra de Negócio: Vendas a débito SEMPRE operam exclusivamente em D+1 ('standard') ou OnTime ('ontime').
+ * Se a conta do lojista estiver configurada em D+7, D+15 ou Due Date, qualquer venda no débito
+ * opera automaticamente sob o plano D+1 Padrão ('standard').
+ */
+export function getEffectivePlanForTransaction(
+  tipo: 'debito' | 'credito',
+  plan: SettlementPlanType = 'standard'
+): SettlementPlanType {
+  if (tipo === 'debito') {
+    if (plan === 'ontime' || plan === 'nitro') {
+      return 'ontime';
+    }
+    return 'standard'; // D+1 Útil Bancário
+  }
+  return plan;
+}
+
+export interface DebitAnticipationCalculation {
+  grossAmount: number;
+  d1FeePercent: number;
+  d1FeeAmount: number;
+  originalNetAmount: number;
+  ontimeFeePercent: number;
+  ontimeTotalFeeAmount: number;
+  anticipationCost: number; // Diferença adicional cobrada
+  finalNetAmount: number; // Valor líquido liberado na hora
+}
+
+/**
+ * Calcula a antecipação de uma venda a débito D+1 cobrando a taxa cheia do OnTime para débito.
+ * Regra de Negócio Estrita:
+ *  - Taxa D+1: STANDARD_FEE_RATES.debit (0.85%)
+ *  - Taxa OnTime Débito: ONTIME_FEE_RATES.debit (1.99%)
+ *  - Na antecipação, cobra-se a taxa cheia do OnTime para o tipo débito.
+ */
+export function calculateDebitAnticipation(
+  netPendingAmount: number,
+  knownGrossAmount?: number
+): DebitAnticipationCalculation {
+  const d1FeePercent = STANDARD_FEE_RATES.debit; // 0.85%
+  const ontimeFeePercent = ONTIME_FEE_RATES.debit; // 1.99%
+
+  // Se o valor bruto não foi informado, reconstrói a partir do líquido retido: net = gross * (1 - 0.0085)
+  const grossAmount = knownGrossAmount && knownGrossAmount > 0
+    ? Math.round(knownGrossAmount * 100) / 100
+    : Math.round((netPendingAmount / (1 - d1FeePercent / 100)) * 100) / 100;
+
+  const d1FeeAmount = Math.round((grossAmount * (d1FeePercent / 100)) * 100) / 100;
+  const originalNetAmount = Math.round((grossAmount - d1FeeAmount) * 100) / 100;
+
+  const ontimeTotalFeeAmount = Math.round((grossAmount * (ontimeFeePercent / 100)) * 100) / 100;
+  const anticipationCost = Math.max(0, Math.round((ontimeTotalFeeAmount - d1FeeAmount) * 100) / 100);
+  const finalNetAmount = Math.max(0, Math.round((grossAmount - ontimeTotalFeeAmount) * 100) / 100);
+
+  return {
+    grossAmount,
+    d1FeePercent,
+    d1FeeAmount,
+    originalNetAmount,
+    ontimeFeePercent,
+    ontimeTotalFeeAmount,
+    anticipationCost,
+    finalNetAmount,
+  };
+}
+
 export function calculateCardFee(
   amount: number,
   tipo: 'debito' | 'credito',
@@ -237,22 +305,18 @@ export function calculateCardFee(
   plan: SettlementPlanType = 'standard'
 ): CardFeeCalculation {
   const numInstallments = Math.max(1, Math.min(12, installments));
+  const effectivePlan = getEffectivePlanForTransaction(tipo, plan);
 
   let feePercent = 0;
 
   if (tipo === 'debito') {
-    if (!isDebitAllowedForPlan(plan)) {
-      throw new Error(
-        `Venda a débito indisponível para o plano "${plan}". Conforme regras do Banco, vendas no débito são permitidas exclusivamente nos planos D+1 ou OnTime.`
-      );
-    }
-    const rates = getRatesForPlan(plan);
+    const rates = getRatesForPlan(effectivePlan);
     feePercent = rates.debit;
-  } else if (plan === 'due_date' && tipo === 'credito') {
+  } else if (effectivePlan === 'due_date' && tipo === 'credito') {
     // Plano Vencimento: cada parcela tem 10% de desconto sobre o crédito 1x
     feePercent = DUE_DATE_FEE_PERCENT;
   } else {
-    const rates = getRatesForPlan(plan);
+    const rates = getRatesForPlan(effectivePlan);
     switch (numInstallments) {
         case 1: feePercent = rates.credit1x; break;
         case 2: feePercent = rates.credit2x; break;
@@ -399,12 +463,8 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
     throw new Error('Valor da venda inválido. Deve ser maior que zero.');
   }
 
-  // 1. Validação de Venda a Débito vs. Plano
-  if (tipo === 'debito' && !isDebitAllowedForPlan(plan)) {
-    throw new Error(
-      `Operação Recusada: Venda a débito não é permitida no plano "${plan}". Conforme regras do Banco, vendas a débito estão disponíveis apenas para liquidação em D+1 ou OnTime.`
-    );
-  }
+  // 1. Definição do Plano Efetivo (Débito é SEMPRE D+1 ou OnTime)
+  const effectivePlan = getEffectivePlanForTransaction(tipo, plan);
 
   // 2. Validação de Prefixo BIN
   const binValidation = validateCardBin(cardNumber);
@@ -414,10 +474,10 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
 
   const cleanNumber = cardNumber.replace(/\D/g, '');
 
-  // 2. Cálculo das Taxas MDR
-  const feeCalc = calculateCardFee(amount, tipo, installments, plan);
+  // 3. Cálculo das Taxas MDR com o Plano Efetivo
+  const feeCalc = calculateCardFee(amount, tipo, installments, effectivePlan);
 
-  // 3. Chamada à RPC PostgreSQL no Supabase
+  // 4. Chamada à RPC PostgreSQL no Supabase
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('process_card_payment', {
     p_merchant_account_id: merchantAccountId,
     p_card_number: cleanNumber,
@@ -427,7 +487,7 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
     p_amount: amount,
     p_tipo: tipo,
     p_installments: installments,
-    p_plan: plan,
+    p_plan: effectivePlan,
     p_fee_percent: feeCalc.feePercent,
     p_fee_amount: feeCalc.feeAmount,
     p_net_amount: feeCalc.netAmount,

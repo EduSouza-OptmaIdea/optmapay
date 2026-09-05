@@ -32,7 +32,12 @@ import {
 import { Link } from 'react-router-dom';
 import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
 import { executeAnticipationSettlement } from '../lib/anticipationService';
-import { AnticipationCalculationResult } from '../lib/businessDays';
+import {
+  AnticipationCalculationResult,
+  calculateSettlementTargetDate,
+  getSettlementCountdown,
+  SettlementPlan,
+} from '../lib/businessDays';
 
 interface TransactionWithRunningBalance extends SandboxTransaction {
   balanceBefore: number;
@@ -40,6 +45,59 @@ interface TransactionWithRunningBalance extends SandboxTransaction {
   alreadyRefunded: number;
   remainingRefundable: number;
   isFullyRefunded: boolean;
+}
+
+export interface SettledDailyGroup {
+  dateKey: string;
+  formattedDate: string;
+  openingBalance: number;
+  closingBalance: number;
+  totalIn: number;
+  totalOut: number;
+  items: TransactionWithRunningBalance[];
+}
+
+export interface FutureSettlementGroup {
+  targetDateKey: string;
+  targetDate: Date;
+  formattedDate: string;
+  subText: string;
+  badgeText: string;
+  badgeColorClass: string;
+  totalFutureAmount: number;
+  items: (TransactionWithRunningBalance & {
+    settlementDetails: ReturnType<typeof getTransactionSettlementDetails>;
+  })[];
+}
+
+export function getTransactionSettlementDetails(tx: SandboxTransaction) {
+  const desc = (tx.description || '').toUpperCase();
+  const isDebit = desc.includes('DEBITO');
+
+  let plan: SettlementPlan = 'standard';
+  if (isDebit) {
+    plan = 'standard'; // Débito sempre é D+1 útil bancário
+  } else if (desc.includes('D+15')) {
+    plan = 'd15';
+  } else if (desc.includes('D+7')) {
+    plan = 'd7';
+  } else if (desc.includes('VENCIMENTO') || desc.includes('DUE_DATE')) {
+    plan = 'due_date';
+  } else if (desc.includes('ONTIME') || desc.includes('NITRO')) {
+    plan = 'ontime';
+  } else {
+    plan = 'standard';
+  }
+
+  const targetDate = calculateSettlementTargetDate(tx.created_at, plan);
+  const countdown = getSettlementCountdown(tx.created_at, plan);
+
+  return {
+    isDebit,
+    plan,
+    targetDate,
+    countdown,
+  };
 }
 
 export const Dashboard: React.FC = () => {
@@ -147,7 +205,20 @@ export const Dashboard: React.FC = () => {
     }
 
     const { data } = await query;
-    setTransactions((data || []) as SandboxTransaction[]);
+    const rawList = (data || []) as SandboxTransaction[];
+
+    // Sanitização Automática: Se for Débito, nunca pode ter "Vencimento" na descrição
+    const sanitizedList = rawList.map((tx) => {
+      if (tx.description && tx.description.includes('DEBITO') && tx.description.includes('Vencimento')) {
+        const cleanedDesc = tx.description.replace('Lançamento Futuro no Vencimento (-10% desc)', 'Lançamento Futuro D+1 Útil');
+        // Atualiza no banco silenciosamente em background para persistir o ajuste definitivo
+        supabase.from('transactions').update({ description: cleanedDesc }).eq('id', tx.id).then();
+        return { ...tx, description: cleanedDesc };
+      }
+      return tx;
+    });
+
+    setTransactions(sanitizedList);
     setLoadingTx(false);
   };
 
@@ -187,19 +258,16 @@ export const Dashboard: React.FC = () => {
 
   const totalProjectedBalance = (activeAccount?.balance || 0) + futureReceivablesTotal;
 
-  // Agrupamento de Transações por Dia COM DISTINÇÃO ESTRITA ENTRE SALDO DISPONÍVEL E LANÇAMENTOS FUTUROS
-  const groupedTransactions = useMemo(() => {
-    if (!activeAccount) return [];
-
-    // Filtra transações de acordo com a aba selecionada no extrato
-    let filteredList = transactions;
-    if (extratoFilterTab === 'settled') {
-      filteredList = transactions.filter((tx) => tx.status !== 'pending');
-    } else if (extratoFilterTab === 'future') {
-      filteredList = transactions.filter((tx) => tx.status === 'pending');
+  // Separação Estrutural de Grupos:
+  // 1. Extrato de Saldo Disponível Realizado (apenas transações liquidadas, agrupadas por data do evento bancário)
+  // 2. Cronograma de Lançamentos Futuros (agrupados por DATA PREVISTA DE LIQUIDAÇÃO / BAIXA)
+  const { settledDailyGroups, futureSettlementGroups } = useMemo(() => {
+    if (!activeAccount) {
+      return { settledDailyGroups: [], futureSettlementGroups: [] };
     }
 
-    // Mapeamento de estornos já ocorridos para conciliação precisa
+    const filteredList = transactions.filter((tx) => !tx.related_transaction_id);
+
     const refundMap = new Map<string, number>();
     transactions.forEach((tx) => {
       if (tx.type === 'pix' && tx.direction === 'out' && tx.related_transaction_id) {
@@ -211,7 +279,6 @@ export const Dashboard: React.FC = () => {
     let runningBalance = Number(activeAccount.balance);
     const enrichedTransactions: TransactionWithRunningBalance[] = [];
 
-    // Ordenados de forma decrescente (mais recente primeiro)
     for (const tx of filteredList) {
       const txAmount = Number(tx.amount);
       const isPending = tx.status === 'pending';
@@ -219,7 +286,7 @@ export const Dashboard: React.FC = () => {
       let after = runningBalance;
       let before = runningBalance;
 
-      // REGRA CRUCIAL: Lançamentos futuros (pending) NÃO alteram o saldo disponível da conta!
+      // Lançamentos futuros (pending) NÃO alteram o saldo disponível da conta corrente!
       if (!isPending) {
         if (tx.direction === 'in') {
           before = after - txAmount;
@@ -229,7 +296,6 @@ export const Dashboard: React.FC = () => {
         runningBalance = before;
       }
 
-      // Calcula quanto já foi devolvido
       const colRefunded = Number(tx.refunded_amount || 0);
       const mapRefunded = refundMap.get(tx.id) || 0;
       const alreadyRefunded = Math.max(colRefunded, mapRefunded);
@@ -246,74 +312,91 @@ export const Dashboard: React.FC = () => {
       });
     }
 
-    const groups: {
-      dateKey: string;
-      formattedDate: string;
-      openingBalance: number;
-      closingBalance: number;
-      totalIn: number;
-      totalOut: number;
-      totalFutureIn: number;
-      items: TransactionWithRunningBalance[];
-    }[] = [];
+    // 1. GRUPO EXTRATO DE SALDO DISPONÍVEL REALIZADO (Apenas liquidados)
+    const settledTransactions = enrichedTransactions.filter((tx) => tx.status !== 'pending');
+    const settledDateMap = new Map<string, TransactionWithRunningBalance[]>();
 
-    const dateMap = new Map<string, TransactionWithRunningBalance[]>();
-
-    enrichedTransactions.forEach((tx) => {
+    settledTransactions.forEach((tx) => {
       const dateKey = new Date(tx.created_at).toLocaleDateString('pt-BR');
-      if (!dateMap.has(dateKey)) {
-        dateMap.set(dateKey, []);
+      if (!settledDateMap.has(dateKey)) {
+        settledDateMap.set(dateKey, []);
       }
-      dateMap.get(dateKey)!.push(tx);
+      settledDateMap.get(dateKey)!.push(tx);
     });
 
-    dateMap.forEach((items, dateKey) => {
+    const settledGroups: SettledDailyGroup[] = [];
+    settledDateMap.forEach((items, dateKey) => {
       let totalIn = 0;
       let totalOut = 0;
-      let totalFutureIn = 0;
-
       items.forEach((item) => {
-        if (item.status === 'pending') {
-          if (item.direction === 'in') {
-            totalFutureIn += Number(item.amount);
-          }
-        } else {
-          if (item.direction === 'in') {
-            totalIn += Number(item.amount);
-          } else {
-            totalOut += Number(item.amount);
-          }
-        }
+        if (item.direction === 'in') totalIn += Number(item.amount);
+        else totalOut += Number(item.amount);
       });
 
-      // Apenas transações liquidadas afetam o saldo de abertura e fechamento
-      const settledItems = items.filter((i) => i.status !== 'pending');
-      const closingBalance = settledItems.length > 0 ? settledItems[0].balanceAfter : runningBalance;
-      const openingBalance = settledItems.length > 0 ? settledItems[settledItems.length - 1].balanceBefore : runningBalance;
+      const closingBalance = items[0].balanceAfter;
+      const openingBalance = items[items.length - 1].balanceBefore;
 
       const sampleDate = new Date(items[0].created_at);
       const isToday = sampleDate.toDateString() === new Date().toDateString();
-      const isYesterday =
-        sampleDate.toDateString() === new Date(Date.now() - 86400000).toDateString();
+      const isYesterday = sampleDate.toDateString() === new Date(Date.now() - 86400000).toDateString();
 
       let formattedDate = dateKey;
       if (isToday) formattedDate = `Hoje • ${dateKey}`;
       else if (isYesterday) formattedDate = `Ontem • ${dateKey}`;
 
-      groups.push({
+      settledGroups.push({
         dateKey,
         formattedDate,
         openingBalance,
         closingBalance,
         totalIn,
         totalOut,
-        totalFutureIn,
         items,
       });
     });
 
-    return groups;
-  }, [transactions, activeAccount?.balance, extratoFilterTab]);
+    // 2. CRONOGRAMA DE LANÇAMENTOS FUTUROS (Agrupados por DATA PREVISTA DE BAIXA / LIQUIDAÇÃO)
+    const pendingTransactions = enrichedTransactions.filter((tx) => tx.status === 'pending');
+    const futureDateMap = new Map<string, FutureSettlementGroup>();
+
+    pendingTransactions.forEach((tx) => {
+      const details = getTransactionSettlementDetails(tx);
+      const targetDateKey = details.targetDate.toLocaleDateString('pt-BR');
+
+      if (!futureDateMap.has(targetDateKey)) {
+        const dayOfWeek = details.targetDate.toLocaleDateString('pt-BR', { weekday: 'long' });
+        const capitalizedDay = dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1);
+        const formattedDate = `${capitalizedDay} • ${targetDateKey}`;
+
+        futureDateMap.set(targetDateKey, {
+          targetDateKey,
+          targetDate: details.targetDate,
+          formattedDate,
+          subText: details.countdown.subText,
+          badgeText: details.countdown.badgeText,
+          badgeColorClass: details.countdown.badgeColorClass,
+          totalFutureAmount: 0,
+          items: [],
+        });
+      }
+
+      const group = futureDateMap.get(targetDateKey)!;
+      group.totalFutureAmount += Number(tx.amount);
+      group.items.push({
+        ...tx,
+        settlementDetails: details,
+      });
+    });
+
+    const futureGroups = Array.from(futureDateMap.values()).sort(
+      (a, b) => a.targetDate.getTime() - b.targetDate.getTime()
+    );
+
+    return {
+      settledDailyGroups: settledGroups,
+      futureSettlementGroups: futureGroups,
+    };
+  }, [transactions, activeAccount?.balance]);
 
   const handleConfirmAnticipation = async (calcResult: AnticipationCalculationResult) => {
     if (!selectedTxForAnticipation || !activeAccount) return;
@@ -789,174 +872,260 @@ export const Dashboard: React.FC = () => {
           </span>
         </div>
 
-        {/* Lista de Transações Agrupadas por Dia com Saldo Anterior e Saldo do Dia */}
-        {groupedTransactions.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
-            Nenhum lançamento registrado nesta conta no período selecionado.
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {groupedTransactions.map((group) => (
-              <div
-                key={group.dateKey}
-                className="border border-slate-200 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-sm"
-              >
-                {/* Cabeçalho do Dia com Saldo Anterior, Movimentação e Saldo do Dia */}
-                <div className="bg-slate-100 dark:bg-slate-900/90 px-4 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs border-b border-slate-200 dark:border-slate-700/80">
-                  <div className="flex items-center gap-2 font-mono font-bold text-slate-800 dark:text-slate-100">
-                    <Calendar className="w-4 h-4 text-[#19A999]" />
-                    <span>{group.formattedDate}</span>
-                  </div>
+        {/* Renderização Inteligente: Futuros agrupados por Data de Baixa vs Extrato Realizado por Data do Evento */}
+        <div className="space-y-8">
+          {/* SEÇÃO 1: CRONOGRAMA DE LANÇAMENTOS FUTUROS (SE 'all' OU 'future') */}
+          {(extratoFilterTab === 'all' || extratoFilterTab === 'future') && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <span>Previsões de Recebíveis Futuros (Agrupados por Data da Baixa / Liquidação)</span>
+                </h4>
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-500/20">
+                  {futureReceivablesCount} a compensar • Total R$ {futureReceivablesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
 
-                  {/* Evolução de Saldo do Dia */}
-                  <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
-                    <div className="text-slate-500 dark:text-slate-400">
-                      Saldo Anterior: <strong>R$ {group.openingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {group.totalIn > 0 && (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                          + R$ {group.totalIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
-                      {group.totalOut > 0 && (
-                        <span className="text-rose-600 dark:text-rose-400 font-bold">
-                          - R$ {group.totalOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
-                      {group.totalFutureIn > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                          ⏳ + R$ {group.totalFutureIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a compensar
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[#19A999] font-extrabold flex items-center gap-1">
-                      <Wallet className="w-3.5 h-3.5" />
-                      <span>Saldo do Dia: R$ {group.closingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
+              {futureSettlementGroups.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                  Nenhum lançamento futuro pendente de liquidação no momento.
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  {futureSettlementGroups.map((group) => (
+                    <div
+                      key={group.targetDateKey}
+                      className="border border-amber-300/80 dark:border-amber-700/80 rounded-2xl overflow-hidden shadow-sm bg-gradient-to-b from-amber-500/5 to-transparent"
+                    >
+                      {/* Cabeçalho da Data Prevista de Baixa */}
+                      <div className="bg-amber-500/15 dark:bg-amber-950/40 px-4 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs border-b border-amber-300/50 dark:border-amber-700/60">
+                        <div className="flex items-center gap-2 font-mono font-bold text-slate-800 dark:text-slate-100">
+                          <Calendar className="w-4 h-4 text-amber-500" />
+                          <span className="text-sm">{group.formattedDate}</span>
+                          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                            (Previsão de Liquidação Bancária)
+                          </span>
+                        </div>
 
-                {/* Itens do Dia */}
-                <div className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
-                  {group.items.map((tx) => {
-                    const isPending = tx.status === 'pending';
-                    const isIn = tx.direction === 'in';
-                    const isPixIn = tx.type === 'pix' && isIn;
-                    const canRefund = isPixIn && !tx.isFullyRefunded && !isPending;
+                        <div className="flex flex-wrap items-center gap-2.5 font-mono text-[11px]">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${group.badgeColorClass}`}>
+                            {group.badgeText}
+                          </span>
+                          <div className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-950 dark:text-amber-200 font-extrabold flex items-center gap-1 border border-amber-500/30">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Total do Dia: R$ {group.totalFutureAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      </div>
 
-                    return (
-                      <div
-                        key={tx.id}
-                        onClick={() => {
-                          if (canRefund) {
-                            handleOpenRefundModal(tx);
-                          }
-                        }}
-                        className={`p-4 flex items-center justify-between gap-4 text-xs transition ${
-                          canRefund
-                            ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer'
-                            : ''
-                        } ${isPending ? 'bg-amber-500/5' : ''}`}
-                      >
-                        <div className="flex items-center gap-3">
+                      {/* Itens do Grupo Futuro */}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
+                        {group.items.map((tx) => (
                           <div
-                            className={`p-2.5 rounded-xl shrink-0 ${
-                              isPending
-                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
-                                : isIn
-                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-                            }`}
+                            key={tx.id}
+                            className="p-4 flex items-center justify-between gap-4 text-xs hover:bg-slate-50 dark:hover:bg-slate-700/40 transition"
                           >
-                            {isPending ? (
-                              <Clock className="w-4 h-4" />
-                            ) : isIn ? (
-                              <ArrowDownLeft className="w-4 h-4" />
-                            ) : (
-                              <ArrowUpRight className="w-4 h-4" />
+                            <div className="flex items-center gap-3">
+                              <div className="p-2.5 rounded-xl shrink-0 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                                <Clock className="w-4 h-4" />
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                                  <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
+                                  <span className="px-2 py-0.5 bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 rounded text-[10px] font-extrabold flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    <span>
+                                      {tx.settlementDetails.isDebit
+                                        ? 'Débito D+1 Útil Bancário'
+                                        : tx.settlementDetails.plan === 'due_date'
+                                        ? 'Crédito No Vencimento'
+                                        : tx.settlementDetails.plan === 'd15'
+                                        ? 'Crédito D+15 Útil'
+                                        : tx.settlementDetails.plan === 'd7'
+                                        ? 'Crédito D+7 Útil'
+                                        : 'Crédito D+1 Útil'}
+                                    </span>
+                                  </span>
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {tx.counterparty_name ? `Contraparte: ${tx.counterparty_name} • ` : ''}
+                                  {tx.description ? `${tx.description} • ` : ''}
+                                  <span className="text-slate-400 font-mono">
+                                    Venda realizada em {new Date(tx.created_at).toLocaleDateString('pt-BR')} às {new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </p>
+                                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                                  {group.subText}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0 text-right">
+                              <div className="space-y-0.5">
+                                <p className="font-extrabold font-mono text-sm text-amber-600 dark:text-amber-400">
+                                  ⏳ + R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-[10px] font-mono text-slate-400">
+                                  Previsão futura (não disponível)
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTxForAnticipation(tx);
+                                  setIsAnticipationModalOpen(true);
+                                }}
+                                className="py-1.5 px-3 bg-gradient-to-r from-amber-500 to-[#F1613A] hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-950/20 transition flex items-center gap-1.5 shrink-0"
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>Antecipar</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SEÇÃO 2: EXTRATO BANCÁRIO REALIZADO (SE 'all' OU 'settled') */}
+          {(extratoFilterTab === 'all' || extratoFilterTab === 'settled') && (
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Wallet className="w-4 h-4 text-[#19A999]" />
+                <span>Extrato Bancário Realizado (Evolução Diária do Saldo Disponível)</span>
+              </h4>
+
+              {settledDailyGroups.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                  Nenhuma movimentação bancária realizada nesta conta no período selecionado.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {settledDailyGroups.map((group) => (
+                    <div
+                      key={group.dateKey}
+                      className="border border-slate-200 dark:border-slate-700/80 rounded-2xl overflow-hidden shadow-sm"
+                    >
+                      {/* Cabeçalho do Dia */}
+                      <div className="bg-slate-100 dark:bg-slate-900/90 px-4 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs border-b border-slate-200 dark:border-slate-700/80">
+                        <div className="flex items-center gap-2 font-mono font-bold text-slate-800 dark:text-slate-100">
+                          <Calendar className="w-4 h-4 text-[#19A999]" />
+                          <span>{group.formattedDate}</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
+                          <div className="text-slate-500 dark:text-slate-400">
+                            Saldo Anterior: <strong>R$ {group.openingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {group.totalIn > 0 && (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                + R$ {group.totalIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            )}
+                            {group.totalOut > 0 && (
+                              <span className="text-rose-600 dark:text-rose-400 font-bold">
+                                - R$ {group.totalOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
                             )}
                           </div>
 
-                          <div className="space-y-0.5">
-                            <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
-                              <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
-
-                              {isPending && (
-                                <span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded text-[10px] font-extrabold flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>Lançamento Futuro (Aguardando Liquidação)</span>
-                                </span>
-                              )}
-
-                              {/* Badges de Status de Devolução */}
-                              {isPixIn && (
-                                tx.isFullyRefunded ? (
-                                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded text-[10px] font-semibold">
-                                    Devolvido Integralmente
-                                  </span>
-                                ) : tx.alreadyRefunded > 0 ? (
-                                  <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
-                                    Devolver Restante (R$ {tx.remainingRefundable.toFixed(2)})
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
-                                    Clique para Devolver
-                                  </span>
-                                )
-                              )}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {tx.counterparty_name ? `Contraparte: ${tx.counterparty_name} • ` : ''}
-                              {tx.description ? `${tx.description} • ` : ''}
-                              {new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            </p>
+                          <div className="px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[#19A999] font-extrabold flex items-center gap-1">
+                            <Wallet className="w-3.5 h-3.5" />
+                            <span>Saldo do Dia: R$ {group.closingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 shrink-0 text-right">
-                          <div className="space-y-0.5">
-                            <p className={`font-extrabold font-mono text-sm ${
-                              isPending
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : isIn
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-rose-600 dark:text-rose-400'
-                            }`}>
-                              {isPending ? '⏳ ' : isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                            <p className="text-[10px] font-mono text-slate-400">
-                              {isPending
-                                ? 'Previsão futura (não disponível)'
-                                : `Saldo após: R$ ${tx.balanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                            </p>
-                          </div>
-
-                          {isPending && isIn && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedTxForAnticipation(tx);
-                                setIsAnticipationModalOpen(true);
-                              }}
-                              className="py-1.5 px-3 bg-gradient-to-r from-amber-500 to-[#F1613A] hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-950/20 transition flex items-center gap-1.5 shrink-0"
-                            >
-                              <Zap className="w-3.5 h-3.5" />
-                              <span>Antecipar</span>
-                            </button>
-                          )}
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Itens Realizados */}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
+                        {group.items.map((tx) => {
+                          const isIn = tx.direction === 'in';
+                          const isPixIn = tx.type === 'pix' && isIn;
+                          const canRefund = isPixIn && !tx.isFullyRefunded;
+
+                          return (
+                            <div
+                              key={tx.id}
+                              onClick={() => {
+                                if (canRefund) {
+                                  handleOpenRefundModal(tx);
+                                }
+                              }}
+                              className={`p-4 flex items-center justify-between gap-4 text-xs transition ${
+                                canRefund ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`p-2.5 rounded-xl shrink-0 ${
+                                    isIn
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                                  }`}
+                                >
+                                  {isIn ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                                </div>
+
+                                <div className="space-y-0.5">
+                                  <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                                    <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
+                                    {isPixIn && (
+                                      tx.isFullyRefunded ? (
+                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 rounded text-[10px] font-semibold">
+                                          Devolvido Integralmente
+                                        </span>
+                                      ) : tx.alreadyRefunded > 0 ? (
+                                        <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
+                                          Devolver Restante (R$ {tx.remainingRefundable.toFixed(2)})
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 bg-teal-500/10 text-[#19A999] rounded text-[10px] font-semibold border border-teal-500/20">
+                                          Clique para Devolver
+                                        </span>
+                                      )
+                                    )}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {tx.counterparty_name ? `Contraparte: ${tx.counterparty_name} • ` : ''}
+                                    {tx.description ? `${tx.description} • ` : ''}
+                                    {new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0 text-right">
+                                <div className="space-y-0.5">
+                                  <p className={`font-extrabold font-mono text-sm ${
+                                    isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                                  }`}>
+                                    {isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </p>
+                                  <p className="text-[10px] font-mono text-slate-400">
+                                    Saldo após: R$ {tx.balanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* MODAL DEVOLUÇÃO / ESTORNO PIX (COM CONTROLE DO SALDO RESTANTE) */}
@@ -1178,7 +1347,9 @@ export const Dashboard: React.FC = () => {
           grossAmount={Number(selectedTxForAnticipation.amount)}
           saleDate={selectedTxForAnticipation.created_at}
           settlementPlan={
-            selectedTxForAnticipation.description?.includes('D+15')
+            selectedTxForAnticipation.description?.toUpperCase().includes('DEBITO')
+              ? 'standard'
+              : selectedTxForAnticipation.description?.includes('D+15')
               ? 'd15'
               : selectedTxForAnticipation.description?.includes('D+7')
               ? 'd7'
@@ -1186,6 +1357,7 @@ export const Dashboard: React.FC = () => {
               ? 'due_date'
               : 'standard'
           }
+          isDebit={selectedTxForAnticipation.description?.toUpperCase().includes('DEBITO')}
           expectedPin={activeAccount?.config?.pin || '1234'}
           onConfirmAnticipation={handleConfirmAnticipation}
         />

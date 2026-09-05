@@ -1067,7 +1067,9 @@ export const CartoesArea: React.FC = () => {
           grossAmount={Number(selectedTxForAnticipation.amount)}
           saleDate={selectedTxForAnticipation.created_at}
           settlementPlan={
-            selectedTxForAnticipation.description?.includes('D+15')
+            selectedTxForAnticipation.description?.toUpperCase().includes('DEBITO')
+              ? 'standard'
+              : selectedTxForAnticipation.description?.includes('D+15')
               ? 'd15'
               : selectedTxForAnticipation.description?.includes('D+7')
               ? 'd7'
@@ -1075,6 +1077,7 @@ export const CartoesArea: React.FC = () => {
               ? 'due_date'
               : 'standard'
           }
+          isDebit={selectedTxForAnticipation.description?.toUpperCase().includes('DEBITO')}
           expectedPin={activeAccount?.config?.pin || cards[0]?.pin || '1234'}
           onConfirmAnticipation={async (calc) => {
             if (!activeAccount) return;

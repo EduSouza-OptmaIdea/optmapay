@@ -18,6 +18,7 @@ import {
   SettlementPlan,
   AnticipationCalculationResult,
 } from '../lib/businessDays';
+import { calculateDebitAnticipation, DebitAnticipationCalculation } from '../lib/cardService';
 
 interface AnticipationSimulationModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ interface AnticipationSimulationModalProps {
   saleDate: string | Date;
   settlementPlan?: SettlementPlan | number;
   expectedPin?: string; // PIN da conta ou cartão (fallback 1234)
+  isDebit?: boolean;
   onConfirmAnticipation: (result: AnticipationCalculationResult) => Promise<void>;
 }
 
@@ -40,6 +42,7 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
   saleDate,
   settlementPlan = 'standard',
   expectedPin = '1234',
+  isDebit = false,
   onConfirmAnticipation,
 }) => {
   const [pin, setPin] = useState('');
@@ -50,16 +53,43 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
 
   if (!isOpen) return null;
 
-  // Calcula a contagem regressiva e data prevista às 06:00
-  const countdown = getSettlementCountdown(saleDate, settlementPlan);
-
-  // Calcula a simulação pro-rata (taxa mensal padrão 5.99% a.m., equivalente ao Crédito 1x OnTime para evitar arbitragem) baseada nos dias corridos
-  const calculation = calculateAnticipationProRata(
-    grossAmount,
-    countdown.daysRemaining,
-    5.99,
-    countdown.targetDateFormatted
+  // Detecta se a venda é da modalidade débito
+  const isDebitTransaction = Boolean(
+    isDebit ||
+    title.toUpperCase().includes('DEBITO') ||
+    externalReference?.toUpperCase().includes('DEBITO')
   );
+
+  // Débito é sempre D+1 útil (standard) se não for OnTime
+  const effectivePlan: SettlementPlan = isDebitTransaction ? 'standard' : (typeof settlementPlan === 'string' ? settlementPlan : 'standard');
+
+  // Calcula a contagem regressiva e data prevista às 06:00
+  const countdown = getSettlementCountdown(saleDate, effectivePlan);
+
+  // Se for débito: Regra de Negócio cobra a taxa cheia do OnTime para débito
+  const debitCalc: DebitAnticipationCalculation | null = isDebitTransaction
+    ? calculateDebitAnticipation(grossAmount)
+    : null;
+
+  // Cálculo a ser enviado e persistido
+  const calculation: AnticipationCalculationResult = isDebitTransaction && debitCalc
+    ? {
+        grossAmount: debitCalc.grossAmount,
+        daysRemaining: countdown.daysRemaining,
+        monthlyFeePercent: debitCalc.ontimeFeePercent,
+        dailyFeePercent: debitCalc.ontimeFeePercent,
+        proRataFeePercent: Math.round((debitCalc.ontimeFeePercent - debitCalc.d1FeePercent) * 100) / 100, // 1.14%
+        anticipationFeeAmount: debitCalc.anticipationCost,
+        netAnticipatedAmount: debitCalc.finalNetAmount,
+        targetSettlementDateStr: countdown.targetDateFormatted,
+        summaryNote: `Antecipação de Venda Débito D+1 com cobrança da taxa cheia OnTime (${debitCalc.ontimeFeePercent}%).`,
+      }
+    : calculateAnticipationProRata(
+        grossAmount,
+        countdown.daysRemaining,
+        5.99,
+        countdown.targetDateFormatted
+      );
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/\D/g, '').slice(0, 4);
@@ -114,13 +144,21 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base sm:text-lg">Simulação de Antecipação</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 uppercase">
-                  Pro Rata Die
+                <h3 className="font-bold text-base sm:text-lg">
+                  {isDebitTransaction ? 'Antecipação de Débito' : 'Simulação de Antecipação'}
+                </h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                  isDebitTransaction
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+                }`}>
+                  {isDebitTransaction ? '⚡ Débito OnTime' : 'Pro Rata Die'}
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Receba o saldo antecipadamente com taxa proporcional aos dias restantes
+                {isDebitTransaction
+                  ? 'Liberação imediata com cobrança da taxa cheia do OnTime para débito'
+                  : 'Receba o saldo antecipadamente com taxa proporcional aos dias restantes'}
               </p>
             </div>
           </div>
@@ -239,11 +277,11 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
                 </p>
               </div>
 
-              {/* Demonstração do Cálculo Pro Rata */}
+              {/* Demonstração do Cálculo */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                   <TrendingDown className="w-4 h-4 text-[#F1613A]" />
-                  Detalhamento Financeiro Pro Rata
+                  {isDebitTransaction ? 'Detalhamento Financeiro — Taxa Cheia OnTime Débito' : 'Detalhamento Financeiro Pro Rata'}
                 </h4>
 
                 <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 divide-y divide-slate-100 dark:divide-slate-700 text-xs">
@@ -254,28 +292,55 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
                     </span>
                   </div>
 
-                  <div className="flex justify-between py-2">
-                    <span className="text-slate-500">Taxa Mensal Base:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300">
-                      {calculation.monthlyFeePercent.toFixed(2)}% a.m.
-                    </span>
-                  </div>
+                  {isDebitTransaction && debitCalc ? (
+                    <>
+                      <div className="flex justify-between py-2">
+                        <span className="text-slate-500">Taxa Débito D+1 Retida na Venda:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          {debitCalc.d1FeePercent.toFixed(2)}% (- R$ {debitCalc.d1FeeAmount.toFixed(2)})
+                        </span>
+                      </div>
 
-                  <div className="flex justify-between py-2">
-                    <span className="text-slate-500">
-                      Taxa Pro Rata ({calculation.daysRemaining} dia(s) até vencimento):
-                    </span>
-                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                      {calculation.proRataFeePercent.toFixed(2)}%
-                    </span>
-                  </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-slate-500">Taxa Cheia OnTime Débito:</span>
+                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                          {debitCalc.ontimeFeePercent.toFixed(2)}% (- R$ {debitCalc.ontimeTotalFeeAmount.toFixed(2)})
+                        </span>
+                      </div>
 
-                  <div className="flex justify-between py-2 text-rose-600 dark:text-rose-400">
-                    <span className="font-semibold">Custo de Desconto da Antecipação:</span>
-                    <span className="font-mono font-bold">
-                      - R$ {calculation.anticipationFeeAmount.toFixed(2)}
-                    </span>
-                  </div>
+                      <div className="flex justify-between py-2 text-rose-600 dark:text-rose-400">
+                        <span className="font-semibold">Custo Adicional da Antecipação:</span>
+                        <span className="font-mono font-bold">
+                          - R$ {debitCalc.anticipationCost.toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between py-2">
+                        <span className="text-slate-500">Taxa Mensal Base:</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          {calculation.monthlyFeePercent.toFixed(2)}% a.m.
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between py-2">
+                        <span className="text-slate-500">
+                          Taxa Pro Rata ({calculation.daysRemaining} dia(s) até vencimento):
+                        </span>
+                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                          {calculation.proRataFeePercent.toFixed(2)}%
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between py-2 text-rose-600 dark:text-rose-400">
+                        <span className="font-semibold">Custo de Desconto da Antecipação:</span>
+                        <span className="font-mono font-bold">
+                          - R$ {calculation.anticipationFeeAmount.toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  )}
 
                   <div className="flex justify-between pt-3 text-sm font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 -mx-4 -mb-4 p-4 rounded-b-2xl">
                     <span className="flex items-center gap-1.5">

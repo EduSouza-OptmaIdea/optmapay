@@ -87,15 +87,17 @@ Acesse: `/cartoes?tab=rates` (com a **Conta Credora** selecionada)
 
 Acesse: `/dashboard` (com a **Conta Credora** selecionada)
 
-- [ ] **4.1. Verificação dos Cards do Topo**
-  - [ ] **Saldo Disponível**: Mostra rigorosamente apenas o dinheiro liberado e em conta (não inclui vendas D+1, D+7, etc. ainda não compensadas).
-  - [ ] **Lançamentos Futuros**: Exibe o total acumulado de vendas a compensar (ex: venda Débito D+1 ou Crédito D+1/D+7/D+15).
+- [ ] **4.1. Verificação dos Cards de Métricas do Topo**
+  - [ ] **Saldo Disponível**: Mostra rigorosamente apenas o dinheiro liberado e em conta (o saldo não se altera no dia 05/09 por uma venda que liquidará no futuro).
+  - [ ] **Lançamentos Futuros**: Exibe o montante total de previsões a compensar.
   - [ ] **Saldo Projetado Total**: Soma do saldo disponível + previsões futuras.
-- [ ] **4.2. Extrato Bancário e Conciliação Diária**
-  - [ ] O **Saldo Anterior** e o **Saldo do Dia** consideram estritamente o dinheiro realizado na conta (não são inflacionados por vendas futuras).
-  - [ ] Vendas futuras são listadas com badge âmbar `⏳ Lançamento Futuro (Aguardando Liquidação)` e nota de `Previsão futura (não disponível)`.
-  - [ ] Pode filtrar o extrato pelas abas: `Visão Consolidada`, `🏦 Saldo Disponível (Realizado)` e `⏳ Lançamentos Futuros (a compensar)`.
-  - [ ] Botão `⚡ Antecipar` disponível diretamente no extrato para antecipar qualquer lançamento futuro com PIN.
+- [ ] **4.2. Cronograma de Lançamentos Futuros por Data Prevista de Baixa**
+  - [ ] A venda no débito realizada no sábado 05/09/2026 é listada sob o grupo **Terça-feira • 08/09/2026** (pois 06/09 é domingo e 07/09 é feriado nacional da Independência).
+  - [ ] Exibe contagem regressiva `D-1 • Próximo Dia Útil` e nota de liquidação às 06:00.
+  - [ ] Mostra a data e hora do evento original (venda em 05/09/2026).
+- [ ] **4.3. Extrato Bancário Realizado**
+  - [ ] Apenas dias com movimentação financeira efetiva que alteraram a conta corrente aparecem com Saldo Anterior e Saldo do Dia.
+  - [ ] As 3 abas de filtro funcionam com precisão: `Visão Consolidada`, `🏦 Saldo Disponível (Realizado)` e `⏳ Lançamentos Futuros`.
 
 **Status:** [ ] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
@@ -103,21 +105,25 @@ Acesse: `/dashboard` (com a **Conta Credora** selecionada)
 
 ---
 
-## ⏩ 5. Antecipação de Recebíveis Pro Rata com Validação de PIN
+## ⏩ 5. Antecipação de Débito (Taxa Cheia OnTime) e Crédito (Pro Rata)
 
-Acesse: `/cartoes?tab=statement` (com a **Conta Credora** selecionada)
+Acesse: `/dashboard` ou `/cartoes?tab=statement` (com a **Conta Credora** selecionada)
 
-- [ ] **5.1. Abertura do Modal de Antecipação**
-  - [ ] Localizou o lançamento futuro na tabela de extrato
-  - [ ] Clicou no botão `⚡ Antecipar Recebível`
-- [ ] **5.2. Análise da Simulação Financeira**
-  - [ ] Modal exibe:
-    - Valor nominal bruto a antecipar
-    - Quantidade exata de dias úteis adiantados
-    - Taxa Pro Rata die proporcional ao tempo
-    - Custo do desconto e **Valor Líquido Imediato a Receber**
-- [ ] **5.3. Autorização com PIN**
-  - [ ] Digitou o PIN de 4 dígitos de segurança
+- [ ] **5.1. Abertura do Modal de Antecipação de Débito**
+  - [ ] Localizou o lançamento futuro de Débito no cronograma de 08/09/2026
+  - [ ] Clicou no botão `⚡ Antecipar`
+- [ ] **5.2. Validação da Regra de Negócio de Débito no Modal**
+  - [ ] O modal identifica como **Antecipação de Débito** com badge `⚡ Débito OnTime`
+  - [ ] Previsão oficial indicada: Terça-feira 08/09 às 06:00 (1 dia útil restante com aviso de feriado 07/09)
+  - [ ] Cobrança da **taxa cheia do OnTime para o tipo débito** (1.99%)
+  - [ ] Desconto da taxa D+1 já retida (0.85%), apurando o custo adicional da antecipação (1.14%)
+  - [ ] Exibição clara do **Valor Líquido a Receber AGORA**
+- [ ] **5.3. Autorização com PIN e Liquidação Instantânea**
+  - [ ] Digitou a senha PIN de 4 dígitos da conta (ex: 1234)
+  - [ ] Clicou em confirmar:
+    - O valor líquido entra **imediatamente no Saldo Disponível** da conta
+    - O lançamento futuro **deixa de ser exibido como futuro** e passa para o extrato de saldo realizado de Hoje (05/09) com status `completed`
+    - Dispara webhook de conciliação (`payment.settled`)
   - [ ] Clicou em `Confirmar Antecipação Pro Rata`
 - [ ] **5.4. Migração Imediata dos Valores**
   - [ ] O lançamento **deixa de ser exibido como futuro** e passa para `completed` / `Antecipado Pro Rata`
