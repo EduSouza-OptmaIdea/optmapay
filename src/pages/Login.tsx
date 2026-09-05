@@ -233,10 +233,10 @@ export const Login: React.FC = () => {
             </Link>
           </div>
 
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2.5 leading-relaxed">
+            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <span>
-              Conta para testes de desenvolvimento e educativas. Não usa valores reais.
+              Conta sem utilização de valores reais, utilizável exclusivamente para testes de desenvolvimento e fins educativos. Não configura instituição financeira ou arranjo de pagamento autorizado pelo BACEN (Lei nº 4.595/1964 e Lei nº 12.865/2013).
             </span>
           </div>
         </div>
