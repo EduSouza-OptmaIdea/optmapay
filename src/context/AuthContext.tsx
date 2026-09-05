@@ -20,20 +20,18 @@ interface AuthContextType {
 export const checkIsSuperAdmin = (u: User | null): boolean => {
   if (!u || !u.email) return false;
   const email = u.email.toLowerCase().trim();
-  const registeredSuperEmail = (localStorage.getItem('optmapay_super_admin_email') || '').toLowerCase().trim();
 
-  // Super Admin se o email for explicitamente o email registrado no portal master
-  if (registeredSuperEmail && email === registeredSuperEmail) {
+  // REGRA ESTRITA: APENAS e EXCLUSIVAMENTE a conta edu.souza é o Super Admin da plataforma
+  if (
+    email.startsWith('edu.souza') ||
+    email.includes('edu.souza') ||
+    email.startsWith('edusouza') ||
+    email.includes('edusouza')
+  ) {
     return true;
   }
-  // Emails mestres de sistema padrão
-  if (email === 'admin@optmaidea.com.br' || email === 'admin@optmapay.com.br' || email === 'master@optmapay.com.br' || email === 'root@optmapay.com.br') {
-    return true;
-  }
-  // Ou se tiver metadados explícitos de super admin atribuídos no provisionamento mestre
-  if (u.app_metadata?.role === 'super_admin' || u.user_metadata?.role === 'super_admin' || u.user_metadata?.is_super_admin === true) {
-    return true;
-  }
+
+  // Nenhuma outra conta (optmamenu, woodwork, madruga, etc) pode ser super admin
   return false;
 };
 

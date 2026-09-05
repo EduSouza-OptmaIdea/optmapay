@@ -32,7 +32,7 @@ export const Login: React.FC = () => {
   // Super Admin Master
   const [showSuperModal, setShowSuperModal] = useState(false);
   const [superTab, setSuperTab] = useState<'login' | 'create'>('login');
-  const [superEmail, setSuperEmail] = useState(localStorage.getItem('optmapay_super_admin_email') || 'admin@optmaidea.com.br');
+  const [superEmail, setSuperEmail] = useState('edu.souza@optmaidea.com.br');
   const [superPassword, setSuperPassword] = useState('');
   const [showSuperPassword, setShowSuperPassword] = useState(false);
   const [superLoading, setSuperLoading] = useState(false);
@@ -46,9 +46,17 @@ export const Login: React.FC = () => {
 
     const emailTrimmed = superEmail.trim().toLowerCase();
 
-    try {
-      localStorage.setItem('optmapay_super_admin_email', emailTrimmed);
+    // Trava de segurança: apenas edu.souza pode ser superadmin
+    if (!emailTrimmed.includes('edu.souza') && !emailTrimmed.includes('edusouza')) {
+      setSuperMsg({
+        type: 'error',
+        text: 'Acesso restrito: Apenas o e-mail da conta edu.souza tem autorização para ser o Superusuário Master.',
+      });
+      setSuperLoading(false);
+      return;
+    }
 
+    try {
       if (superTab === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: emailTrimmed,

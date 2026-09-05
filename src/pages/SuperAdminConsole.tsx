@@ -402,6 +402,28 @@ export const SuperAdminConsole: React.FC = () => {
         </div>
       </div>
 
+      {/* Indicador do Super Admin Oficial */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-slate-50 to-amber-500/5 dark:from-amber-950/20 dark:via-slate-800 dark:to-amber-950/10 p-4 rounded-3xl border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-amber-500 text-slate-950 font-black shrink-0 shadow-sm">
+            <Crown className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 dark:text-white">
+                Superusuário Master Autorizado: <span className="font-mono text-amber-600 dark:text-amber-400">edu.souza</span>
+              </span>
+              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                Único Administrador
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Apenas a conta de <strong>edu.souza</strong> possui permissão de governança, parametrização e gestão. Todas as demais contas abaixo são clientes comuns isolados (PF/PJ).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Tabela de Gestão de Contas do Sistema (Multi-Tenancy) */}
       <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -496,7 +518,8 @@ export const SuperAdminConsole: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {filteredAccounts.map((acc) => {
                 const isActive = acc.id === activeAccount?.id;
-                const role = acc.config?.role || 'standard';
+                const isAccEduSouza = acc.name?.toLowerCase().includes('edu.souza') || acc.pix_key?.toLowerCase().includes('edu.souza');
+                const role = isAccEduSouza ? 'super_admin' : (acc.config?.role === 'bank_manager' ? 'bank_manager' : 'standard');
 
                 return (
                   <tr
