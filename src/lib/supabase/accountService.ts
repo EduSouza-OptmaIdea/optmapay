@@ -334,3 +334,28 @@ export async function superAdminUpdateAccountRole(
   if (error) throw error;
 }
 
+/**
+ * Exclui uma conta sandbox e todos os seus dados correlacionados (ações do Super Admin)
+ */
+export async function superAdminDeleteAccount(accountId: string): Promise<void> {
+  await deleteSandboxAccountRPC(accountId);
+}
+
+/**
+ * Zera o extrato de testes de uma conta (apaga transações e boletos de teste) e restaura saldo padrão
+ */
+export async function superAdminResetAccountTransactions(
+  accountId: string,
+  resetBalanceTo: number = 10000.00
+): Promise<void> {
+  const client = getSupabaseClient();
+  await client.from('transactions').delete().or(`account_id.eq.${accountId},counterparty_account_id.eq.${accountId}`);
+  await client.from('boletos').delete().eq('account_id', accountId);
+  const { error } = await client.from('accounts').update({
+    balance: resetBalanceTo,
+    updated_at: new Date().toISOString(),
+  }).eq('id', accountId);
+  if (error) throw error;
+}
+
+

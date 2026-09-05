@@ -17,6 +17,19 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
+export const checkIsSuperAdmin = (u: User | null): boolean => {
+  if (!u || !u.email) return false;
+  const email = u.email.toLowerCase().trim();
+  const registeredSuperEmail = (localStorage.getItem('optmapay_super_admin_email') || 'admin@optmaidea.com.br').toLowerCase().trim();
+  if (email === registeredSuperEmail || email === 'admin@optmapay.com.br' || email === 'root@optmapay.com.br') {
+    return true;
+  }
+  if (u.app_metadata?.role === 'super_admin' || u.user_metadata?.role === 'super_admin' || u.user_metadata?.is_super_admin === true) {
+    return true;
+  }
+  return false;
+};
+
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -26,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accounts, setAccounts] = useState<SandboxAccount[]>([]);
   const [allAccounts, setAllAccounts] = useState<SandboxAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(true); // Super Admin Master do OptmaPay
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const userRef = useRef<User | null>(null);
   userRef.current = user;
 
@@ -34,22 +47,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetUserId = userId !== undefined ? userId : userRef.current?.id || '';
     if (!targetUserId) {
       setAccounts([]);
+      setAllAccounts([]);
       setActiveAccount(null);
+      setIsSuperAdmin(false);
       return;
     }
+
+    const currentAuthUser = currentUser || userRef.current;
+    const isMaster = checkIsSuperAdmin(currentAuthUser);
+    setIsSuperAdmin(isMaster);
 
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
-    // Como Super Admin, busca também todas as contas gerais da plataforma
-    const allFetched = await fetchAllAccountsAsSuperAdmin();
-    setAllAccounts(allFetched.length > 0 ? allFetched : fetched);
+    // SÓ busca contas de terceiros se o usuário for estritamente o Super Admin
+    let allFetched: SandboxAccount[] = [];
+    if (isMaster) {
+      allFetched = await fetchAllAccountsAsSuperAdmin();
+    }
+    setAllAccounts(allFetched);
 
     if (fetched && fetched.length > 0) {
       setAccounts(fetched);
 
       const savedActiveId = localStorage.getItem('optmapay_active_account_id');
-      const pool = allFetched.length > 0 ? allFetched : fetched;
+      const pool = isMaster && allFetched.length > 0 ? allFetched : fetched;
       const matched = pool.find((a) => a.id === savedActiveId);
 
       setActiveAccount((prev) => {
@@ -107,11 +129,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error || !currentUser) {
         supabase.auth.signOut().catch(() => {});
         setUser(null);
+        setIsSuperAdmin(false);
         setAccounts([]);
+        setAllAccounts([]);
         setActiveAccount(null);
         setLoading(false);
       } else {
         setUser(currentUser);
+        setIsSuperAdmin(checkIsSuperAdmin(currentUser));
         loadAccounts(currentUser.id, currentUser).finally(() => setLoading(false));
       }
     });
@@ -119,11 +144,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user || null;
       setUser(currentUser);
+      setIsSuperAdmin(checkIsSuperAdmin(currentUser));
       if (currentUser) {
         await loadAccounts(currentUser.id, currentUser);
       } else {
         setAccounts([]);
+        setAllAccounts([]);
         setActiveAccount(null);
+        setIsSuperAdmin(false);
       }
     });
 

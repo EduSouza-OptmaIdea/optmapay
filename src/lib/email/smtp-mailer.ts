@@ -12,9 +12,9 @@ export interface SmtpEmailOptions {
 }
 
 export async function sendSmtpEmail(options: SmtpEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // Em ambiente de produção na Vercel / Edge Function, as credenciais são lidas de process.env / Deno.env
-  const fromEmail = options.fromEmail || process.env.SMTP_FROM_EMAIL || 'optmapay.auth@optmaidea.com.br';
-  const fromName = options.fromName || process.env.SMTP_FROM_NAME || 'OptmaPay Sandbox | Dev Bank';
+  const envProcess = typeof process !== 'undefined' ? process?.env : undefined;
+  const fromEmail = options.fromEmail || (envProcess && envProcess.SMTP_FROM_EMAIL) || 'optmapay.auth@optmaidea.com.br';
+  const fromName = options.fromName || (envProcess && envProcess.SMTP_FROM_NAME) || 'OptmaPay Sandbox | Dev Bank';
 
   try {
     // Se estiver rodando via API endpoint backend

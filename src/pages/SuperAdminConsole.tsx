@@ -19,6 +19,8 @@ import {
   Clock,
   RotateCcw,
   Sliders,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   SandboxAccount,
@@ -29,6 +31,8 @@ import {
   superAdminAdjustAccountBalance,
   superAdminCreateTenantAccount,
   superAdminUpdateAccountRole,
+  superAdminDeleteAccount,
+  superAdminResetAccountTransactions,
   SuperAdminGlobalMetrics,
 } from '../lib/supabase/accountService';
 import { supabase } from '../lib/supabase';
@@ -66,6 +70,14 @@ export const SuperAdminConsole: React.FC = () => {
   const [selectedAccForRole, setSelectedAccForRole] = useState<SandboxAccount | null>(null);
   const [newRoleInput, setNewRoleInput] = useState<'standard' | 'bank_manager' | 'super_admin'>('standard');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+
+  // Modal de Exclusão de Conta
+  const [selectedAccForDelete, setSelectedAccForDelete] = useState<SandboxAccount | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+
+  // Modal de Zerar Extrato / Reset de Testes
+  const [selectedAccForReset, setSelectedAccForReset] = useState<SandboxAccount | null>(null);
+  const [isResettingAccount, setIsResettingAccount] = useState(false);
 
   // Varredura Geral de Liquidação
   const [isSweeping, setIsSweeping] = useState(false);
@@ -176,6 +188,41 @@ export const SuperAdminConsole: React.FC = () => {
       alert(`Erro ao atualizar papel: ${err.message}`);
     } finally {
       setIsUpdatingRole(false);
+    }
+  };
+
+  // Excluir Conta Sandbox (Reset total da conta)
+  const handleConfirmDeleteAccount = async () => {
+    if (!selectedAccForDelete) return;
+    setIsDeletingAccount(true);
+    try {
+      await superAdminDeleteAccount(selectedAccForDelete.id);
+      await loadData();
+      await refreshAccounts();
+      showToast(`🗑️ Conta "${selectedAccForDelete.name}" e dados de sandbox foram excluídos.`);
+      setSelectedAccForDelete(null);
+    } catch (err: any) {
+      alert(`Erro ao excluir conta: ${err.message}`);
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  // Zerar Extrato de Testes / Reset das Transações
+  const handleConfirmResetAccount = async () => {
+    if (!selectedAccForReset) return;
+    setIsResettingAccount(true);
+    try {
+      const defaultBal = selectedAccForReset.type === 'merchant' ? 10000.00 : 2500.00;
+      await superAdminResetAccountTransactions(selectedAccForReset.id, defaultBal);
+      await loadData();
+      await refreshAccounts();
+      showToast(`✨ Extrato e transações da conta "${selectedAccForReset.name}" foram zerados.`);
+      setSelectedAccForReset(null);
+    } catch (err: any) {
+      alert(`Erro ao zerar extrato: ${err.message}`);
+    } finally {
+      setIsResettingAccount(false);
     }
   };
 
@@ -576,6 +623,28 @@ export const SuperAdminConsole: React.FC = () => {
                           <ShieldCheck className="w-3 h-3" />
                           <span>Poderes</span>
                         </button>
+
+                        {/* Botão Zerar Extrato */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAccForReset(acc)}
+                          className="px-2 py-1.5 rounded-xl font-bold text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition flex items-center gap-1"
+                          title="Zerar histórico de transações e restaurar saldo"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Zerar</span>
+                        </button>
+
+                        {/* Botão Excluir Conta Sandbox */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAccForDelete(acc)}
+                          className="px-2 py-1.5 rounded-xl font-bold text-[11px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition flex items-center gap-1"
+                          title="Excluir conta e dados associados para começar do zero"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Excluir</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -883,6 +952,99 @@ export const SuperAdminConsole: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Zerar Extrato de Testes */}
+      {selectedAccForReset && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Zerar Extrato de Testes
+                </h3>
+                <p className="text-[10px] text-slate-400">Limpar histórico de transações desta conta</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <p className="font-bold">Atenção ao reset de testes:</p>
+              <p>
+                Todas as transações (vendas simuladas, cartões e boletos) vinculadas à conta <strong>"{selectedAccForReset.name}"</strong> serão apagadas e o saldo será restaurado para o valor inicial de fábrica ({selectedAccForReset.type === 'merchant' ? 'R$ 10.000,00' : 'R$ 2.500,00'}).
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedAccForReset(null)}
+                className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isResettingAccount}
+                onClick={handleConfirmResetAccount}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{isResettingAccount ? 'Limpando...' : 'Confirmar e Zerar'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exclusão de Conta Sandbox */}
+      {selectedAccForDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Excluir Conta Sandbox
+                </h3>
+                <p className="text-[10px] text-slate-400">Remoção definitiva desta conta de teste</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/30 rounded-2xl border border-rose-200 dark:border-rose-800 text-xs text-rose-900 dark:text-rose-200 space-y-1">
+              <p className="font-bold flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Ação irreversível de limpeza:</span>
+              </p>
+              <p>
+                A conta <strong>"{selectedAccForDelete.name}"</strong> (Ag: {selectedAccForDelete.agency} CC: {selectedAccForDelete.account_number}) e todos os seus registros de extrato, cartões e webhooks serão permanentemente removidos.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedAccForDelete(null)}
+                className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={handleConfirmDeleteAccount}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingAccount ? 'Excluindo...' : 'Sim, Excluir Conta'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

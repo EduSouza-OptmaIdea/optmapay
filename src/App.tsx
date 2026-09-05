@@ -32,7 +32,7 @@ import { SuperAdminConsole } from './pages/SuperAdminConsole';
 import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, isSuperAdmin } = useAuth();
   const { mode } = useAppMode();
 
   if (loading) {
@@ -70,8 +70,8 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/settlement" element={<SettlementSimulator />} />
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
-            <Route path="/config-banco" element={<BankParametersArea />} />
-            <Route path="/master-admin" element={<SuperAdminConsole />} />
+            <Route path="/config-banco" element={isSuperAdmin ? <BankParametersArea /> : <Navigate to="/dashboard" replace />} />
+            <Route path="/master-admin" element={isSuperAdmin ? <SuperAdminConsole /> : <Navigate to="/dashboard" replace />} />
             <Route path="/settings" element={<SettingsReset />} />
             <Route path="*" element={<Navigate to={mode === 'edu' ? '/edu-dashboard' : '/dashboard'} replace />} />
           </Routes>

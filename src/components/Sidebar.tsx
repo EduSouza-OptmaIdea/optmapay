@@ -19,8 +19,11 @@ import {
   Crown,
 } from 'lucide-react';
 
+import { useAuth } from '../context/AuthContext';
+
 export const Sidebar: React.FC = () => {
   const { mode, score, isNegativado } = useAppMode();
+  const { isSuperAdmin } = useAuth();
 
   const devNavItems = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,8 +33,12 @@ export const Sidebar: React.FC = () => {
     { to: '/settlement', label: 'Simulador Vendas', icon: ArrowLeftRight },
     { to: '/dev', label: 'Painel Dev & Webhooks', icon: Code2 },
     { to: '/meus-dados', label: 'Meus Dados', icon: User },
-    { to: '/master-admin', label: 'Console Super Admin', icon: Crown },
-    { to: '/config-banco', label: 'Parâmetros do Banco', icon: Landmark },
+    ...(isSuperAdmin
+      ? [
+          { to: '/master-admin', label: 'Console Super Admin', icon: Crown },
+          { to: '/config-banco', label: 'Parâmetros do Banco', icon: Landmark },
+        ]
+      : []),
     { to: '/settings', label: 'Config & Exclusão', icon: Settings },
   ];
 
