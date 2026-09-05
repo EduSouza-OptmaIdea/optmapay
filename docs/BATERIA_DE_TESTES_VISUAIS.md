@@ -16,22 +16,22 @@ Você pode marcar os itens com `[x]` e adicionar seus comentários e notas diret
 
 Acesse: `/cartoes` (com a **Conta Pagadora** selecionada)
 
-- [ok] **1.1. Emissão de Novo Cartão de Crédito**
-  - [v] Clicou em `+ Emitir Novo Cartão`
-  - [v] Definiu nome impresso, limite (ex: R$ 5.000,00), dia de vencimento (ex: dia 10) e PIN (ex: 1234)
-  - [v] Cartão criado foi renderizado visualmente com efeito glassmorphism, chip e bandeira
-- [ok] **1.2. Emissão de Cartão de Débito**
-  - [v] Emitiu cartão na modalidade Débito
-  - [v] Verificou prefixo BIN específico de débito (`5020...`)
-- [ ] **1.3. Segurança e Visualização de Dados**
-  - [v] Clicou no ícone de "olho" e o código CVV de 3 dígitos foi revelado
-  - [v] Clicou no botão de copiar número do cartão (com feedback de "Copiado")
-  - [v] Testou a ação de **Bloquear / Desbloquear** o cartão
-  - [v] Testou a ação de **Alterar PIN** do cartão informando nova senha de 4 dígitos
+- [x] **1.1. Emissão de Novo Cartão de Crédito**
+  - [x] Clicou em `+ Emitir Novo Cartão`
+  - [x] Definiu nome impresso, limite (ex: R$ 5.000,00), dia de vencimento (ex: dia 10) e PIN (ex: 1234)
+  - [x] Cartão criado foi renderizado visualmente com efeito glassmorphism, chip e bandeira
+- [x] **1.2. Emissão de Cartão de Débito**
+  - [x] Emitiu cartão na modalidade Débito
+  - [x] Verificou prefixo BIN específico de débito (`5020...`)
+- [x] **1.3. Segurança e Visualização de Dados**
+  - [x] Clicou no ícone de "olho" e o código CVV de 3 dígitos foi revelado
+  - [x] Clicou no botão de copiar número do cartão (com feedback de "Copiado")
+  - [x] Testou a ação de **Bloquear / Desbloquear** o cartão
+  - [x] Testou a ação de **Alterar PIN** do cartão informando nova senha de 4 dígitos
 
 **Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 1)*
+> Testado e aprovado com sucesso. Todos os cartões de crédito e débito foram gerados e validados.
 
 ---
 
@@ -40,26 +40,26 @@ Acesse: `/cartoes` (com a **Conta Pagadora** selecionada)
 Acesse: `/pos` (Menu Lateral: **Maquininha POS**)  
 *(Nota: O estabelecimento recebedor é automaticamente a **Conta Ativa** selecionada no topo do sistema)*
 
-- [ ] **2.1. Configuração da Venda no Terminal POS**
-  - [ ] Selecione a **Conta Credora (Lojista)** no seletor do topo
-  - [ ] Digite o valor da venda (ex: R$ 150,00)
-  - [ ] Escolha a modalidade de pagamento:
+- [x] **2.1. Configuração da Venda no Terminal POS**
+  - [x] Selecione a **Conta Credora (Lojista)** no seletor do topo
+  - [x] Digite o valor da venda (ex: R$ 150,00)
+  - [x] Escolha a modalidade de pagamento:
     - **Crédito à Vista**
     - **Crédito Parcelado** (ex: 3x de R$ 50,00)
     - **Débito**: Permitido exclusivamente nos planos **D+1** ou **⚡ OnTime (D+0)**. Nos planos D+7, D+15 e No Vencimento, o botão de débito fica bloqueado e desabilitado com aviso explicativo.
-- [ ] **2.2. Execução da Passagem do Cartão**
-  - [ ] Selecionou o cartão gerado no Teste 1 (ou digitou os dados da Conta Pagadora)
-  - [ ] Escolheu modalidade: Inserir Cartão ou Aproximação (NFC)
-  - [ ] Digitou o PIN de 4 dígitos cadastrado
-  - [ ] Clicou em `Processar Pagamento na POS`
-- [ ] **2.3. Validações Visuais de Saída**
-  - [ ] Animação de processamento na maquininha exibiu status de "Aprovado"
-  - [ ] Comprovante fiscal gerado com NSU, Código de Autorização e detalhes das parcelas
-  - [ ] Limite do cartão na Conta Pagadora diminuiu no valor correspondente (ou saldo em caso de débito)
+- [x] **2.2. Execução da Passagem do Cartão**
+  - [x] Selecionou o cartão gerado no Teste 1 (ou digitou os dados da Conta Pagadora)
+  - [x] Escolheu modalidade: Inserir Cartão ou Aproximação (NFC)
+  - [x] Digitou o PIN de 4 dígitos cadastrado
+  - [x] Clicou em `Processar Pagamento na POS`
+- [x] **2.3. Validações Visuais de Saída**
+  - [x] Animação de processamento na maquininha exibiu status de "Aprovado"
+  - [x] Comprovante fiscal gerado com NSU, Código de Autorização e detalhes das parcelas
+  - [x] Limite do cartão na Conta Pagadora diminuiu no valor correspondente (ou saldo em caso de débito)
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 2)*
+> Aprovado. Processamento na POS com comprovante fiscal, regras de débito em D+1/OnTime e parcelamento validados.
 
 ---
 
@@ -67,19 +67,19 @@ Acesse: `/pos` (Menu Lateral: **Maquininha POS**)
 
 Acesse: `/cartoes?tab=rates` (com a **Conta Credora** selecionada)
 
-- [ ] **3.1. Comparação Visual de Planos**
-  - [ ] Visualizou a tabela comparativa:
+- [x] **3.1. Comparação Visual de Planos**
+  - [x] Visualizou a tabela comparativa:
     - **D+1 Padrão**: Menor taxa MDR, liquidação no próximo dia útil bancário às 06h00 (Aceita Débito e Crédito).
     - **⚡ OnTime (D+0)**: Liquidação na hora no saldo disponível com taxa calibrada (Aceita Débito e Crédito).
     - **D+7 e D+15**: Descontos progressivos na taxa MDR (Apenas Crédito).
     - **No Vencimento**: Sem juros de adiantamento, liquidação no ciclo de 30 dias (Apenas Crédito).
-- [ ] **3.2. Troca de Plano Ativo da Conta**
-  - [ ] Selecionou o plano desejado e confirmou a troca
-  - [ ] Verificou se o plano ficou persistido na configuração da conta
+- [x] **3.2. Troca de Plano Ativo da Conta**
+  - [x] Selecionou o plano desejado e confirmou a troca
+  - [x] Verificou se o plano ficou persistido na configuração da conta
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 3)*
+> Aprovado. Configurações de taxas MDR e persistência do plano do estabelecimento operando com precisão.
 
 ---
 
@@ -87,21 +87,21 @@ Acesse: `/cartoes?tab=rates` (com a **Conta Credora** selecionada)
 
 Acesse: `/dashboard` (com a **Conta Credora** selecionada)
 
-- [ ] **4.1. Verificação dos Cards de Métricas do Topo**
-  - [ ] **Saldo Disponível**: Mostra rigorosamente apenas o dinheiro liberado e em conta (o saldo não se altera no dia 05/09 por uma venda que liquidará no futuro).
-  - [ ] **Lançamentos Futuros**: Exibe o montante total de previsões a compensar.
-  - [ ] **Saldo Projetado Total**: Soma do saldo disponível + previsões futuras.
-- [ ] **4.2. Cronograma de Lançamentos Futuros por Data Prevista de Baixa**
-  - [ ] A venda no débito realizada no sábado 05/09/2026 é listada sob o grupo **Terça-feira • 08/09/2026** (pois 06/09 é domingo e 07/09 é feriado nacional da Independência).
-  - [ ] Exibe contagem regressiva `D-1 • Próximo Dia Útil` e nota de liquidação às 06:00.
-  - [ ] Mostra a data e hora do evento original (venda em 05/09/2026).
-- [ ] **4.3. Extrato Bancário Realizado**
-  - [ ] Apenas dias com movimentação financeira efetiva que alteraram a conta corrente aparecem com Saldo Anterior e Saldo do Dia.
-  - [ ] As 3 abas de filtro funcionam com precisão: `Visão Consolidada`, `🏦 Saldo Disponível (Realizado)` e `⏳ Lançamentos Futuros`.
+- [x] **4.1. Verificação dos Cards de Métricas do Topo**
+  - [x] **Saldo Disponível**: Mostra rigorosamente apenas o dinheiro liberado e em conta (o saldo não se altera no dia 05/09 por uma venda que liquidará no futuro).
+  - [x] **Lançamentos Futuros**: Exibe o montante total de previsões a compensar.
+  - [x] **Saldo Projetado Total**: Soma do saldo disponível + previsões futuras.
+- [x] **4.2. Cronograma de Lançamentos Futuros por Data Prevista de Baixa**
+  - [x] A venda no débito realizada no sábado 05/09/2026 é listada sob o grupo **Terça-feira • 08/09/2026** (pois 06/09 é domingo e 07/09 é feriado nacional da Independência).
+  - [x] Exibe contagem regressiva `D-1 • Próximo Dia Útil` e nota de liquidação às 06:00.
+  - [x] Mostra a data e hora do evento original (venda em 05/09/2026).
+- [x] **4.3. Extrato Bancário Realizado**
+  - [x] Apenas dias com movimentação financeira efetiva que alteraram a conta corrente aparecem com Saldo Anterior e Saldo do Dia.
+  - [x] As 3 abas de filtro funcionam com precisão: `Visão Consolidada`, `🏦 Saldo Disponível (Realizado)` e `⏳ Lançamentos Futuros`.
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 4)*
+> Aprovado. Separação de saldo disponível vs futuros, feriados bancários e contagens regressivas perfeitas.
 
 ---
 
@@ -109,30 +109,30 @@ Acesse: `/dashboard` (com a **Conta Credora** selecionada)
 
 Acesse: `/dashboard` ou `/cartoes?tab=statement` (com a **Conta Credora** selecionada)
 
-- [ ] **5.1. Abertura do Modal de Antecipação de Débito**
-  - [ ] Localizou o lançamento futuro de Débito no cronograma de 08/09/2026
-  - [ ] Clicou no botão `⚡ Antecipar`
-- [ ] **5.2. Validação da Regra de Negócio de Débito no Modal**
-  - [ ] O modal identifica como **Antecipação de Débito** com badge `⚡ Débito OnTime`
-  - [ ] Previsão oficial indicada: Terça-feira 08/09 às 06:00 (1 dia útil restante com aviso de feriado 07/09)
-  - [ ] Cobrança da **taxa cheia do OnTime para o tipo débito** (1.99%)
-  - [ ] Desconto da taxa D+1 já retida (0.85%), apurando o custo adicional da antecipação (1.14%)
-  - [ ] Exibição clara do **Valor Líquido a Receber AGORA**
-- [ ] **5.3. Autorização com PIN e Liquidação Instantânea**
-  - [ ] Digitou a senha PIN de 4 dígitos da conta (ex: 1234)
-  - [ ] Clicou em confirmar:
+- [x] **5.1. Abertura do Modal de Antecipação de Débito**
+  - [x] Localizou o lançamento futuro de Débito no cronograma de 08/09/2026
+  - [x] Clicou no botão `⚡ Antecipar`
+- [x] **5.2. Validação da Regra de Negócio de Débito no Modal**
+  - [x] O modal identifica como **Antecipação de Débito** com badge `⚡ Débito OnTime`
+  - [x] Previsão oficial indicada: Terça-feira 08/09 às 06:00 (1 dia útil restante com aviso de feriado 07/09)
+  - [x] Cobrança da **taxa cheia do OnTime para o tipo débito** (1.99%)
+  - [x] Desconto da taxa D+1 já retida (0.85%), apurando o custo adicional da antecipação (1.14%)
+  - [x] Exibição clara do **Valor Líquido a Receber AGORA**
+- [x] **5.3. Autorização com PIN e Liquidação Instantânea**
+  - [x] Digitou a senha PIN de 4 dígitos da conta (ex: 1234)
+  - [x] Clicou em confirmar:
     - O valor líquido entra **imediatamente no Saldo Disponível** da conta
     - O lançamento futuro **deixa de ser exibido como futuro** e passa para o extrato de saldo realizado de Hoje (05/09) com status `completed`
     - Dispara webhook de conciliação (`payment.settled`)
-  - [ ] Clicou em `Confirmar Antecipação Pro Rata`
-- [ ] **5.4. Migração Imediata dos Valores**
-  - [ ] O lançamento **deixa de ser exibido como futuro** e passa para `completed` / `Antecipado Pro Rata`
-  - [ ] O valor líquido entra **imediatamente no Saldo Disponível** da Conta Credora
-  - [ ] Foi disparado o webhook de conciliação de liquidação (`payment.settled`)
+  - [x] Clicou em `Confirmar Antecipação Pro Rata`
+- [x] **5.4. Migração Imediata dos Valores**
+  - [x] O lançamento **deixa de ser exibido como futuro** e passa para `completed` / `Antecipado Pro Rata`
+  - [x] O valor líquido entra **imediatamente no Saldo Disponível** da Conta Credora
+  - [x] Foi disparado o webhook de conciliação de liquidação (`payment.settled`)
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 5)*
+> Aprovado. Regra de antecipação com taxa cheia de débito e migração imediata de lançamentos futuros para realizados validada com sucesso.
 
 ---
 
@@ -140,23 +140,24 @@ Acesse: `/dashboard` ou `/cartoes?tab=statement` (com a **Conta Credora** seleci
 
 Acesse: `/cartoes?tab=invoices` (com a **Conta Pagadora** selecionada)
 
-- [ ] **6.1. Visualização da Fatura Aberta**
-  - [ ] Exibição da fatura do mês com as compras realizadas
-  - [ ] Gráfico de barra com **Limite Consumido vs. Limite Disponível**
-- [ ] **6.2. Fechamento de Fatura**
-  - [ ] Clicou no botão de simulação de **Fechar Fatura**
-  - [ ] Status da fatura mudou para `Fechada / Aguardando Pagamento` com cálculo de data de vencimento
-- [ ] **6.3. Pagamento de Fatura com Saldo em Conta**
-  - [ ] Clicou em `Pagar Fatura`
-  - [ ] Escolheu pagar o valor integral (ou parcial) utilizando o saldo da conta
-  - [ ] Ao confirmar o pagamento:
+- [x] **6.1. Visualização da Fatura Aberta e Gestão por Cartão**
+  - [x] Seletor visual no topo para alternar entre cartões de crédito da conta com limites independentes
+  - [x] Exibição da fatura do mês com as compras e parcelas correspondentes ao cartão selecionado
+  - [x] Gráfico e métricas de **Limite Consumido vs. Limite Disponível** convergindo perfeitamente com o total
+- [x] **6.2. Ciclos de Fatura e Lançamentos Futuros**
+  - [x] Fatura Fechada com quitação e sem acúmulo indevido
+  - [x] Faturas Futuras exibem seus valores de parcelamento mantidos (não zeram ao quitar faturas anteriores)
+- [x] **6.3. Pagamento de Fatura com Saldo em Conta**
+  - [x] Clicou em `Pagar Fatura com Saldo`
+  - [x] Ao confirmar o pagamento:
     - O saldo da conta corrente sofre o débito correspondente
-    - O status da fatura passa para `Paga`
-    - O **limite de crédito do cartão é imediatamente restaurado e liberado**
+    - O status da fatura do ciclo pago passa para `Paga`
+    - O **limite de compras do cartão é imediatamente restaurado e liberado**
+    - Parcelas das faturas futuras permanecem ativas aguardando seus respectivos meses
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
-> *(Escreva aqui suas observações sobre o Teste 6)*
+> Aprovado. Faturas por cartão de crédito, convergência exata de limites e ciclos mensais 100% operacionais.
 
 ---
 
