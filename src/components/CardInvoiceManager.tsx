@@ -29,6 +29,7 @@ interface CardInvoiceManagerProps {
   activeAccount: SandboxAccount;
   cards: SandboxCard[];
   transactions?: SandboxTransaction[];
+  initialSelectedCardId?: string;
   onInvoicePaid?: () => void;
   onCardUpdated?: () => void;
 }
@@ -37,12 +38,36 @@ export const CardInvoiceManager: React.FC<CardInvoiceManagerProps> = ({
   activeAccount,
   cards,
   transactions: initialTransactions = [],
+  initialSelectedCardId,
   onInvoicePaid,
   onCardUpdated,
 }) => {
   const creditCards = cards.filter((c) => c.tipo === 'credito');
-  const [selectedCardId, setSelectedCardId] = useState<string>(creditCards[0]?.id || '');
+  const [selectedCardId, setSelectedCardId] = useState<string>(() => {
+    if (initialSelectedCardId && creditCards.some((c) => c.id === initialSelectedCardId)) {
+      return initialSelectedCardId;
+    }
+    return creditCards[0]?.id || '';
+  });
   const [fetchedTransactions, setFetchedTransactions] = useState<SandboxTransaction[]>([]);
+
+  // Sincronizar caso a prop initialSelectedCardId mude externamente (ex: clique na Carteira)
+  useEffect(() => {
+    if (initialSelectedCardId && creditCards.some((c) => c.id === initialSelectedCardId)) {
+      setSelectedCardId(initialSelectedCardId);
+      setSelectedCycleId('');
+      setSimulatedDaysOverdue(0);
+    }
+  }, [initialSelectedCardId]);
+
+  // Se o cartão selecionado foi excluído ou não existe mais na lista, selecionar o primeiro disponível
+  useEffect(() => {
+    if (creditCards.length > 0 && !creditCards.some((c) => c.id === selectedCardId)) {
+      setSelectedCardId(creditCards[0].id);
+      setSelectedCycleId('');
+      setSimulatedDaysOverdue(0);
+    }
+  }, [creditCards, selectedCardId]);
 
   const [paying, setPaying] = useState(false);
   const [paySuccessMsg, setPaySuccessMsg] = useState<string | null>(null);
@@ -209,29 +234,106 @@ export const CardInvoiceManager: React.FC<CardInvoiceManagerProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Card Selector (if multiple credit cards) */}
-      {creditCards.length > 1 && (
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-3xl border border-slate-200 dark:border-slate-700">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Selecione o Cartão de Crédito:
-          </label>
-          <select
-            value={currentCard.id}
-            onChange={(e) => {
-              setSelectedCardId(e.target.value);
-              setSelectedCycleId('');
-              setSimulatedDaysOverdue(0);
-            }}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-slate-200"
-          >
-            {creditCards.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.masked_number} - {c.cardholder_name} (Limite: R$ {c.credit_limit.toFixed(0)})
-              </option>
-            ))}
-          </select>
+      {/* SELETOR VISUAL DE FATURAS POR CARTÃO DE CRÉDITO */}
+      <div className="space-y-3 bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1367A2] to-[#A63987] flex items-center justify-center text-white shadow-md">
+              <CreditCard className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                Faturas por Cartão de Crédito
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                {creditCards.length} {creditCards.length === 1 ? 'cartão de crédito disponível' : 'cartões de crédito disponíveis nesta conta'}
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            Selecione o cartão para visualizar suas faturas e limites exclusivos
+          </span>
         </div>
-      )}
+
+        {/* Grid de Cartões de Crédito Selecionáveis */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+          {creditCards.map((c) => {
+            const isSelected = c.id === currentCard.id;
+            const cLimit = Number(c.credit_limit) || 5000;
+            const cUsed = Number(c.current_balance) || 0;
+            const last4 = (c.card_number || c.masked_number || '').slice(-4);
+
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCardId(c.id);
+                  setSelectedCycleId('');
+                  setSimulatedDaysOverdue(0);
+                }}
+                className={`text-left p-4 rounded-2xl transition-all relative overflow-hidden border flex flex-col justify-between gap-3 ${
+                  isSelected
+                    ? 'bg-gradient-to-br from-[#0B2545] via-[#134074] to-[#A63987] border-[#A63987] text-white shadow-xl shadow-[#A63987]/25 ring-2 ring-[#A63987]/70 scale-[1.01]'
+                    : 'bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-200 opacity-80 hover:opacity-100 hover:scale-[1.005]'
+                }`}
+              >
+                {/* Efeito sutil de brilho no fundo */}
+                {isSelected && (
+                  <div className="absolute -right-8 -bottom-8 w-28 h-28 bg-[#A63987]/30 rounded-full blur-xl pointer-events-none" />
+                )}
+
+                {/* Topo do Mini-Card */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-4 rounded-sm bg-gradient-to-tr from-amber-300 via-amber-200 to-amber-100 border border-amber-400/60 flex items-center justify-center shadow-sm">
+                      <div className="w-3.5 h-1.5 border-y border-slate-800/40" />
+                    </div>
+                    <span className="font-mono font-extrabold text-xs tracking-wider">
+                      •••• {last4}
+                    </span>
+                  </div>
+
+                  {isSelected ? (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 flex items-center gap-1 shadow-sm">
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      Visualizando
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      Venc. Dia {c.due_day || 10}
+                    </span>
+                  )}
+                </div>
+
+                {/* Nome do Titular */}
+                <div>
+                  <p className={`text-[11px] font-semibold truncate ${isSelected ? 'text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>
+                    {c.cardholder_name}
+                  </p>
+                  <p className={`text-[10px] font-mono ${isSelected ? 'text-sky-200' : 'text-slate-400'}`}>
+                    Vencimento todo dia {c.due_day || 10}
+                  </p>
+                </div>
+
+                {/* Barra e Valores de Limite */}
+                <div className="pt-2 border-t border-white/10 dark:border-slate-700/60 space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className={isSelected ? 'text-slate-300' : 'text-slate-400'}>Limite Total</span>
+                    <span className="font-bold">R$ {cLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className={isSelected ? 'text-slate-300' : 'text-slate-400'}>Faturas a Vencer</span>
+                    <span className={`font-bold ${cUsed > 0 ? (isSelected ? 'text-pink-300' : 'text-pink-600 dark:text-pink-400') : (isSelected ? 'text-emerald-300' : 'text-emerald-600 dark:text-emerald-400')}`}>
+                      R$ {cUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Alerta de Cartão Bloqueado por Atraso */}
       {overdueInfo.isBlockedByOverdue && (

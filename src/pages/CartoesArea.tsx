@@ -55,6 +55,7 @@ export const CartoesArea: React.FC = () => {
   };
   const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'rates' | 'ecommerce' | 'statement'>(getInitialTab);
   const [cards, setCards] = useState<SandboxCard[]>([]);
+  const [selectedInvoiceCardId, setSelectedInvoiceCardId] = useState<string | null>(null);
   const [selectedTxForAnticipation, setSelectedTxForAnticipation] = useState<SandboxTransaction | null>(null);
   const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
   const [cardTransactions, setCardTransactions] = useState<SandboxTransaction[]>([]);
@@ -463,7 +464,7 @@ export const CartoesArea: React.FC = () => {
                 return (
                   <div
                     key={card.id}
-                    className={`rounded-3xl p-6 shadow-xl text-white relative overflow-hidden flex flex-col justify-between h-60 border transition-all ${
+                    className={`rounded-3xl p-5 shadow-xl text-white relative overflow-hidden flex flex-col justify-between min-h-[255px] h-auto border transition-all ${
                       isBlocked
                         ? 'bg-slate-800 border-slate-700 opacity-60 grayscale'
                         : isCredit
@@ -572,6 +573,22 @@ export const CartoesArea: React.FC = () => {
                           <span>Venc: Dia {card.due_day || 10} • Lim: R$ {card.credit_limit.toFixed(0)}</span>
                         )}
                       </div>
+
+                      {/* Ação Rápida: Ver Faturas & Limites deste Cartão de Crédito */}
+                      {isCredit && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedInvoiceCardId(card.id);
+                            setActiveTab('invoices');
+                          }}
+                          className="mt-1.5 w-full py-1.5 px-3 bg-white/15 hover:bg-white/25 active:scale-98 rounded-xl text-[10px] font-bold text-white flex items-center justify-center gap-1.5 transition border border-white/20 backdrop-blur-sm shadow-sm"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-pink-300" />
+                          <span>Ver Faturas & Limites deste Cartão</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -589,6 +606,7 @@ export const CartoesArea: React.FC = () => {
           activeAccount={activeAccount}
           cards={cards}
           transactions={cardTransactions}
+          initialSelectedCardId={selectedInvoiceCardId || undefined}
           onInvoicePaid={() => {
             fetchCards();
             fetchCardTransactions();

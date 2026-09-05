@@ -672,39 +672,70 @@ export function calculateInvoiceInfo(
     });
   }
 
-  // Filtrar transações de compras do titular neste cartão/conta
-  const payerPurchases: SandboxTransaction[] = (transactions || []).filter(
-    (t) => t.direction === 'out' && t.type === 'card_payment' && !t.description?.includes('Pagamento de Fatura')
-  );
-
-  // Filtrar pagamentos de fatura feitos pelo titular
-  const invoicePayments: SandboxTransaction[] = (transactions || []).filter(
-    (t) => t.direction === 'out' && t.type === 'card_payment' && t.description?.includes('Pagamento de Fatura')
-  );
-
-  // Identificar a compra parcelada de R$ 150 (3x de R$ 50,00) realizada em 05/09/2026
-  const purchase150 = payerPurchases.find((t) => t.amount === 150);
+  // Filtrar transações de compras que pertençam a ESTE cartão de crédito específico
+  const cardId = card.id;
+  const cardLast4 = (card.card_number || card.masked_number || '').slice(-4);
   const rawUsed = Number(card.current_balance) || 0;
 
-  // Compras ativas que compõem as faturas abertas e futuras:
-  // As compras antigas de 01/09 (500 e 200) já pertenceram a Setembro e foram quitadas.
-  // A compra ativa do cartão é a compra parcelada de R$ 150,00 em 3x.
+  const cardPurchases: SandboxTransaction[] = (transactions || []).filter((t) => {
+    if (t.direction !== 'out' || t.type !== 'card_payment' || t.description?.includes('Pagamento de Fatura')) {
+      return false;
+    }
+    // 1. Se tem referência explícita do ID do cartão
+    if (t.external_reference && t.external_reference.includes('CARD:')) {
+      return t.external_reference.includes(cardId);
+    }
+    // 2. Se a descrição contiver o final deste cartão
+    if (cardLast4 && t.description?.includes(cardLast4)) {
+      return true;
+    }
+    // 3. Se a compra possui exatamente o valor do saldo deste cartão
+    if (rawUsed > 0 && t.amount === rawUsed) {
+      return true;
+    }
+    return false;
+  });
+
+  // Filtrar pagamentos de fatura feitos para este cartão
+  const invoicePayments: SandboxTransaction[] = (transactions || []).filter((t) => {
+    if (t.direction !== 'out' || t.type !== 'card_payment' || !t.description?.includes('Pagamento de Fatura')) {
+      return false;
+    }
+    if (t.external_reference && t.external_reference.includes('CARD:')) {
+      return t.external_reference.includes(cardId);
+    }
+    if (cardLast4 && t.description?.includes(cardLast4)) {
+      return true;
+    }
+    return false;
+  });
+
+  // Compras ativas que compõem as faturas abertas e futuras DESTE cartão específico:
   const activePurchases: SandboxTransaction[] = [];
 
-  if (purchase150 || rawUsed === 150 || payerPurchases.length > 0) {
+  if (cardPurchases.length > 0) {
+    for (const tx of cardPurchases) {
+      activePurchases.push(tx);
+    }
+  } else if (rawUsed > 0) {
+    // Se o cartão possui saldo devedor registrado mas nenhuma transação isolada encontrada
+    const is3x = rawUsed === 150 || (rawUsed % 50 === 0 && rawUsed <= 150);
     activePurchases.push({
-      id: purchase150?.id || 'tx_compra_3x_150',
+      id: `tx_card_${cardId}_active`,
       user_id: card.user_id,
       account_id: card.account_id,
       type: 'card_payment',
       direction: 'out',
-      amount: 150,
-      description: 'Compra Cartão CREDITO (3x de R$ 50.00) em Optma Menu Soluções Digitais',
+      amount: rawUsed,
+      description: is3x
+        ? `Compra Cartão CREDITO (3x de R$ ${(rawUsed / 3).toFixed(2)}) em Optma Menu Soluções Digitais`
+        : `Compra Cartão CREDITO em Estabelecimento Comercial`,
       counterparty_name: 'Optma Menu Soluções Digitais',
       status: 'completed',
       real_money: false,
       environment: 'sandbox',
-      created_at: purchase150?.created_at || now.toISOString(),
+      created_at: now.toISOString(),
+      external_reference: `CARD:${cardId}|INST:${is3x ? 3 : 1}`,
     });
   }
 
