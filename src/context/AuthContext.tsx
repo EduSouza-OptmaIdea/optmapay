@@ -1,14 +1,16 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
-import { fetchUserAccounts, createBankAccount } from '../lib/supabase/accountService';
+import { fetchUserAccounts, createBankAccount, fetchAllAccountsAsSuperAdmin } from '../lib/supabase/accountService';
 import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   isUnauthorized: boolean;
+  isSuperAdmin: boolean;
   accounts: SandboxAccount[];
+  allAccounts: SandboxAccount[];
   activeAccount: SandboxAccount | null;
   setActiveAccountId: (id: string) => void;
   refreshAccounts: () => Promise<void>;
@@ -22,7 +24,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [accounts, setAccounts] = useState<SandboxAccount[]>([]);
+  const [allAccounts, setAllAccounts] = useState<SandboxAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(true); // Super Admin Master do OptmaPay
   const userRef = useRef<User | null>(null);
   userRef.current = user;
 
@@ -37,16 +41,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
+    // Como Super Admin, busca também todas as contas gerais da plataforma
+    const allFetched = await fetchAllAccountsAsSuperAdmin();
+    setAllAccounts(allFetched.length > 0 ? allFetched : fetched);
+
     if (fetched && fetched.length > 0) {
       setAccounts(fetched);
 
       const savedActiveId = localStorage.getItem('optmapay_active_account_id');
-      const matched = fetched.find((a) => a.id === savedActiveId);
+      const pool = allFetched.length > 0 ? allFetched : fetched;
+      const matched = pool.find((a) => a.id === savedActiveId);
 
       setActiveAccount((prev) => {
         if (savedActiveId && matched) return { ...matched };
         if (prev) {
-          const stillExists = fetched.find((a) => a.id === prev.id);
+          const stillExists = pool.find((a) => a.id === prev.id);
           if (stillExists) return { ...stillExists };
         }
         return matched ? { ...matched } : { ...fetched[0] };
@@ -193,7 +202,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const setActiveAccountId = (id: string) => {
-    const matched = accounts.find((a) => a.id === id);
+    const pool = allAccounts.length > 0 ? allAccounts : accounts;
+    const matched = pool.find((a) => a.id === id) || accounts.find((a) => a.id === id);
     if (matched) {
       setActiveAccount({ ...matched });
       localStorage.setItem('optmapay_active_account_id', id);
@@ -210,6 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setUser(null);
     setAccounts([]);
+    setAllAccounts([]);
     setActiveAccount(null);
     localStorage.removeItem('optmapay_active_account_id');
   };
@@ -220,7 +231,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         loading,
         isUnauthorized,
+        isSuperAdmin,
         accounts,
+        allAccounts,
         activeAccount,
         setActiveAccountId,
         refreshAccounts,

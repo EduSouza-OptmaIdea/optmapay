@@ -170,3 +170,104 @@ export async function depositFundsRPC(accountId: string, amount: number, descrip
 
   return data;
 }
+
+export interface SuperAdminGlobalMetrics {
+  totalAccounts: number;
+  totalBalanceCustodied: number;
+  totalTransactionsCount: number;
+  totalVolumeTPV: number;
+  totalMdrRevenueCollected: number;
+  totalPendingSettlements: number;
+  pendingTransactionsCount: number;
+}
+
+/**
+ * Busca todas as contas do sistema registradas no banco (Visão Super Admin)
+ */
+export async function fetchAllAccountsAsSuperAdmin(): Promise<SandboxAccount[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('accounts')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error || !data) {
+    console.warn('[fetchAllAccountsAsSuperAdmin] Falha ao listar contas gerais:', error?.message);
+    return [];
+  }
+  return data as SandboxAccount[];
+}
+
+/**
+ * Ajusta o saldo de qualquer conta no sistema como Super Admin
+ */
+export async function superAdminAdjustAccountBalance(
+  accountId: string,
+  newBalance: number,
+  reason: string = 'Ajuste de Saldo Administrativo (Super Admin)'
+): Promise<{ success: boolean; newBalance: number }> {
+  const client = getSupabaseClient();
+  const { data: acc } = await client.from('accounts').select('balance, user_id').eq('id', accountId).single();
+  const oldBal = Number(acc?.balance || 0);
+  const diff = Math.round((newBalance - oldBal) * 100) / 100;
+
+  await client.from('accounts').update({ balance: newBalance, updated_at: new Date().toISOString() }).eq('id', accountId);
+
+  if (diff !== 0) {
+    await client.from('transactions').insert({
+      account_id: accountId,
+      user_id: acc?.user_id,
+      type: 'adjustment',
+      direction: diff > 0 ? 'in' : 'out',
+      amount: Math.abs(diff),
+      description: `[SUPER ADMIN] ${reason} (De R$ ${oldBal.toFixed(2)} para R$ ${newBalance.toFixed(2)})`,
+      status: 'completed',
+      real_money: false,
+      environment: 'sandbox',
+    });
+  }
+
+  return { success: true, newBalance };
+}
+
+/**
+ * Calcula as métricas consolidadas do banco (Visão Master Super Admin)
+ */
+export async function superAdminFetchGlobalMetrics(): Promise<SuperAdminGlobalMetrics> {
+  const client = getSupabaseClient();
+  const { data: accounts } = await client.from('accounts').select('id, balance');
+  const { data: transactions } = await client.from('transactions').select('amount, status, type, direction, description');
+
+  const accs = accounts || [];
+  const txs = transactions || [];
+
+  const totalBalanceCustodied = accs.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+  const totalVolumeTPV = txs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+  let totalPendingSettlements = 0;
+  let pendingCount = 0;
+  let mdrRevenue = 0;
+
+  for (const t of txs) {
+    if (t.status === 'pending') {
+      totalPendingSettlements += Number(t.amount || 0);
+      pendingCount++;
+    }
+    if (t.description?.includes('Taxa') || t.type === 'card_fee') {
+      const match = t.description?.match(/Taxa[^:]*:\s*[-R$\s]*([\d,.]+)/i);
+      if (match) {
+        mdrRevenue += parseFloat(match[1].replace(',', '.')) || 0;
+      }
+    }
+  }
+
+  return {
+    totalAccounts: accs.length,
+    totalBalanceCustodied: Math.round(totalBalanceCustodied * 100) / 100,
+    totalTransactionsCount: txs.length,
+    totalVolumeTPV: Math.round(totalVolumeTPV * 100) / 100,
+    totalMdrRevenueCollected: Math.round(mdrRevenue * 100) / 100,
+    totalPendingSettlements: Math.round(totalPendingSettlements * 100) / 100,
+    pendingTransactionsCount: pendingCount,
+  };
+}

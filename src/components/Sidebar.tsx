@@ -16,6 +16,7 @@ import {
   Compass,
   CheckCircle2,
   Landmark,
+  Crown,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -29,6 +30,7 @@ export const Sidebar: React.FC = () => {
     { to: '/settlement', label: 'Simulador Vendas', icon: ArrowLeftRight },
     { to: '/dev', label: 'Painel Dev & Webhooks', icon: Code2 },
     { to: '/meus-dados', label: 'Meus Dados', icon: User },
+    { to: '/master-admin', label: 'Console Super Admin', icon: Crown },
     { to: '/config-banco', label: 'Parâmetros do Banco', icon: Landmark },
     { to: '/settings', label: 'Config & Exclusão', icon: Settings },
   ];
