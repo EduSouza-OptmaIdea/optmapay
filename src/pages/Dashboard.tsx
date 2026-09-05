@@ -70,11 +70,15 @@ export const Dashboard: React.FC = () => {
         sendWelcomeEmail({
           to: user.email,
           fullName: user.user_metadata?.account_name || user.email.split('@')[0],
-        }).then((res) => {
-          if (res.success) {
-            localStorage.setItem(welcomeKey, 'true');
-          }
-        });
+        })
+          .then((res) => {
+            if (res && res.success) {
+              localStorage.setItem(welcomeKey, 'true');
+            }
+          })
+          .catch((err) => {
+            console.debug('[Dashboard] Envio de e-mail de boas-vindas ignorado em sandbox:', err);
+          });
       }
     }
   }, [user?.id, user?.email]);

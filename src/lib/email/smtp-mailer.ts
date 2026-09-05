@@ -12,11 +12,10 @@ export interface SmtpEmailOptions {
 }
 
 export async function sendSmtpEmail(options: SmtpEmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const envProcess = typeof process !== 'undefined' ? process?.env : undefined;
-  const fromEmail = options.fromEmail || (envProcess && envProcess.SMTP_FROM_EMAIL) || 'optmapay.auth@optmaidea.com.br';
-  const fromName = options.fromName || (envProcess && envProcess.SMTP_FROM_NAME) || 'OptmaPay Sandbox | Dev Bank';
-
   try {
+    const fromEmail = options.fromEmail || (import.meta.env?.VITE_SMTP_FROM_EMAIL as string) || 'optmapay.auth@optmaidea.com.br';
+    const fromName = options.fromName || (import.meta.env?.VITE_SMTP_FROM_NAME as string) || 'OptmaPay Sandbox | Dev Bank';
+
     // Se estiver rodando via API endpoint backend
     const response = await fetch('/api/v1/email/send', {
       method: 'POST',
