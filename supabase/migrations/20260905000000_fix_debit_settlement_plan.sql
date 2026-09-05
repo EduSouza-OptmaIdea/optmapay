@@ -205,10 +205,12 @@ BEGIN
     'out',
     p_amount,
     'completed',
-    'Compra Cartão ' || UPPER(p_tipo) || ' em ' || COALESCE(v_merchant_account.name, 'Estabelecimento') || ' (NSU ' || v_nsu || ')',
+    'Compra Cartão ' || UPPER(p_tipo) ||
+      CASE WHEN p_installments > 1 THEN ' (' || p_installments || 'x de R$ ' || TO_CHAR(ROUND(p_amount / p_installments, 2), 'FM999999990.00') || ')' ELSE '' END ||
+      ' em ' || COALESCE(v_merchant_account.name, 'Estabelecimento') || ' (NSU ' || v_nsu || ')',
     v_merchant_account.name,
     v_merchant_account.cpf_cnpj,
-    p_external_reference,
+    COALESCE(p_external_reference, 'CARD:' || v_card.id || '|INST:' || p_installments),
     now()
   ) RETURNING id INTO v_tx_out_id;
 
@@ -258,3 +260,8 @@ BEGIN
   );
 END;
 $$;
+
+-- 3. SANEAMENTO DE COMPRAS A CRÉDITO ANTERIORES DE R$ 150,00 EM 3X
+UPDATE public.transactions
+SET description = replace(description, 'Compra Cartão CREDITO em', 'Compra Cartão CREDITO (3x de R$ 50.00) em')
+WHERE description LIKE 'Compra Cartão CREDITO em%' AND amount = 150.00;

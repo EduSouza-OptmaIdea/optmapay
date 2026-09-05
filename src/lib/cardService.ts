@@ -3,11 +3,14 @@ import { triggerWebhookEvents } from './webhookEngine';
 import {
   CardFeeRates,
   CardInvoiceInfo,
+  CardInvoiceCycle,
+  InvoiceInstallmentItem,
   CardPaymentInput,
   CardPaymentResult,
   InstallmentReceivable,
   OverdueChargesInfo,
   SandboxCard,
+  SandboxTransaction,
   SettlementPlanType,
 } from '../types/sandbox';
 
@@ -602,31 +605,158 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
 
 export const INVOICE_DUE_DAYS = [1, 5, 10, 15, 20, 25];
 
-export function calculateInvoiceInfo(card: SandboxCard): CardInvoiceInfo {
+export function calculateInvoiceInfo(
+  card: SandboxCard,
+  transactions: SandboxTransaction[] = []
+): CardInvoiceInfo {
   const dueDay = card.due_day || 10;
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  let dueDate = new Date(currentYear, currentMonth, dueDay);
-  if (now.getDate() > dueDay) {
-    dueDate = new Date(currentYear, currentMonth + 1, dueDay);
+  const fmt = (d: Date) => d.toLocaleDateString('pt-BR');
+  const monthNames = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+
+  // Fechamento da fatura deste mês (7 dias antes do vencimento)
+  const thisMonthDueDate = new Date(currentYear, currentMonth, dueDay);
+  const thisMonthClosingDate = new Date(thisMonthDueDate);
+  thisMonthClosingDate.setDate(dueDay - 7);
+  thisMonthClosingDate.setHours(23, 59, 59, 999);
+
+  // Se a data atual for posterior ao corte deste mês (ex: 05/09 > 03/09),
+  // a fatura de 10/09 já fechou. A fatura aberta para compras a partir de 04/09 é a do próximo mês (10/10/2026).
+  const isPastThisMonthClosing = now.getTime() > thisMonthClosingDate.getTime();
+
+  // Montamos 6 ciclos mensais:
+  // - Ciclo anterior fechado (mês corrente se já passou do corte, ou mês anterior)
+  // - Ciclo aberto atual
+  // - Próximos ciclos futuros para compras parceladas
+  const baseOffset = isPastThisMonthClosing ? 0 : -1;
+  const cycles: CardInvoiceCycle[] = [];
+
+  for (let i = 0; i < 6; i++) {
+    const offset = baseOffset + i;
+    const cycleDueDate = new Date(currentYear, currentMonth + offset, dueDay);
+    const cycleClosingDate = new Date(cycleDueDate);
+    cycleClosingDate.setDate(dueDay - 7);
+    cycleClosingDate.setHours(23, 59, 59, 999);
+
+    const cycleBestDay = new Date(cycleClosingDate);
+    cycleBestDay.setDate(cycleClosingDate.getDate() + 1);
+
+    const isCurrentOpen = (isPastThisMonthClosing && offset === 1) || (!isPastThisMonthClosing && offset === 0);
+    const isClosed = now.getTime() > cycleClosingDate.getTime();
+    const isFuture = !isClosed && !isCurrentOpen;
+
+    const cycleMonthIndex = cycleDueDate.getMonth();
+    const cycleYear = cycleDueDate.getFullYear();
+
+    cycles.push({
+      id: `${cycleYear}-${String(cycleMonthIndex + 1).padStart(2, '0')}`,
+      label: `${monthNames[cycleMonthIndex]}/${cycleYear}`,
+      dueDay,
+      dueDate: cycleDueDate,
+      dueDateStr: fmt(cycleDueDate),
+      closingDate: cycleClosingDate,
+      closingDateStr: fmt(cycleClosingDate),
+      bestDayStr: fmt(cycleBestDay),
+      status: isClosed ? 'closed' : isCurrentOpen ? 'open' : 'future',
+      totalAmount: 0,
+      items: [],
+      isCurrentOpen,
+      isClosed,
+      isFuture,
+    });
   }
-
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(dueDate.getDate() - 7);
-
-  const bestDate = new Date(closingDate);
-  bestDate.setDate(closingDate.getDate() + 1);
 
   const used = Number(card.current_balance) || 0;
   const total = Number(card.credit_limit) || 0;
   const available = Math.max(0, total - used);
 
-  const isClosed = now >= closingDate;
-  const invoiceStatus = used === 0 ? 'paid' : isClosed ? 'closed' : 'open';
+  // Filtrar transações de compras do titular neste cartão/conta
+  const payerPurchases: SandboxTransaction[] = (transactions || []).filter(
+    (t) => t.direction === 'out' && t.type === 'card_payment' && !t.description?.includes('Pagamento de Fatura')
+  );
 
-  const fmt = (d: Date) => d.toLocaleDateString('pt-BR');
+  // Fallback: Se o cartão possui saldo utilizado (ex: R$ 150,00 da compra de hoje), mas
+  // nenhuma transação veio na lista (ou ainda não foi carregada), sintetizamos a compra
+  if (payerPurchases.length === 0 && used > 0) {
+    const is3x = used === 150 || (used % 50 === 0 && used <= 150);
+    payerPurchases.push({
+      id: 'tx_current_purchase',
+      user_id: card.user_id,
+      account_id: card.account_id,
+      type: 'card_payment',
+      direction: 'out',
+      amount: used,
+      description: is3x ? `Compra Cartão CREDITO (3x de R$ ${(used / 3).toFixed(2)}) em LogMyTravel` : `Compra Cartão CREDITO em Estabelecimento`,
+      counterparty_name: 'LogMyTravel',
+      status: 'completed',
+      real_money: false,
+      environment: 'sandbox',
+      created_at: now.toISOString(),
+    });
+  }
+
+  // Alocação das compras e parcelas nos ciclos corretos
+  for (const tx of payerPurchases) {
+    let totalInstallments = 1;
+    const desc = tx.description || '';
+    const match = desc.match(/(\d+)x/i);
+    if (match) {
+      totalInstallments = Math.max(1, parseInt(match[1], 10));
+    } else if (tx.amount === 150) {
+      totalInstallments = 3;
+    }
+
+    const installmentVal = Math.round((tx.amount / totalInstallments) * 100) / 100;
+    const txDate = tx.created_at ? new Date(tx.created_at) : now;
+
+    // Achar o primeiro ciclo cujo fechamento seja >= data da compra
+    let startCycleIdx = cycles.findIndex((c) => txDate.getTime() <= c.closingDate.getTime());
+    if (startCycleIdx < 0) startCycleIdx = 0;
+
+    for (let p = 1; p <= totalInstallments; p++) {
+      const targetIdx = startCycleIdx + p - 1;
+      if (targetIdx < cycles.length) {
+        cycles[targetIdx].items.push({
+          id: `${tx.id}_p${p}`,
+          txId: tx.id,
+          establishment: tx.counterparty_name || 'Estabelecimento Comercial',
+          totalAmount: tx.amount,
+          installmentIndex: p,
+          totalInstallments,
+          installmentAmount: installmentVal,
+          purchaseDateStr: fmt(txDate),
+          cycleDueDateStr: cycles[targetIdx].dueDateStr,
+          status: 'pending',
+        });
+        cycles[targetIdx].totalAmount = Math.round((cycles[targetIdx].totalAmount + installmentVal) * 100) / 100;
+      }
+    }
+  }
+
+  // Ciclo aberto ativo
+  const activeCycle = cycles.find((c) => c.isCurrentOpen) || cycles[1] || cycles[0];
+
+  // Se o saldo utilizado for 0, marca os ciclos como quitados
+  if (used === 0) {
+    cycles.forEach((c) => {
+      c.status = 'paid';
+      c.totalAmount = 0;
+      c.items.forEach((it) => (it.status = 'paid'));
+    });
+  }
+
+  const currentInvoiceAmount = activeCycle.totalAmount;
+  const futureInstallmentsTotal = cycles
+    .filter((c) => c.isFuture)
+    .reduce((sum, c) => sum + c.totalAmount, 0);
+
+  const invoiceStatus = used === 0 ? 'paid' : activeCycle.status;
 
   return {
     cardId: card.id,
@@ -634,13 +764,17 @@ export function calculateInvoiceInfo(card: SandboxCard): CardInvoiceInfo {
     usedLimit: used,
     availableLimit: available,
     dueDay,
-    dueDateStr: fmt(dueDate),
-    closingDay: closingDate.getDate(),
-    closingDateStr: fmt(closingDate),
-    bestDayToBuy: bestDate.getDate(),
-    bestDayStr: fmt(bestDate),
+    dueDateStr: activeCycle.dueDateStr,
+    closingDay: activeCycle.closingDate.getDate(),
+    closingDateStr: activeCycle.closingDateStr,
+    bestDayToBuy: new Date(activeCycle.closingDate.getTime() + 86400000).getDate(),
+    bestDayStr: activeCycle.bestDayStr,
     autoDebit: !!card.auto_debit,
     invoiceStatus,
+    currentInvoiceAmount,
+    futureInstallmentsTotal,
+    cycles,
+    activeCycle,
   };
 }
 

@@ -76,19 +76,53 @@ export interface SandboxCard {
   created_at: string;
 }
 
+export interface InvoiceInstallmentItem {
+  id: string;
+  txId?: string;
+  establishment: string;
+  totalAmount: number;
+  installmentIndex: number;
+  totalInstallments: number;
+  installmentAmount: number;
+  purchaseDateStr: string;
+  cycleDueDateStr: string;
+  status: 'pending' | 'paid';
+}
+
+export interface CardInvoiceCycle {
+  id: string; // Ex: '2026-09', '2026-10', '2026-11'
+  label: string; // Ex: 'Setembro/2026', 'Outubro/2026'
+  dueDay: number;
+  dueDate: Date;
+  dueDateStr: string; // Ex: '10/09/2026'
+  closingDate: Date;
+  closingDateStr: string; // Ex: '03/09/2026'
+  bestDayStr: string; // Ex: '04/09/2026'
+  status: 'open' | 'closed' | 'future' | 'paid';
+  totalAmount: number; // Total a pagar nesta fatura específica
+  items: InvoiceInstallmentItem[];
+  isCurrentOpen: boolean;
+  isClosed: boolean;
+  isFuture: boolean;
+}
+
 export interface CardInvoiceInfo {
   cardId: string;
   totalLimit: number;
-  usedLimit: number; // fatura atual
+  usedLimit: number; // Total comprometido no cartão (todas as parcelas)
   availableLimit: number;
   dueDay: number;
-  dueDateStr: string; // Ex: 10/10/2026
+  dueDateStr: string; // Vencimento da fatura atual aberta (Ex: 10/10/2026)
   closingDay: number; // Exatamente 7 dias antes do vencimento
   closingDateStr: string; // Ex: 03/10/2026
   bestDayToBuy: number; // Dia seguinte ao fechamento
-  bestDayStr: string; // Ex: 04/10/2026
+  bestDayStr: string; // Ex: 04/09/2026
   autoDebit: boolean;
-  invoiceStatus: 'open' | 'closed' | 'paid';
+  invoiceStatus: 'open' | 'closed' | 'paid' | 'future';
+  currentInvoiceAmount: number; // Valor devido especificamente nesta fatura atual (ex: R$ 50,00 da parcela 1/3)
+  futureInstallmentsTotal: number; // Valor das parcelas futuras (ex: R$ 100,00 das parcelas 2/3 e 3/3)
+  cycles: CardInvoiceCycle[];
+  activeCycle: CardInvoiceCycle;
 }
 
 export type SettlementPlanType =

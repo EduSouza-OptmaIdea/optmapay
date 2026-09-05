@@ -43,7 +43,17 @@ import {
 
 export const CartoesArea: React.FC = () => {
   const { activeAccount, accounts, refreshAccounts } = useAuth();
-  const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'rates' | 'ecommerce' | 'statement'>('wallet');
+  const getInitialTab = (): 'wallet' | 'invoices' | 'rates' | 'ecommerce' | 'statement' => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'invoices' || tabParam === 'rates' || tabParam === 'ecommerce' || tabParam === 'statement' || tabParam === 'wallet') {
+        return tabParam;
+      }
+    }
+    return 'wallet';
+  };
+  const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'rates' | 'ecommerce' | 'statement'>(getInitialTab);
   const [cards, setCards] = useState<SandboxCard[]>([]);
   const [selectedTxForAnticipation, setSelectedTxForAnticipation] = useState<SandboxTransaction | null>(null);
   const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
@@ -578,6 +588,7 @@ export const CartoesArea: React.FC = () => {
         <CardInvoiceManager
           activeAccount={activeAccount}
           cards={cards}
+          transactions={cardTransactions}
           onInvoicePaid={() => {
             fetchCards();
             fetchCardTransactions();
