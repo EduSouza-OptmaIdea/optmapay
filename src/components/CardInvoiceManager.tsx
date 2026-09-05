@@ -81,6 +81,28 @@ export const CardInvoiceManager: React.FC<CardInvoiceManagerProps> = ({
 
   const effectiveTransactions = initialTransactions.length > 0 ? initialTransactions : fetchedTransactions;
 
+  // Cálculo Multi-Ciclos de Fatura
+  const invoice = calculateInvoiceInfo(currentCard, effectiveTransactions);
+  const currentCycle = invoice.cycles.find((c) => c.id === selectedCycleId) || invoice.activeCycle;
+
+  // Sincronizar saldo devedor do cartão no Supabase se houver discrepância com a soma rigorosa das faturas a vencer
+  useEffect(() => {
+    const syncCardDebt = async () => {
+      if (currentCard && invoice.usedLimit > 0 && currentCard.current_balance !== invoice.usedLimit) {
+        try {
+          await supabase
+            .from('cartoes')
+            .update({ current_balance: invoice.usedLimit })
+            .eq('id', currentCard.id);
+          if (onCardUpdated) onCardUpdated();
+        } catch (err) {
+          console.warn('[CardInvoiceManager] Erro ao sincronizar saldo devedor:', err);
+        }
+      }
+    };
+    syncCardDebt();
+  }, [currentCard?.id, invoice.usedLimit]);
+
   if (creditCards.length === 0) {
     return (
       <div className="p-8 text-center bg-white dark:bg-slate-800 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 space-y-3">
@@ -95,9 +117,6 @@ export const CardInvoiceManager: React.FC<CardInvoiceManagerProps> = ({
     );
   }
 
-  // Cálculo Multi-Ciclos de Fatura
-  const invoice = calculateInvoiceInfo(currentCard, effectiveTransactions);
-  const currentCycle = invoice.cycles.find((c) => c.id === selectedCycleId) || invoice.activeCycle;
 
   // Valor a pagar para simulação de atraso ou quitação
   const targetInvoiceAmount = currentCycle.totalAmount > 0 ? currentCycle.totalAmount : invoice.currentInvoiceAmount;
@@ -515,8 +534,8 @@ export const CardInvoiceManager: React.FC<CardInvoiceManagerProps> = ({
                   {paying
                     ? 'Processando Quitação...'
                     : currentCycle.totalAmount > 0
-                    ? `Pagar Fatura com Saldo (R$ ${(simulatedDaysOverdue > 0 ? overdueInfo.totalDueAmount : currentCycle.totalAmount).toFixed(2)})`
-                    : 'Fatura sem Débitos Pendentes'}
+                    ? `${currentCycle.isFuture ? `Antecipar Parcela de ${currentCycle.label}` : `Pagar Fatura de ${currentCycle.label}`} com Saldo (R$ ${(simulatedDaysOverdue > 0 ? overdueInfo.totalDueAmount : currentCycle.totalAmount).toFixed(2)})`
+                    : 'Fatura sem Débitos Pendentes (R$ 0,00)'}
                 </span>
               </button>
             </div>

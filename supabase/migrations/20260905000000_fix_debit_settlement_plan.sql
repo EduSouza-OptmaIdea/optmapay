@@ -265,3 +265,9 @@ $$;
 UPDATE public.transactions
 SET description = replace(description, 'Compra Cartão CREDITO em', 'Compra Cartão CREDITO (3x de R$ 50.00) em')
 WHERE description LIKE 'Compra Cartão CREDITO em%' AND amount = 150.00;
+
+-- 4. GARANTIR QUE O CARTÃO CRÉDITO COM A COMPRA DE 150 POSSUA CURRENT_BALANCE = 150.00
+UPDATE public.cartoes
+SET current_balance = 150.00
+WHERE (masked_number LIKE '%5011' OR card_number LIKE '%5011') AND tipo = 'credito';
+

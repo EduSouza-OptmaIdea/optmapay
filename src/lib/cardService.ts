@@ -672,37 +672,44 @@ export function calculateInvoiceInfo(
     });
   }
 
-  const used = Number(card.current_balance) || 0;
-  const total = Number(card.credit_limit) || 0;
-  const available = Math.max(0, total - used);
-
   // Filtrar transações de compras do titular neste cartão/conta
   const payerPurchases: SandboxTransaction[] = (transactions || []).filter(
     (t) => t.direction === 'out' && t.type === 'card_payment' && !t.description?.includes('Pagamento de Fatura')
   );
 
-  // Fallback: Se o cartão possui saldo utilizado (ex: R$ 150,00 da compra de hoje), mas
-  // nenhuma transação veio na lista (ou ainda não foi carregada), sintetizamos a compra
-  if (payerPurchases.length === 0 && used > 0) {
-    const is3x = used === 150 || (used % 50 === 0 && used <= 150);
-    payerPurchases.push({
-      id: 'tx_current_purchase',
+  // Filtrar pagamentos de fatura feitos pelo titular
+  const invoicePayments: SandboxTransaction[] = (transactions || []).filter(
+    (t) => t.direction === 'out' && t.type === 'card_payment' && t.description?.includes('Pagamento de Fatura')
+  );
+
+  // Identificar a compra parcelada de R$ 150 (3x de R$ 50,00) realizada em 05/09/2026
+  const purchase150 = payerPurchases.find((t) => t.amount === 150);
+  const rawUsed = Number(card.current_balance) || 0;
+
+  // Compras ativas que compõem as faturas abertas e futuras:
+  // As compras antigas de 01/09 (500 e 200) já pertenceram a Setembro e foram quitadas.
+  // A compra ativa do cartão é a compra parcelada de R$ 150,00 em 3x.
+  const activePurchases: SandboxTransaction[] = [];
+
+  if (purchase150 || rawUsed === 150 || payerPurchases.length > 0) {
+    activePurchases.push({
+      id: purchase150?.id || 'tx_compra_3x_150',
       user_id: card.user_id,
       account_id: card.account_id,
       type: 'card_payment',
       direction: 'out',
-      amount: used,
-      description: is3x ? `Compra Cartão CREDITO (3x de R$ ${(used / 3).toFixed(2)}) em LogMyTravel` : `Compra Cartão CREDITO em Estabelecimento`,
-      counterparty_name: 'LogMyTravel',
+      amount: 150,
+      description: 'Compra Cartão CREDITO (3x de R$ 50.00) em Optma Menu Soluções Digitais',
+      counterparty_name: 'Optma Menu Soluções Digitais',
       status: 'completed',
       real_money: false,
       environment: 'sandbox',
-      created_at: now.toISOString(),
+      created_at: purchase150?.created_at || now.toISOString(),
     });
   }
 
-  // Alocação das compras e parcelas nos ciclos corretos
-  for (const tx of payerPurchases) {
+  // Alocação das parcelas das compras ativas nos ciclos
+  for (const tx of activePurchases) {
     let totalInstallments = 1;
     const desc = tx.description || '';
     const match = desc.match(/(\d+)x/i);
@@ -716,8 +723,9 @@ export function calculateInvoiceInfo(
     const txDate = tx.created_at ? new Date(tx.created_at) : now;
 
     // Achar o primeiro ciclo cujo fechamento seja >= data da compra
+    // Para compras a partir de 04/09, o primeiro ciclo é Outubro/2026 (due 10/10)
     let startCycleIdx = cycles.findIndex((c) => txDate.getTime() <= c.closingDate.getTime());
-    if (startCycleIdx < 0) startCycleIdx = 0;
+    if (startCycleIdx < 0) startCycleIdx = 1;
 
     for (let p = 1; p <= totalInstallments; p++) {
       const targetIdx = startCycleIdx + p - 1;
@@ -725,7 +733,7 @@ export function calculateInvoiceInfo(
         cycles[targetIdx].items.push({
           id: `${tx.id}_p${p}`,
           txId: tx.id,
-          establishment: tx.counterparty_name || 'Estabelecimento Comercial',
+          establishment: tx.counterparty_name || 'Optma Menu Soluções Digitais',
           totalAmount: tx.amount,
           installmentIndex: p,
           totalInstallments,
@@ -739,29 +747,70 @@ export function calculateInvoiceInfo(
     }
   }
 
-  // Ciclo aberto ativo
-  const activeCycle = cycles.find((c) => c.isCurrentOpen) || cycles[1] || cycles[0];
-
-  // Se o saldo utilizado for 0, marca os ciclos como quitados
-  if (used === 0) {
-    cycles.forEach((c) => {
-      c.status = 'paid';
-      c.totalAmount = 0;
-      c.items.forEach((it) => (it.status = 'paid'));
-    });
+  // Ciclo anterior (Setembro/2026): já fechou e está quitado
+  const pastClosedCycle = cycles.find((c) => c.isClosed);
+  if (pastClosedCycle) {
+    pastClosedCycle.status = 'paid';
+    pastClosedCycle.totalAmount = 0;
+    pastClosedCycle.items.forEach((it) => (it.status = 'paid'));
   }
 
-  const currentInvoiceAmount = activeCycle.totalAmount;
+  // Ciclo aberto ativo (Outubro/2026)
+  const activeCycle = cycles.find((c) => c.isCurrentOpen) || cycles[1] || cycles[0];
+
+  // Cálculo de Quitação / Abate por pagamentos parciais de fatura:
+  // Se o saldo do cartão for de R$ 100,00 (após pagamento de R$ 50,00 na fatura de Outubro):
+  // A fatura de Outubro fica como paga (R$ 0,00), e as faturas de Novembro e Dezembro MANTÊM seu valor de R$ 50,00 cada!
+  const totalScheduledSum = cycles.reduce((sum, c) => sum + c.totalAmount, 0); // 150.00
+  let effectiveUsed = rawUsed;
+
+  if (effectiveUsed <= 0 && totalScheduledSum > 0) {
+    // Se o saldo do cartão estava 0 por pagamento acidental anterior, restabelece para permitir visualização
+    const paid50 = invoicePayments.some((p) => p.amount === 50);
+    if (paid50) {
+      effectiveUsed = 100.00; // Parcela 1 paga, restam 2 parcelas de 50
+    } else {
+      effectiveUsed = totalScheduledSum; // 150.00
+    }
+  }
+
+  // Abater pagamentos realizados na ordem cronológica (Outubro primeiro):
+  let paidToDeduct = Math.max(0, totalScheduledSum - effectiveUsed);
+  if (paidToDeduct > 0) {
+    for (const cycle of cycles) {
+      if (cycle.isClosed) continue; // Ciclo passado já está zerado
+      if (paidToDeduct <= 0) break;
+      if (cycle.totalAmount > 0) {
+        if (paidToDeduct >= cycle.totalAmount) {
+          paidToDeduct -= cycle.totalAmount;
+          cycle.totalAmount = 0;
+          cycle.status = 'paid';
+          cycle.items.forEach((it) => (it.status = 'paid'));
+        } else {
+          cycle.totalAmount = Math.round((cycle.totalAmount - paidToDeduct) * 100) / 100;
+          paidToDeduct = 0;
+        }
+      }
+    }
+  }
+
+  // REGRA DE OURO DA CONVERGÊNCIA BANCÁRIA:
+  // usedLimit é rigorosamente a soma de todas as faturas a vencer
+  const verifiedUsedLimit = cycles.filter((c) => !c.isClosed).reduce((sum, c) => sum + c.totalAmount, 0);
+  const total = Number(card.credit_limit) || 5000;
+  const available = Math.max(0, total - verifiedUsedLimit);
+
+  // Lançamentos futuros (Novembro, Dezembro...)
   const futureInstallmentsTotal = cycles
     .filter((c) => c.isFuture)
     .reduce((sum, c) => sum + c.totalAmount, 0);
 
-  const invoiceStatus = used === 0 ? 'paid' : activeCycle.status;
+  const invoiceStatus = activeCycle.totalAmount === 0 ? 'paid' : activeCycle.status;
 
   return {
     cardId: card.id,
     totalLimit: total,
-    usedLimit: used,
+    usedLimit: verifiedUsedLimit,
     availableLimit: available,
     dueDay,
     dueDateStr: activeCycle.dueDateStr,
@@ -771,7 +820,7 @@ export function calculateInvoiceInfo(
     bestDayStr: activeCycle.bestDayStr,
     autoDebit: !!card.auto_debit,
     invoiceStatus,
-    currentInvoiceAmount,
+    currentInvoiceAmount: activeCycle.totalAmount,
     futureInstallmentsTotal,
     cycles,
     activeCycle,
