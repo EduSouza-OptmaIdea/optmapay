@@ -16,42 +16,46 @@ Você pode marcar os itens com `[x]` e adicionar seus comentários e notas diret
 
 Acesse: `/cartoes` (com a **Conta Pagadora** selecionada)
 
-- [ ] **1.1. Emissão de Novo Cartão de Crédito**
-  - [ ] Clicou em `+ Emitir Novo Cartão`
-  - [ ] Definiu nome impresso, limite (ex: R$ 5.000,00), dia de vencimento (ex: dia 10) e PIN (ex: 1234)
-  - [ ] Cartão criado foi renderizado visualmente com efeito glassmorphism, chip e bandeira
-- [ ] **1.2. Emissão de Cartão de Débito**
-  - [ ] Emitiu cartão na modalidade Débito
-  - [ ] Verificou prefixo BIN específico de débito (`5020...`)
+- [ok] **1.1. Emissão de Novo Cartão de Crédito**
+  - [v] Clicou em `+ Emitir Novo Cartão`
+  - [v] Definiu nome impresso, limite (ex: R$ 5.000,00), dia de vencimento (ex: dia 10) e PIN (ex: 1234)
+  - [v] Cartão criado foi renderizado visualmente com efeito glassmorphism, chip e bandeira
+- [ok] **1.2. Emissão de Cartão de Débito**
+  - [v] Emitiu cartão na modalidade Débito
+  - [v] Verificou prefixo BIN específico de débito (`5020...`)
 - [ ] **1.3. Segurança e Visualização de Dados**
-  - [ ] Clicou no ícone de "olho" e o código CVV de 3 dígitos foi revelado
-  - [ ] Clicou no botão de copiar número do cartão (com feedback de "Copiado")
-  - [ ] Testou a ação de **Bloquear / Desbloquear** o cartão
-  - [ ] Testou a ação de **Alterar PIN** do cartão informando nova senha de 4 dígitos
+  - [v] Clicou no ícone de "olho" e o código CVV de 3 dígitos foi revelado
+  - [v] Clicou no botão de copiar número do cartão (com feedback de "Copiado")
+  - [v] Testou a ação de **Bloquear / Desbloquear** o cartão
+  - [v] Testou a ação de **Alterar PIN** do cartão informando nova senha de 4 dígitos
 
-**Status:** [ ] Aprovado | [ ] Requer Ajustes  
+**Status:** [X] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
 > *(Escreva aqui suas observações sobre o Teste 1)*
 
 ---
 
-## 💳 2. Venda na Maquininha POS Virtual (Credora vs. Pagadora)
+## 💳 2. Venda na Maquininha POS Virtual (Terminal de Balcão)
 
-Acesse: `/cartoes?tab=pos` (ou aba "Maquininha POS")
+Acesse: `/pos` (Menu Lateral: **Maquininha POS**)  
+*(Nota: O estabelecimento recebedor é automaticamente a **Conta Ativa** selecionada no topo do sistema)*
 
-- [ ] **2.1. Configuração da Venda**
-  - [ ] Selecionou a **Conta Credora** no campo "Conta de Destino (Lojista)"
-  - [ ] Digitou o valor da venda (ex: R$ 150,00)
-  - [ ] Escolheu a forma de pagamento: **Crédito Parcelado** (ex: 3x de R$ 50,00)
+- [ ] **2.1. Configuração da Venda no Terminal POS**
+  - [ ] Selecione a **Conta Credora (Lojista)** no seletor do topo
+  - [ ] Digite o valor da venda (ex: R$ 150,00)
+  - [ ] Escolha a modalidade de pagamento:
+    - **Crédito à Vista**
+    - **Crédito Parcelado** (ex: 3x de R$ 50,00)
+    - **Débito**: Permitido exclusivamente nos planos **D+1** ou **⚡ OnTime (D+0)**. Nos planos D+7, D+15 e No Vencimento, o botão de débito fica bloqueado e desabilitado com aviso explicativo.
 - [ ] **2.2. Execução da Passagem do Cartão**
-  - [ ] Selecionou o cartão gerado no Teste 1 (ou digitou os dados)
+  - [ ] Selecionou o cartão gerado no Teste 1 (ou digitou os dados da Conta Pagadora)
   - [ ] Escolheu modalidade: Inserir Cartão ou Aproximação (NFC)
   - [ ] Digitou o PIN de 4 dígitos cadastrado
   - [ ] Clicou em `Processar Pagamento na POS`
 - [ ] **2.3. Validações Visuais de Saída**
   - [ ] Animação de processamento na maquininha exibiu status de "Aprovado"
   - [ ] Comprovante fiscal gerado com NSU, Código de Autorização e detalhes das parcelas
-  - [ ] Limite disponível do cartão na Conta Pagadora diminuiu no valor correspondente (R$ 150,00)
+  - [ ] Limite do cartão na Conta Pagadora diminuiu no valor correspondente (ou saldo em caso de débito)
 
 **Status:** [ ] Aprovado | [ ] Requer Ajustes  
 **Observações:**  
@@ -65,10 +69,10 @@ Acesse: `/cartoes?tab=rates` (com a **Conta Credora** selecionada)
 
 - [ ] **3.1. Comparação Visual de Planos**
   - [ ] Visualizou a tabela comparativa:
-    - **D+1 Padrão**: Menor taxa MDR, liquidação no próximo dia útil bancário às 06h00.
-    - **⚡ OnTime (D+0)**: Liquidação na hora no saldo disponível com taxa calibrada.
-    - **D+7 e D+15**: Descontos progressivos na taxa MDR.
-    - **No Vencimento**: Sem juros de adiantamento, liquidação no ciclo de 30 dias.
+    - **D+1 Padrão**: Menor taxa MDR, liquidação no próximo dia útil bancário às 06h00 (Aceita Débito e Crédito).
+    - **⚡ OnTime (D+0)**: Liquidação na hora no saldo disponível com taxa calibrada (Aceita Débito e Crédito).
+    - **D+7 e D+15**: Descontos progressivos na taxa MDR (Apenas Crédito).
+    - **No Vencimento**: Sem juros de adiantamento, liquidação no ciclo de 30 dias (Apenas Crédito).
 - [ ] **3.2. Troca de Plano Ativo da Conta**
   - [ ] Selecionou o plano desejado e confirmou a troca
   - [ ] Verificou se o plano ficou persistido na configuração da conta
@@ -79,17 +83,19 @@ Acesse: `/cartoes?tab=rates` (com a **Conta Credora** selecionada)
 
 ---
 
-## 📊 4. Saldo Disponível vs. Lançamentos Futuros
+## 📊 4. Saldo Disponível vs. Lançamentos Futuros no Dashboard
 
 Acesse: `/dashboard` (com a **Conta Credora** selecionada)
 
 - [ ] **4.1. Verificação dos Cards do Topo**
-  - [ ] **Saldo Disponível em Conta**: Mostra apenas o valor imediatamente disponível para saque, Pix ou pagamento.
-  - [ ] **Lançamentos Futuros (A Receber)**: Exibe a soma de vendas em cartão ou boletos pendentes de liquidação.
-- [ ] **4.2. Linha do Tempo e Badges Decrescentes**
-  - [ ] Venda efetuada no Teste 2 aparece listada com badge de contagem regressiva:
-    - Ex: `D-1 • Próximo Dia Útil (às 06:00)` ou `D-15`, `D-30`
-  - [ ] O valor líquido exibido já desconta a taxa MDR da maquininha/gateway.
+  - [ ] **Saldo Disponível**: Mostra rigorosamente apenas o dinheiro liberado e em conta (não inclui vendas D+1, D+7, etc. ainda não compensadas).
+  - [ ] **Lançamentos Futuros**: Exibe o total acumulado de vendas a compensar (ex: venda Débito D+1 ou Crédito D+1/D+7/D+15).
+  - [ ] **Saldo Projetado Total**: Soma do saldo disponível + previsões futuras.
+- [ ] **4.2. Extrato Bancário e Conciliação Diária**
+  - [ ] O **Saldo Anterior** e o **Saldo do Dia** consideram estritamente o dinheiro realizado na conta (não são inflacionados por vendas futuras).
+  - [ ] Vendas futuras são listadas com badge âmbar `⏳ Lançamento Futuro (Aguardando Liquidação)` e nota de `Previsão futura (não disponível)`.
+  - [ ] Pode filtrar o extrato pelas abas: `Visão Consolidada`, `🏦 Saldo Disponível (Realizado)` e `⏳ Lançamentos Futuros (a compensar)`.
+  - [ ] Botão `⚡ Antecipar` disponível diretamente no extrato para antecipar qualquer lançamento futuro com PIN.
 
 **Status:** [ ] Aprovado | [ ] Requer Ajustes  
 **Observações:**  

@@ -28,7 +28,6 @@ import {
   CheckCircle2,
   RefreshCw,
 } from 'lucide-react';
-import { VirtualPosMachine } from '../components/VirtualPosMachine';
 import { CardRatesModal } from '../components/CardRatesModal';
 import { CardEcommerceSimulator } from '../components/CardEcommerceSimulator';
 import { CardInvoiceManager } from '../components/CardInvoiceManager';
@@ -44,7 +43,7 @@ import {
 
 export const CartoesArea: React.FC = () => {
   const { activeAccount, accounts, refreshAccounts } = useAuth();
-  const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'pos' | 'rates' | 'ecommerce' | 'statement'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'invoices' | 'rates' | 'ecommerce' | 'statement'>('wallet');
   const [cards, setCards] = useState<SandboxCard[]>([]);
   const [selectedTxForAnticipation, setSelectedTxForAnticipation] = useState<SandboxTransaction | null>(null);
   const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
@@ -382,7 +381,6 @@ export const CartoesArea: React.FC = () => {
         {[
           { id: 'wallet', label: '💳 Carteira de Cartões', count: cards.length },
           { id: 'invoices', label: '📑 Faturas & Limites' },
-          { id: 'pos', label: '📟 Maquininha Smart POS' },
           { id: 'rates', label: '⚡ Taxas & Planos (MDR)' },
           { id: 'ecommerce', label: '🛒 Gateway E-Commerce' },
           { id: 'statement', label: '📊 Extrato de Vendas', count: cardTransactions.length },
@@ -592,25 +590,7 @@ export const CartoesArea: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 3: MAQUININHA SMART POS */}
-      {/* ========================================================================= */}
-      {activeTab === 'pos' && (
-        <VirtualPosMachine
-          activeAccount={activeAccount}
-          allAccounts={accounts}
-          savedCards={cards}
-          currentPlan={currentPlan}
-          onPlanChange={handlePlanChange}
-          onTransactionSuccess={() => {
-            fetchCards();
-            fetchCardTransactions();
-            refreshAccounts();
-          }}
-        />
-      )}
-
-      {/* ========================================================================= */}
-      {/* ABA 4: TAXAS & PLANOS (D+1 vs ONTIME) */}
+      {/* ABA 3: TAXAS & PLANOS (D+1 vs ONTIME) */}
       {/* ========================================================================= */}
       {activeTab === 'rates' && (
         <CardRatesModal

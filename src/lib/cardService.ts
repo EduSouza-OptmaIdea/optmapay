@@ -226,6 +226,10 @@ export function getRatesForPlan(plan: SettlementPlanType): CardFeeRates {
   }
 }
 
+export function isDebitAllowedForPlan(plan: SettlementPlanType): boolean {
+  return plan === 'standard' || plan === 'd1' || plan === 'ontime' || plan === 'nitro';
+}
+
 export function calculateCardFee(
   amount: number,
   tipo: 'debito' | 'credito',
@@ -236,15 +240,20 @@ export function calculateCardFee(
 
   let feePercent = 0;
 
-  if (plan === 'due_date' && tipo === 'credito') {
+  if (tipo === 'debito') {
+    if (!isDebitAllowedForPlan(plan)) {
+      throw new Error(
+        `Venda a débito indisponível para o plano "${plan}". Conforme regras do Banco, vendas no débito são permitidas exclusivamente nos planos D+1 ou OnTime.`
+      );
+    }
+    const rates = getRatesForPlan(plan);
+    feePercent = rates.debit;
+  } else if (plan === 'due_date' && tipo === 'credito') {
     // Plano Vencimento: cada parcela tem 10% de desconto sobre o crédito 1x
     feePercent = DUE_DATE_FEE_PERCENT;
   } else {
     const rates = getRatesForPlan(plan);
-    if (tipo === 'debito') {
-      feePercent = rates.debit;
-    } else {
-      switch (numInstallments) {
+    switch (numInstallments) {
         case 1: feePercent = rates.credit1x; break;
         case 2: feePercent = rates.credit2x; break;
         case 3: feePercent = rates.credit3x; break;
@@ -259,7 +268,6 @@ export function calculateCardFee(
         case 12: feePercent = rates.credit12x; break;
         default: feePercent = rates.credit1x; break;
       }
-    }
   }
 
   const feeAmount = Math.round((amount * (feePercent / 100)) * 100) / 100;
@@ -391,7 +399,14 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
     throw new Error('Valor da venda inválido. Deve ser maior que zero.');
   }
 
-  // 1. Validação de Prefixo BIN
+  // 1. Validação de Venda a Débito vs. Plano
+  if (tipo === 'debito' && !isDebitAllowedForPlan(plan)) {
+    throw new Error(
+      `Operação Recusada: Venda a débito não é permitida no plano "${plan}". Conforme regras do Banco, vendas a débito estão disponíveis apenas para liquidação em D+1 ou OnTime.`
+    );
+  }
+
+  // 2. Validação de Prefixo BIN
   const binValidation = validateCardBin(cardNumber);
   if (!binValidation.isValid) {
     throw new Error(binValidation.errorMessage || 'Cartão não autorizado no OptmaPay Sandbox.');

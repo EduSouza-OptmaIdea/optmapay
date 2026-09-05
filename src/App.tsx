@@ -14,6 +14,7 @@ import { Dashboard } from './pages/Dashboard';
 import { PixArea } from './pages/PixArea';
 import { BoletosArea } from './pages/BoletosArea';
 import { CartoesArea } from './pages/CartoesArea';
+import { PosMachineArea } from './pages/PosMachineArea';
 import { SettlementSimulator } from './pages/SettlementSimulator';
 import { DevPanel } from './pages/DevPanel';
 import { SettingsReset } from './pages/SettingsReset';
@@ -67,6 +68,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/pix" element={<PixArea />} />
             <Route path="/boletos" element={<BoletosArea />} />
             <Route path="/cartoes" element={<CartoesArea />} />
+            <Route path="/pos" element={<PosMachineArea />} />
             <Route path="/settlement" element={<SettlementSimulator />} />
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />

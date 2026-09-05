@@ -25,8 +25,14 @@ import {
   X,
   Wallet,
   Check,
+  Smartphone,
+  Zap,
+  Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
+import { executeAnticipationSettlement } from '../lib/anticipationService';
+import { AnticipationCalculationResult } from '../lib/businessDays';
 
 interface TransactionWithRunningBalance extends SandboxTransaction {
   balanceBefore: number;
@@ -51,6 +57,13 @@ export const Dashboard: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [dateWarning, setDateWarning] = useState<string | null>(null);
+
+  // Filtro de Visualização do Extrato (Todas vs Saldo Disponível Realizado vs Lançamentos Futuros)
+  const [extratoFilterTab, setExtratoFilterTab] = useState<'all' | 'settled' | 'future'>('all');
+
+  // Modal de Antecipação de Recebíveis
+  const [selectedTxForAnticipation, setSelectedTxForAnticipation] = useState<SandboxTransaction | null>(null);
+  const [isAnticipationModalOpen, setIsAnticipationModalOpen] = useState(false);
 
   // Modal Devolução / Reembolso Pix
   const [selectedTxForRefund, setSelectedTxForRefund] = useState<TransactionWithRunningBalance | null>(null);
@@ -161,9 +174,30 @@ export const Dashboard: React.FC = () => {
     };
   }, [activeAccount?.id, periodFilter, customStartDate, customEndDate]);
 
-  // Agrupamento de Transações por Dia COM EVOLUÇÃO DO SALDO E CÁLCULO DE DEVOLUÇÕES
+  // Métricas Consolidadas: Saldo Disponível, Lançamentos Futuros e Saldo Projetado
+  const futureReceivablesTotal = useMemo(() => {
+    return transactions
+      .filter((tx) => tx.status === 'pending' && tx.direction === 'in')
+      .reduce((acc, tx) => acc + Number(tx.amount), 0);
+  }, [transactions]);
+
+  const futureReceivablesCount = useMemo(() => {
+    return transactions.filter((tx) => tx.status === 'pending' && tx.direction === 'in').length;
+  }, [transactions]);
+
+  const totalProjectedBalance = (activeAccount?.balance || 0) + futureReceivablesTotal;
+
+  // Agrupamento de Transações por Dia COM DISTINÇÃO ESTRITA ENTRE SALDO DISPONÍVEL E LANÇAMENTOS FUTUROS
   const groupedTransactions = useMemo(() => {
     if (!activeAccount) return [];
+
+    // Filtra transações de acordo com a aba selecionada no extrato
+    let filteredList = transactions;
+    if (extratoFilterTab === 'settled') {
+      filteredList = transactions.filter((tx) => tx.status !== 'pending');
+    } else if (extratoFilterTab === 'future') {
+      filteredList = transactions.filter((tx) => tx.status === 'pending');
+    }
 
     // Mapeamento de estornos já ocorridos para conciliação precisa
     const refundMap = new Map<string, number>();
@@ -178,15 +212,21 @@ export const Dashboard: React.FC = () => {
     const enrichedTransactions: TransactionWithRunningBalance[] = [];
 
     // Ordenados de forma decrescente (mais recente primeiro)
-    for (const tx of transactions) {
+    for (const tx of filteredList) {
       const txAmount = Number(tx.amount);
-      const after = runningBalance;
+      const isPending = tx.status === 'pending';
+
+      let after = runningBalance;
       let before = runningBalance;
 
-      if (tx.direction === 'in') {
-        before = after - txAmount;
-      } else {
-        before = after + txAmount;
+      // REGRA CRUCIAL: Lançamentos futuros (pending) NÃO alteram o saldo disponível da conta!
+      if (!isPending) {
+        if (tx.direction === 'in') {
+          before = after - txAmount;
+        } else {
+          before = after + txAmount;
+        }
+        runningBalance = before;
       }
 
       // Calcula quanto já foi devolvido
@@ -199,13 +239,11 @@ export const Dashboard: React.FC = () => {
       enrichedTransactions.push({
         ...tx,
         balanceBefore: before,
-        balanceAfter: after,
+        balanceAfter: isPending ? runningBalance : after,
         alreadyRefunded,
         remainingRefundable,
         isFullyRefunded,
       });
-
-      runningBalance = before;
     }
 
     const groups: {
@@ -215,6 +253,7 @@ export const Dashboard: React.FC = () => {
       closingBalance: number;
       totalIn: number;
       totalOut: number;
+      totalFutureIn: number;
       items: TransactionWithRunningBalance[];
     }[] = [];
 
@@ -231,17 +270,26 @@ export const Dashboard: React.FC = () => {
     dateMap.forEach((items, dateKey) => {
       let totalIn = 0;
       let totalOut = 0;
+      let totalFutureIn = 0;
 
       items.forEach((item) => {
-        if (item.direction === 'in') {
-          totalIn += Number(item.amount);
+        if (item.status === 'pending') {
+          if (item.direction === 'in') {
+            totalFutureIn += Number(item.amount);
+          }
         } else {
-          totalOut += Number(item.amount);
+          if (item.direction === 'in') {
+            totalIn += Number(item.amount);
+          } else {
+            totalOut += Number(item.amount);
+          }
         }
       });
 
-      const closingBalance = items[0].balanceAfter;
-      const openingBalance = items[items.length - 1].balanceBefore;
+      // Apenas transações liquidadas afetam o saldo de abertura e fechamento
+      const settledItems = items.filter((i) => i.status !== 'pending');
+      const closingBalance = settledItems.length > 0 ? settledItems[0].balanceAfter : runningBalance;
+      const openingBalance = settledItems.length > 0 ? settledItems[settledItems.length - 1].balanceBefore : runningBalance;
 
       const sampleDate = new Date(items[0].created_at);
       const isToday = sampleDate.toDateString() === new Date().toDateString();
@@ -259,12 +307,32 @@ export const Dashboard: React.FC = () => {
         closingBalance,
         totalIn,
         totalOut,
+        totalFutureIn,
         items,
       });
     });
 
     return groups;
-  }, [transactions, activeAccount?.balance]);
+  }, [transactions, activeAccount?.balance, extratoFilterTab]);
+
+  const handleConfirmAnticipation = async (calcResult: AnticipationCalculationResult) => {
+    if (!selectedTxForAnticipation || !activeAccount) return;
+    try {
+      await executeAnticipationSettlement({
+        transactionId: selectedTxForAnticipation.id,
+        accountId: activeAccount.id,
+        userId: activeAccount.user_id,
+        calculation: calcResult,
+        description: selectedTxForAnticipation.description,
+      });
+      setIsAnticipationModalOpen(false);
+      setSelectedTxForAnticipation(null);
+      await refreshAccounts();
+      await fetchTransactions();
+    } catch (err: any) {
+      alert(`Erro ao antecipar recebível: ${err.message}`);
+    }
+  };
 
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,50 +480,108 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Account Overview Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-br from-teal-700 via-teal-800 to-slate-900 text-white p-6 rounded-2xl shadow-xl shadow-teal-900/10">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-teal-200 text-xs font-semibold uppercase tracking-wider">
-            {activeAccount.type === 'merchant' ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
-            <span>Conta {activeAccount.type === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}</span>
+      {/* Account Overview Header: 3 Caixas de Saldos (Disponível vs Futuro vs Projetado) */}
+      <div className="bg-gradient-to-br from-teal-800 via-teal-900 to-slate-950 text-white p-6 rounded-3xl shadow-xl shadow-teal-950/20 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-teal-300 text-xs font-semibold uppercase tracking-wider">
+              {activeAccount.type === 'merchant' ? <Building2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
+              <span>Conta {activeAccount.type === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">{activeAccount.name}</h1>
+            <p className="text-xs text-teal-200/80 font-mono">
+              Agência: {activeAccount.agency} • Conta: {activeAccount.account_number} • CPF/CNPJ: {activeAccount.cpf_cnpj}
+            </p>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold">{activeAccount.name}</h1>
-          <p className="text-xs text-teal-200/80 font-mono">
-            Agência: {activeAccount.agency} • Conta: {activeAccount.account_number} • CPF/CNPJ: {activeAccount.cpf_cnpj}
-          </p>
+
+          <button
+            type="button"
+            onClick={() => setShowBalance(!showBalance)}
+            className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-teal-200 hover:text-white transition flex items-center gap-2 text-xs font-semibold border border-white/10"
+            title="Exibir/Ocultar saldos"
+          >
+            {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            <span>{showBalance ? 'Ocultar Valores' : 'Exibir Valores'}</span>
+          </button>
         </div>
 
-        {/* Balance Box */}
-        <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 rounded-xl space-y-1 min-w-[220px]">
-          <div className="flex items-center justify-between text-xs text-teal-100">
-            <span>Saldo Fictício</span>
-            <button
-              onClick={() => setShowBalance(!showBalance)}
-              className="text-teal-200 hover:text-white transition"
-              title="Exibir/Ocultar saldo"
-            >
-              {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+        {/* 3 Caixas de Saldos: Disponível vs Futuro vs Projetado */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+          {/* Card 1: Saldo Disponível */}
+          <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 space-y-1">
+            <div className="flex items-center justify-between text-xs text-teal-200">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Saldo Disponível</span>
+              </span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">Livre</span>
+            </div>
+            <div className="text-xl sm:text-2xl font-extrabold font-mono text-white">
+              {showBalance ? (
+                `R$ ${activeAccount.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+              ) : (
+                '••••••••'
+              )}
+            </div>
+            <p className="text-[10px] text-teal-200/70 leading-tight">
+              Livre imediatamente para Pix, saques e pagamentos.
+            </p>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-mono">
-            {showBalance ? (
-              `R$ ${activeAccount.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-            ) : (
-              '••••••••'
-            )}
+
+          {/* Card 2: Lançamentos Futuros */}
+          <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 space-y-1">
+            <div className="flex items-center justify-between text-xs text-teal-200">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Lançamentos Futuros</span>
+              </span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                {futureReceivablesCount} a compensar
+              </span>
+            </div>
+            <div className="text-xl sm:text-2xl font-extrabold font-mono text-amber-300">
+              {showBalance ? (
+                `R$ ${futureReceivablesTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+              ) : (
+                '••••••••'
+              )}
+            </div>
+            <p className="text-[10px] text-teal-200/70 leading-tight">
+              Previsões de recebíveis de cartão e duplicatas.
+            </p>
           </div>
-          <button
-            onClick={() => setIsDepositOpen(true)}
-            className="w-full mt-2 py-1.5 px-3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-sm"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Simular Aporte (Depósito)</span>
-          </button>
+
+          {/* Card 3: Saldo Projetado Total */}
+          <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 space-y-1">
+            <div className="flex items-center justify-between text-xs text-teal-200">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                <span>Saldo Projetado Total</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsDepositOpen(true)}
+                className="text-[10px] bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold px-2 py-0.5 rounded transition"
+              >
+                + Aporte
+              </button>
+            </div>
+            <div className="text-xl sm:text-2xl font-extrabold font-mono text-teal-200">
+              {showBalance ? (
+                `R$ ${totalProjectedBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+              ) : (
+                '••••••••'
+              )}
+            </div>
+            <p className="text-[10px] text-teal-200/70 leading-tight">
+              Saldo disponível somado às previsões futuras.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Quick Action Shortcuts */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Link
           to="/pix"
           className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500/50 hover:shadow-md transition flex flex-col items-center text-center gap-2 group"
@@ -486,14 +612,25 @@ export const Dashboard: React.FC = () => {
             <CreditCard className="w-6 h-6" />
           </div>
           <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">Cartões Virtuais</span>
-          <span className="text-[10px] text-slate-400">Débito e Crédito</span>
+          <span className="text-[10px] text-slate-400">Carteira e Faturas</span>
+        </Link>
+
+        <Link
+          to="/pos"
+          className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500/50 hover:shadow-md transition flex flex-col items-center text-center gap-2 group"
+        >
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition">
+            <Smartphone className="w-6 h-6" />
+          </div>
+          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">Maquininha POS</span>
+          <span className="text-[10px] text-slate-400">Terminal Smart POS</span>
         </Link>
 
         <Link
           to="/settlement"
           className="p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-teal-500/50 hover:shadow-md transition flex flex-col items-center text-center gap-2 group"
         >
-          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition">
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition">
             <RefreshCw className="w-6 h-6" />
           </div>
           <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">Simulador Vendas</span>
@@ -502,7 +639,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* EXTRATO BANCÁRIO COMPLETO COM EVOLUÇÃO DO SALDO E SALDO ANTERIOR */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-6 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 space-y-6 shadow-sm">
         
         {/* Header do Extrato */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700/80 pb-4">
@@ -512,7 +649,7 @@ export const Dashboard: React.FC = () => {
               Extrato Bancário da Conta
             </h2>
             <p className="text-xs text-slate-500">
-              Acompanhe a evolução do saldo diário a partir do saldo anterior consolidado
+              Conciliação matemática de saldo disponível e monitoramento de previsões futuras
             </p>
           </div>
 
@@ -568,6 +705,45 @@ export const Dashboard: React.FC = () => {
               <RefreshCw className={`w-3.5 h-3.5 ${loadingTx ? 'animate-spin' : ''}`} />
             </button>
           </div>
+        </div>
+
+        {/* Abas de Modo do Extrato: Todas vs Realizado (Saldo Disponível) vs Lançamentos Futuros */}
+        <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-2xl text-xs font-bold gap-1">
+          <button
+            type="button"
+            onClick={() => setExtratoFilterTab('all')}
+            className={`flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 ${
+              extratoFilterTab === 'all'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <span>Visão Consolidada</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setExtratoFilterTab('settled')}
+            className={`flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 ${
+              extratoFilterTab === 'settled'
+                ? 'bg-white dark:bg-slate-800 text-[#19A999] shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Wallet className="w-3.5 h-3.5 text-emerald-500" />
+            <span>🏦 Saldo Disponível (Realizado)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setExtratoFilterTab('future')}
+            className={`flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 ${
+              extratoFilterTab === 'future'
+                ? 'bg-white dark:bg-slate-800 text-amber-500 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
+            <span>⏳ Lançamentos Futuros ({futureReceivablesCount} a compensar)</span>
+          </button>
         </div>
 
         {/* Inputs de Data Personalizada */}
@@ -649,6 +825,11 @@ export const Dashboard: React.FC = () => {
                           - R$ {group.totalOut.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                       )}
+                      {group.totalFutureIn > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                          ⏳ + R$ {group.totalFutureIn.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} a compensar
+                        </span>
+                      )}
                     </div>
 
                     <div className="px-2.5 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[#19A999] font-extrabold flex items-center gap-1">
@@ -661,9 +842,10 @@ export const Dashboard: React.FC = () => {
                 {/* Itens do Dia */}
                 <div className="divide-y divide-slate-100 dark:divide-slate-700/50 bg-white dark:bg-slate-800">
                   {group.items.map((tx) => {
+                    const isPending = tx.status === 'pending';
                     const isIn = tx.direction === 'in';
                     const isPixIn = tx.type === 'pix' && isIn;
-                    const canRefund = isPixIn && !tx.isFullyRefunded;
+                    const canRefund = isPixIn && !tx.isFullyRefunded && !isPending;
 
                     return (
                       <div
@@ -677,22 +859,37 @@ export const Dashboard: React.FC = () => {
                           canRefund
                             ? 'hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer'
                             : ''
-                        }`}
+                        } ${isPending ? 'bg-amber-500/5' : ''}`}
                       >
                         <div className="flex items-center gap-3">
                           <div
                             className={`p-2.5 rounded-xl shrink-0 ${
-                              isIn
+                              isPending
+                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                                : isIn
                                 ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
                                 : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
                             }`}
                           >
-                            {isIn ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                            {isPending ? (
+                              <Clock className="w-4 h-4" />
+                            ) : isIn ? (
+                              <ArrowDownLeft className="w-4 h-4" />
+                            ) : (
+                              <ArrowUpRight className="w-4 h-4" />
+                            )}
                           </div>
 
                           <div className="space-y-0.5">
-                            <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
                               <span>{getFriendlyTypeName(tx.type, tx.direction, tx.description)}</span>
+
+                              {isPending && (
+                                <span className="px-2 py-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded text-[10px] font-extrabold flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>Lançamento Futuro (Aguardando Liquidação)</span>
+                                </span>
+                              )}
 
                               {/* Badges de Status de Devolução */}
                               {isPixIn && (
@@ -719,13 +916,38 @@ export const Dashboard: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0 space-y-0.5">
-                          <p className={`font-extrabold font-mono text-sm ${isIn ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            {isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                          <p className="text-[10px] font-mono text-slate-400">
-                            Saldo após: R$ {tx.balanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
+                        <div className="flex items-center gap-3 shrink-0 text-right">
+                          <div className="space-y-0.5">
+                            <p className={`font-extrabold font-mono text-sm ${
+                              isPending
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : isIn
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
+                            }`}>
+                              {isPending ? '⏳ ' : isIn ? '+' : '-'} R$ {Number(tx.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-[10px] font-mono text-slate-400">
+                              {isPending
+                                ? 'Previsão futura (não disponível)'
+                                : `Saldo após: R$ ${tx.balanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                            </p>
+                          </div>
+
+                          {isPending && isIn && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTxForAnticipation(tx);
+                                setIsAnticipationModalOpen(true);
+                              }}
+                              className="py-1.5 px-3 bg-gradient-to-r from-amber-500 to-[#F1613A] hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-950/20 transition flex items-center gap-1.5 shrink-0"
+                            >
+                              <Zap className="w-3.5 h-3.5" />
+                              <span>Antecipar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -941,6 +1163,32 @@ export const Dashboard: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal de Simulação de Antecipação de Recebíveis no Extrato */}
+      {selectedTxForAnticipation && (
+        <AnticipationSimulationModal
+          isOpen={isAnticipationModalOpen}
+          onClose={() => {
+            setIsAnticipationModalOpen(false);
+            setSelectedTxForAnticipation(null);
+          }}
+          title={selectedTxForAnticipation.description || 'Recebível Futuro'}
+          externalReference={selectedTxForAnticipation.external_reference || selectedTxForAnticipation.id}
+          grossAmount={Number(selectedTxForAnticipation.amount)}
+          saleDate={selectedTxForAnticipation.created_at}
+          settlementPlan={
+            selectedTxForAnticipation.description?.includes('D+15')
+              ? 'd15'
+              : selectedTxForAnticipation.description?.includes('D+7')
+              ? 'd7'
+              : selectedTxForAnticipation.description?.includes('Vencimento')
+              ? 'due_date'
+              : 'standard'
+          }
+          expectedPin={activeAccount?.config?.pin || '1234'}
+          onConfirmAnticipation={handleConfirmAnticipation}
+        />
       )}
     </div>
   );

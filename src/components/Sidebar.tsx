@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Landmark,
   Crown,
+  Smartphone,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,7 @@ export const Sidebar: React.FC = () => {
     { to: '/pix', label: 'Área Pix', icon: QrCode },
     { to: '/boletos', label: 'Boletos', icon: FileText },
     { to: '/cartoes', label: 'Cartões Virtuais', icon: CreditCard },
+    { to: '/pos', label: 'Maquininha POS', icon: Smartphone },
     { to: '/settlement', label: 'Simulador Vendas', icon: ArrowLeftRight },
     { to: '/dev', label: 'Painel Dev & Webhooks', icon: Code2 },
     { to: '/meus-dados', label: 'Meus Dados', icon: User },

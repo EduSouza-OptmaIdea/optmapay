@@ -23,6 +23,7 @@ import {
   executeCardPayment,
   validateCardBin,
   blockCardByPinAttempts,
+  isDebitAllowedForPlan,
   STANDARD_FEE_RATES,
   ONTIME_FEE_RATES,
   D7_FEE_RATES,
@@ -134,6 +135,10 @@ export const VirtualPosMachine: React.FC<VirtualPosMachineProps> = ({
   };
 
   const handleSelectMode = (selectedTipo: 'debito' | 'credito', isInstallment: boolean = false) => {
+    if (selectedTipo === 'debito' && !isDebitAllowedForPlan(currentPlan)) {
+      alert(`Venda a débito indisponível para o plano "${getPlanName()}". Conforme regras do Banco, vendas no débito são aceitas exclusivamente nos planos D+1 ou OnTime.`);
+      return;
+    }
     setTipo(selectedTipo);
     if (selectedTipo === 'debito') {
       setInstallments(1);
@@ -365,24 +370,39 @@ export const VirtualPosMachine: React.FC<VirtualPosMachineProps> = ({
               </div>
 
               <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectMode('debito')}
-                  className="w-full p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#1367A2] rounded-xl flex items-center justify-between text-left transition group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-[#1367A2]/20 text-[#1367A2] dark:text-sky-400 flex items-center justify-center font-bold text-[10px]">
-                      1
+                {isDebitAllowedForPlan(currentPlan) ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMode('debito')}
+                    className="w-full p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-[#1367A2] rounded-xl flex items-center justify-between text-left transition group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-[#1367A2]/20 text-[#1367A2] dark:text-sky-400 flex items-center justify-center font-bold text-[10px]">
+                        1
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-100 group-hover:text-sky-300">1. Débito</p>
+                        <p className="text-[9px] text-slate-400">
+                          Taxa: {calculateCardFee(100, 'debito', 1, currentPlan).feePercent}%
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-100 group-hover:text-sky-300">1. Débito</p>
-                      <p className="text-[9px] text-slate-400">
-                        Taxa: {calculateCardFee(100, 'debito', 1, currentPlan).feePercent}%
-                      </p>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#1367A2]" />
+                  </button>
+                ) : (
+                  <div className="w-full p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between text-left opacity-60 cursor-not-allowed">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-[10px]">
+                        1
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-400">1. Débito (Indisponível)</p>
+                        <p className="text-[9px] text-amber-400">Exclusivo planos D+1 ou OnTime</p>
+                      </div>
                     </div>
+                    <span className="text-[9px] text-slate-500 font-bold px-1.5 py-0.5 rounded bg-slate-900">Bloqueado</span>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-[#1367A2]" />
-                </button>
+                )}
 
                 <button
                   type="button"
