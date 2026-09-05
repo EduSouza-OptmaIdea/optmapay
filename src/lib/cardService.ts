@@ -76,7 +76,7 @@ export const D15_FEE_RATES: CardFeeRates = {
  * Plano OnTime (Recebimento na Hora / D+0) - ⚡ OnTime
  */
 export const ONTIME_FEE_RATES: CardFeeRates = {
-  debit: 2.79,
+  debit: 1.99,
   credit1x: 5.99,
   credit2x: 11.39,
   credit3x: 12.49,
@@ -288,7 +288,7 @@ export function calculateInstallmentsReceivables(
   const baseInstallmentGross = Math.round((totalAmount / count) * 100) / 100;
   const results: InstallmentReceivable[] = [];
 
-  const baseRate = STANDARD_FEE_RATES.credit1x; // 2.89%
+  const baseRate = ONTIME_FEE_RATES.credit1x; // 5.99% a.m. (base OnTime 1x para evitar arbitragem)
   const discountedRate = DUE_DATE_FEE_PERCENT; // 2.601%
 
   for (let i = 1; i <= count; i++) {

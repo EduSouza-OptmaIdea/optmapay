@@ -53,11 +53,11 @@ export const AnticipationSimulationModal: React.FC<AnticipationSimulationModalPr
   // Calcula a contagem regressiva e data prevista às 06:00
   const countdown = getSettlementCountdown(saleDate, settlementPlan);
 
-  // Calcula a simulação pro-rata (taxa mensal padrão 2.89% a.m.) baseada nos dias corridos
+  // Calcula a simulação pro-rata (taxa mensal padrão 5.99% a.m., equivalente ao Crédito 1x OnTime para evitar arbitragem) baseada nos dias corridos
   const calculation = calculateAnticipationProRata(
     grossAmount,
     countdown.daysRemaining,
-    2.89,
+    5.99,
     countdown.targetDateFormatted
   );
 

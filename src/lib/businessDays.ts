@@ -277,7 +277,7 @@ export interface AnticipationCalculationResult {
 export function calculateAnticipationProRata(
   grossAmount: number,
   daysRemaining: number,
-  monthlyFeePercent: number = 2.89,
+  monthlyFeePercent: number = 5.99, // Taxa base de antecipação: 5.99% a.m. (igual ao Crédito 1x OnTime para evitar arbitragem)
   targetSettlementDateStr: string = ''
 ): AnticipationCalculationResult {
   const safeGross = Math.max(0, grossAmount);
