@@ -271,3 +271,66 @@ export async function superAdminFetchGlobalMetrics(): Promise<SuperAdminGlobalMe
     pendingTransactionsCount: pendingCount,
   };
 }
+
+/**
+ * Provisiona um novo Tenant / Conta Bancária diretamente pelo Super Admin
+ */
+export async function superAdminCreateTenantAccount(
+  ownerUserId: string,
+  input: {
+    name: string;
+    type: 'merchant' | 'customer';
+    cpf_cnpj: string;
+    initialBalance?: number;
+    pixKey?: string;
+    role?: 'standard' | 'bank_manager' | 'super_admin';
+  }
+): Promise<SandboxAccount> {
+  const client = getSupabaseClient();
+  const agency = '0001';
+  const accountNumber = `${Math.floor(10000 + Math.random() * 90000)}-${Math.floor(1 + Math.random() * 9)}`;
+  const defaultPixKey = input.pixKey && input.pixKey.trim() !== ''
+    ? input.pixKey.trim()
+    : input.type === 'merchant'
+    ? `vendas@${input.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.fake`
+    : `pix.${input.cpf_cnpj.replace(/[^0-9]/g, '')}@optmapay.fake`;
+
+  const newAccount = {
+    user_id: ownerUserId,
+    name: input.name,
+    type: input.type,
+    cpf_cnpj: input.cpf_cnpj,
+    phone: '(11) 98888-7766',
+    balance: input.initialBalance !== undefined ? input.initialBalance : input.type === 'merchant' ? 10000.00 : 2500.00,
+    pix_key: defaultPixKey,
+    agency,
+    account_number: accountNumber,
+    config: {
+      role: input.role || 'standard',
+      created_by_super_admin: true,
+      created_at: new Date().toISOString(),
+    },
+  };
+
+  const { data, error } = await client.from('accounts').insert([newAccount]).select().single();
+  if (error || !data) {
+    throw new Error(error?.message || 'Falha ao provisionar tenant no Supabase');
+  }
+  return data as SandboxAccount;
+}
+
+/**
+ * Atualiza o papel / delegação de poderes de uma conta existente
+ */
+export async function superAdminUpdateAccountRole(
+  accountId: string,
+  role: 'standard' | 'bank_manager' | 'super_admin'
+): Promise<void> {
+  const client = getSupabaseClient();
+  const { data: acc } = await client.from('accounts').select('config').eq('id', accountId).single();
+  const existingConfig = acc?.config || {};
+  const updatedConfig = { ...existingConfig, role };
+  const { error } = await client.from('accounts').update({ config: updatedConfig, updated_at: new Date().toISOString() }).eq('id', accountId);
+  if (error) throw error;
+}
+

@@ -27,6 +27,8 @@ import {
   fetchAllAccountsAsSuperAdmin,
   superAdminFetchGlobalMetrics,
   superAdminAdjustAccountBalance,
+  superAdminCreateTenantAccount,
+  superAdminUpdateAccountRole,
   SuperAdminGlobalMetrics,
 } from '../lib/supabase/accountService';
 import { supabase } from '../lib/supabase';
@@ -34,7 +36,7 @@ import { releaseD1Settlement } from '../lib/cardService';
 import { getSettlementCountdown } from '../lib/businessDays';
 
 export const SuperAdminConsole: React.FC = () => {
-  const { isSuperAdmin, activeAccount, setActiveAccountId, refreshAccounts } = useAuth();
+  const { user, isSuperAdmin, activeAccount, setActiveAccountId, refreshAccounts } = useAuth();
   const navigate = useNavigate();
 
   const [accounts, setAccounts] = useState<SandboxAccount[]>([]);
@@ -49,6 +51,21 @@ export const SuperAdminConsole: React.FC = () => {
   const [newBalanceInput, setNewBalanceInput] = useState<string>('');
   const [adjustReason, setAdjustReason] = useState<string>('Injeção de Testes do Super Admin');
   const [isAdjusting, setIsAdjusting] = useState(false);
+
+  // Modal de Criação de Novo Tenant / Conta
+  const [isCreateTenantOpen, setIsCreateTenantOpen] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+  const [tenantType, setTenantType] = useState<'merchant' | 'customer'>('merchant');
+  const [tenantDoc, setTenantDoc] = useState('');
+  const [tenantInitialBalance, setTenantInitialBalance] = useState('10000.00');
+  const [tenantPixKey, setTenantPixKey] = useState('');
+  const [tenantRole, setTenantRole] = useState<'standard' | 'bank_manager' | 'super_admin'>('standard');
+  const [isCreatingTenant, setIsCreatingTenant] = useState(false);
+
+  // Modal de Delegação de Poderes / Papéis
+  const [selectedAccForRole, setSelectedAccForRole] = useState<SandboxAccount | null>(null);
+  const [newRoleInput, setNewRoleInput] = useState<'standard' | 'bank_manager' | 'super_admin'>('standard');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   // Varredura Geral de Liquidação
   const [isSweeping, setIsSweeping] = useState(false);
@@ -105,6 +122,60 @@ export const SuperAdminConsole: React.FC = () => {
       alert(`Erro ao ajustar saldo: ${err.message}`);
     } finally {
       setIsAdjusting(false);
+    }
+  };
+
+  // Criar Novo Tenant / Conta
+  const handleCreateTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantName.trim() || !tenantDoc.trim()) {
+      alert('Preencha o Nome e CPF/CNPJ do novo Tenant.');
+      return;
+    }
+    const initialBal = parseFloat(tenantInitialBalance) || 0;
+    const ownerId = user?.id || activeAccount?.user_id || '00000000-0000-0000-0000-000000000001';
+
+    setIsCreatingTenant(true);
+    try {
+      const created = await superAdminCreateTenantAccount(ownerId, {
+        name: tenantName.trim(),
+        type: tenantType,
+        cpf_cnpj: tenantDoc.trim(),
+        initialBalance: initialBal,
+        pixKey: tenantPixKey.trim() || undefined,
+        role: tenantRole,
+      });
+
+      await loadData();
+      await refreshAccounts();
+      showToast(`🎉 Novo Tenant "${created.name}" provisionado com sucesso!`);
+      setIsCreateTenantOpen(false);
+      setTenantName('');
+      setTenantDoc('');
+      setTenantPixKey('');
+    } catch (err: any) {
+      alert(`Erro ao criar tenant: ${err.message}`);
+    } finally {
+      setIsCreatingTenant(false);
+    }
+  };
+
+  // Atualizar Papel / Delegação de Poderes
+  const handleUpdateRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAccForRole) return;
+
+    setIsUpdatingRole(true);
+    try {
+      await superAdminUpdateAccountRole(selectedAccForRole.id, newRoleInput);
+      await loadData();
+      await refreshAccounts();
+      showToast(`🛡️ Papel da conta "${selectedAccForRole.name}" atualizado para [${newRoleInput.toUpperCase()}]!`);
+      setSelectedAccForRole(null);
+    } catch (err: any) {
+      alert(`Erro ao atualizar papel: ${err.message}`);
+    } finally {
+      setIsUpdatingRole(false);
     }
   };
 
@@ -295,11 +366,21 @@ export const SuperAdminConsole: React.FC = () => {
               </span>
             </h2>
             <p className="text-xs text-slate-500">
-              Alterne entre contas para navegar como o cliente ou ajuste saldos diretamente
+              Provisione novos tenants, delegue poderes administrativos ou assuma qualquer conta com 1 clique
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Botão Novo Tenant */}
+            <button
+              type="button"
+              onClick={() => setIsCreateTenantOpen(true)}
+              className="py-1.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-95 text-slate-950 font-black text-xs rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Novo Tenant / Conta</span>
+            </button>
+
             {/* Campo de Busca */}
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
@@ -308,7 +389,7 @@ export const SuperAdminConsole: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar conta, CNPJ, Pix..."
-                className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border rounded-xl text-xs font-medium w-48 sm:w-56"
+                className="pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-900 border rounded-xl text-xs font-medium w-44 sm:w-52"
               />
             </div>
 
@@ -357,9 +438,10 @@ export const SuperAdminConsole: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-700 text-[10px] text-slate-400 font-bold uppercase tracking-wider bg-slate-50/50 dark:bg-slate-900/50">
                 <th className="py-3 px-6">Identificação da Conta</th>
-                <th className="py-3 px-4">Tipo</th>
-                <th className="py-3 px-4">Documento (CPF/CNPJ)</th>
-                <th className="py-3 px-4">Chave Pix</th>
+                <th className="py-3 px-3">Tipo</th>
+                <th className="py-3 px-3">Papel / Acesso</th>
+                <th className="py-3 px-3">Documento</th>
+                <th className="py-3 px-3">Chave Pix</th>
                 <th className="py-3 px-4 text-right">Saldo Disponível</th>
                 <th className="py-3 px-6 text-center">Ações Super Admin</th>
               </tr>
@@ -367,6 +449,8 @@ export const SuperAdminConsole: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
               {filteredAccounts.map((acc) => {
                 const isActive = acc.id === activeAccount?.id;
+                const role = acc.config?.role || 'standard';
+
                 return (
                   <tr
                     key={acc.id}
@@ -396,7 +480,7 @@ export const SuperAdminConsole: React.FC = () => {
                             </span>
                             {isActive && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                Conta Ativa
+                                Ativa
                               </span>
                             )}
                           </div>
@@ -407,7 +491,7 @@ export const SuperAdminConsole: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-3">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           acc.type === 'merchant'
@@ -415,15 +499,32 @@ export const SuperAdminConsole: React.FC = () => {
                             : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
                         }`}
                       >
-                        {acc.type === 'merchant' ? 'PJ Lojista' : 'PF Cliente'}
+                        {acc.type === 'merchant' ? 'PJ' : 'PF'}
                       </span>
                     </td>
 
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">
+                    {/* Coluna Papel / Delegação de Poderes */}
+                    <td className="py-3 px-3">
+                      {role === 'super_admin' ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1 w-fit">
+                          <Crown className="w-2.5 h-2.5" />
+                          <span>Super Admin</span>
+                        </span>
+                      ) : role === 'bank_manager' ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1 w-fit">
+                          <ShieldCheck className="w-2.5 h-2.5" />
+                          <span>Gerente</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Cliente Comum</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-300">
                       {acc.cpf_cnpj || '---'}
                     </td>
 
-                    <td className="py-3 px-4 font-mono text-slate-500 text-[11px] truncate max-w-[180px]">
+                    <td className="py-3 px-3 font-mono text-slate-500 text-[11px] truncate max-w-[150px]">
                       {acc.pix_key || '---'}
                     </td>
 
@@ -432,7 +533,7 @@ export const SuperAdminConsole: React.FC = () => {
                     </td>
 
                     <td className="py-3 px-6 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1.5">
                         {/* Botão de Impersonate / Alternar Sessão */}
                         <button
                           type="button"
@@ -455,11 +556,25 @@ export const SuperAdminConsole: React.FC = () => {
                             setSelectedAccForBalance(acc);
                             setNewBalanceInput(Number(acc.balance || 0).toFixed(2));
                           }}
-                          className="px-2.5 py-1.5 rounded-xl font-bold text-[11px] bg-[#1367A2]/10 hover:bg-[#1367A2]/20 text-[#1367A2] dark:text-sky-400 transition flex items-center gap-1"
+                          className="px-2 py-1.5 rounded-xl font-bold text-[11px] bg-[#1367A2]/10 hover:bg-[#1367A2]/20 text-[#1367A2] dark:text-sky-400 transition flex items-center gap-1"
                           title="Ajustar saldo fictício desta conta"
                         >
                           <DollarSign className="w-3 h-3" />
                           <span>Saldo</span>
+                        </button>
+
+                        {/* Botão Delegar Papel */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAccForRole(acc);
+                            setNewRoleInput(acc.config?.role || 'standard');
+                          }}
+                          className="px-2 py-1.5 rounded-xl font-bold text-[11px] bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-300 transition flex items-center gap-1"
+                          title="Delegar ou revogar poderes de administração"
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Poderes</span>
                         </button>
                       </div>
                     </td>
@@ -546,6 +661,225 @@ export const SuperAdminConsole: React.FC = () => {
                   className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-95 text-slate-950 font-black text-xs rounded-xl shadow-md disabled:opacity-50"
                 >
                   {isAdjusting ? 'Gravando...' : 'Aplicar Ajuste'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Criação de Novo Tenant / Conta */}
+      {isCreateTenantOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-lg w-full border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-amber-500" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Provisionar Novo Tenant / Conta
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Criação de nova conta no Core Banking pelo Super Admin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateTenantOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTenant} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Nome da Conta / Razão Social:
+                </label>
+                <input
+                  type="text"
+                  value={tenantName}
+                  onChange={(e) => setTenantName(e.target.value)}
+                  placeholder="Ex: Restaurante Sabor & Arte LTDA"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Tipo de Conta:
+                  </label>
+                  <select
+                    value={tenantType}
+                    onChange={(e) => setTenantType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    <option value="merchant">PJ - Estabelecimento Comercial</option>
+                    <option value="customer">PF - Cliente Pagador</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    CPF ou CNPJ:
+                  </label>
+                  <input
+                    type="text"
+                    value={tenantDoc}
+                    onChange={(e) => setTenantDoc(e.target.value)}
+                    placeholder="12.345.678/0001-90"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Saldo Inicial Fictício (R$):
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    value={tenantInitialBalance}
+                    onChange={(e) => setTenantInitialBalance(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Delegação de Poderes / Papel:
+                  </label>
+                  <select
+                    value={tenantRole}
+                    onChange={(e) => setTenantRole(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    <option value="standard">Cliente Comum (Sem poderes)</option>
+                    <option value="bank_manager">🛡️ Gerente Bancário Delegado</option>
+                    <option value="super_admin">👑 Super Admin Master (Root)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Chave Pix (Opcional):
+                </label>
+                <input
+                  type="text"
+                  value={tenantPixKey}
+                  onChange={(e) => setTenantPixKey(e.target.value)}
+                  placeholder="Deixe vazio para gerar automaticamente"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-2xl border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
+                A nova conta será criada instantaneamente com agência 0001, conta corrente e cartões fictícios gerados no padrão Sandbox.
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateTenantOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingTenant}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-95 text-slate-950 font-black text-xs rounded-xl shadow-md disabled:opacity-50"
+                >
+                  {isCreatingTenant ? 'Criando...' : 'Criar Tenant'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Delegação de Poderes / Papéis */}
+      {selectedAccForRole && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-purple-500" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Delegar Poderes Administrativos
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Defina o nível de acesso e governança para esta conta
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAccForRole(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateRole} className="space-y-4">
+              <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Conta Selecionada:</p>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  {selectedAccForRole.name}
+                </p>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  Papel Atual: <strong>{(selectedAccForRole.config?.role || 'standard').toUpperCase()}</strong>
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Selecione o Novo Papel / Nível de Acesso:
+                </label>
+                <select
+                  value={newRoleInput}
+                  onChange={(e) => setNewRoleInput(e.target.value as any)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                >
+                  <option value="standard">Cliente Comum (Sem poderes administrativos)</option>
+                  <option value="bank_manager">🛡️ Gerente Bancário (Poderes Delegados)</option>
+                  <option value="super_admin">👑 Super Admin Master (Acesso Total Root)</option>
+                </select>
+              </div>
+
+              <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-2xl border border-purple-200 dark:border-purple-800 text-[11px] text-purple-900 dark:text-purple-300 space-y-1">
+                <p className="font-bold">Como funciona a delegação de poderes:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Cliente Comum:</strong> Acessa apenas a sua própria conta bancária.</li>
+                  <li><strong>Gerente Delegado:</strong> Pode ver contas e efetuar liquidações.</li>
+                  <li><strong>Super Admin:</strong> Tem controle irrestrito de taxas, criação de novos tenants e injeção de saldo.</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccForRole(null)}
+                  className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingRole}
+                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50"
+                >
+                  {isUpdatingRole ? 'Atualizando...' : 'Confirmar Delegação'}
                 </button>
               </div>
             </form>
