@@ -162,12 +162,15 @@ export const CardRatesModal: React.FC<CardRatesModalProps> = ({ currentPlan, onP
                 Como funciona o Plano Receber no Vencimento:
               </p>
               <ul className="list-disc pl-4 text-[11px] text-purple-800 dark:text-purple-400 space-y-1">
-                <li>Cada parcela é liberada exatamente a cada 30 dias após a data da venda.</li>
+                <li>Cada parcela de Crédito é liberada exatamente a cada 30 dias após a data da venda.</li>
                 <li>
                   Taxa com 10% de desconto sobre o Crédito à Vista:{' '}
                   <strong className="font-mono">{DUE_DATE_FEE_PERCENT}%</strong> por parcela (em vez de 2,89%).
                 </li>
-                <li>Você pode antecipar parcelas individuais a qualquer momento com a taxa proporcional aos dias restantes.</li>
+                <li>
+                  <strong className="text-purple-950 dark:text-purple-200">Débito (Sem retenção de 30d):</strong> Transações no Débito são sempre liquidadas no plano <strong>D+1 Padrão (às 06h00, taxa 0,85%)</strong>.
+                </li>
+                <li>Você pode antecipar parcelas individuais de crédito a qualquer momento com a taxa proporcional aos dias restantes.</li>
               </ul>
             </div>
 
@@ -342,6 +345,15 @@ export const CardRatesModal: React.FC<CardRatesModalProps> = ({ currentPlan, onP
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {selectedPlanTab === 'due_date' && calcTipo === 'debito' && (
+            <div className="sm:col-span-3 p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-2xl text-[11px] text-purple-900 dark:text-purple-300 flex items-center gap-2">
+              <Info className="w-4 h-4 shrink-0 text-purple-600 dark:text-purple-400" />
+              <span>
+                <strong>Aviso:</strong> No plano <em>No Vencimento</em>, transações no <strong>Débito</strong> não sofrem retenção de 30 dias; elas são sempre liquidadas no plano <strong>D+1 Padrão (às 06h00 com taxa de 0,85%)</strong>.
+              </span>
             </div>
           )}
         </div>

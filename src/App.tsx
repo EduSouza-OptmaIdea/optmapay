@@ -27,6 +27,7 @@ import { EduDashboard } from './pages/EduDashboard';
 import { InvestimentosEduArea } from './pages/InvestimentosEduArea';
 import { EmprestimosEduArea } from './pages/EmprestimosEduArea';
 import { CenariosEduArea } from './pages/CenariosEduArea';
+import { BankParametersArea } from './pages/BankParametersArea';
 import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
@@ -68,6 +69,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/settlement" element={<SettlementSimulator />} />
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
+            <Route path="/config-banco" element={<BankParametersArea />} />
             <Route path="/settings" element={<SettingsReset />} />
             <Route path="*" element={<Navigate to={mode === 'edu' ? '/edu-dashboard' : '/dashboard'} replace />} />
           </Routes>
