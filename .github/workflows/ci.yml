@@ -51,6 +51,8 @@ jobs:
         run: npm run test:run
         env:
           DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
+          OPTMAPAY_WEBHOOK_MASTER_KEY: 1120dca10ff3e2431842f68255ba32958f868c78ed7391c95254ac7d5b66c66c
+          OPTMAPAY_INTERNAL_DISPATCH_TOKEN: d2101bdab6268277eb37d143666771d02b6975bced4f106e
 
       - name: Run ESLint
         run: npm run lint

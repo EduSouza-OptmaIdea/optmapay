@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import crypto from 'node:crypto';
 import {
   deriveWebhookSecret,
@@ -7,6 +7,12 @@ import {
 } from '../api/_lib/webhookSigner';
 
 describe('Webhook HMAC-SHA256 v1 & Anti-Replay', () => {
+  beforeAll(() => {
+    process.env.OPTMAPAY_WEBHOOK_MASTER_KEY =
+      process.env.OPTMAPAY_WEBHOOK_MASTER_KEY ||
+      '1120dca10ff3e2431842f68255ba32958f868c78ed7391c95254ac7d5b66c66c';
+  });
+
   const secret = 'whsec_optmapay_test_secret_for_unit_tests_2026';
   const timestamp = 1789876543;
   const eventId = '7d6e5c4b-3a21-4f9e-8d7c-1b2a3c4d5e6f';
