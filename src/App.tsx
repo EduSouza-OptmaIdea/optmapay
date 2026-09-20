@@ -71,6 +71,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/pos" element={<PosMachineArea />} />
             <Route path="/settlement" element={<SettlementSimulator />} />
             <Route path="/dev" element={<DevPanel />} />
+            <Route path="/dev-panel" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
             <Route path="/config-banco" element={isSuperAdmin ? <BankParametersArea /> : <Navigate to="/dashboard" replace />} />
             <Route path="/master-admin" element={isSuperAdmin ? <SuperAdminConsole /> : <Navigate to="/dashboard" replace />} />
