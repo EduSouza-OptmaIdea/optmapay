@@ -36,21 +36,18 @@ serve(async (req: Request) => {
     const nowIso = new Date().toISOString();
     const workerId = `worker-${crypto.randomUUID()}`;
 
-    // 2. Claim atômico usando RPC com FOR UPDATE SKIP LOCKED
-    const { data: claimedJobs, error: claimErr } = await adminClient.rpc(
-      "claim_webhook_delivery_jobs",
-      {
-        p_limit: 50,
-        p_locked_by: workerId,
-      }
+    // 2. Seleção de IDs elegíveis sem lock/claim prévio (Node é a autoridade única de claim e transporte)
+    const { data: eligibleJobs, error: selectErr } = await adminClient.rpc(
+      "get_eligible_webhook_job_ids",
+      { p_limit: 50 }
     );
 
-    if (claimErr) {
-      throw new Error(`Erro ao realizar claim atômico de jobs: ${claimErr.message}`);
+    if (selectErr) {
+      throw new Error(`Erro ao selecionar jobs elegíveis para retry: ${selectErr.message}`);
     }
 
     const results = [];
-    for (const job of claimedJobs || []) {
+    for (const job of eligibleJobs || []) {
       try {
         const dispatchRes = await processJobDispatch(adminClient, job.id, false);
         results.push({ jobId: job.id, success: dispatchRes.success, status: dispatchRes.status });

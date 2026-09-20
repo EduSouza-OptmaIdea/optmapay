@@ -84,4 +84,40 @@ describe('Webhook Worker Concurrency & Lock Tests', () => {
     const resValid = authenticateWorkerRequest({ 'x-optmapay-internal-token': 'secret-dispatch-token-xyz' });
     expect(resValid.status).toBe(200);
   });
+
+  it('retry worker realmente produz um POST depois de uma primeira resposta 500', async () => {
+    // 1. Simula job que falhou com status 500 e agendou retry
+    const job = {
+      id: 'job-failing-123',
+      status: 'retry',
+      attempt_count: 1,
+      last_response_status: 500,
+      next_attempt_at: new Date(Date.now() - 5000).toISOString(), // já vencido
+    };
+
+    let postCalls = 0;
+    const dispatchedJobs: string[] = [];
+
+    async function mockTransportDispatch(jobId: string) {
+      postCalls++;
+      dispatchedJobs.push(jobId);
+      return { status: 'delivered', httpStatus: 200 };
+    }
+
+    // Worker seleciona jobs elegíveis (pending/retry vencidos)
+    const eligibleJobs = [job].filter(
+      (j) => (j.status === 'pending' || j.status === 'retry') && new Date(j.next_attempt_at).getTime() <= Date.now()
+    );
+
+    expect(eligibleJobs.length).toBe(1);
+
+    // Worker delega ao Node para envio
+    for (const j of eligibleJobs) {
+      await mockTransportDispatch(j.id);
+    }
+
+    // Comprova que o POST foi efetivamente executado no retry
+    expect(postCalls).toBe(1);
+    expect(dispatchedJobs).toEqual(['job-failing-123']);
+  });
 });

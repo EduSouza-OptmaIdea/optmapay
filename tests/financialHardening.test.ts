@@ -147,5 +147,32 @@ describe('Financial Hardening & Invariant Tests', () => {
       expect(res.statusCode).toBe(400);
       expect(res.jsonBody?.error?.code).toBe('INVALID_AMOUNT');
     });
+
+    it('deve rejeitar transação quando detectedType for diferente do tipo solicitado', async () => {
+      const req: any = {
+        method: 'POST',
+        headers: { 'idempotency-key': 'idem-test-mismatch', 'x-api-key': 'optmapay_test_key' },
+        body: {
+          orderId: 'ORD-MISMATCH-1',
+          cardNumber: '5899000011112222', // Cartão de crédito (prefixo 5899)
+          expirationDate: '12/28',
+          cvv: '123',
+          amount: 50.0,
+          tipo: 'debito', // Incompatível com o BIN 5899!
+        },
+      };
+      const res = createMockRes();
+
+      vi.spyOn(await import('../api/_lib/apiKeyAuth'), 'authenticateApiKey').mockResolvedValue({
+        accountId: 'acc-123',
+        key: { id: 'key-123', accountId: 'acc-123' },
+      } as any);
+
+      await cardChargeHandler(req, res);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.jsonBody?.error?.code).toBe('INVALID_CARD_TYPE');
+      expect(res.jsonBody?.error?.message).toContain('incompatível com a bandeira do cartão');
+    });
   });
 });

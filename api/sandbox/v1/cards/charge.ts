@@ -65,6 +65,15 @@ export default async function handler(req: any, res: any) {
     );
   }
 
+  if (binValidation.detectedType && binValidation.detectedType !== tipo) {
+    return sendError(
+      res,
+      400,
+      'INVALID_CARD_TYPE',
+      `Tipo de transação incompatível com a bandeira do cartão. Cartão é ${binValidation.detectedType}, mas foi solicitado ${tipo}.`
+    );
+  }
+
   const numAmount = typeof amount === 'number' ? amount : parseFloat(amount);
   if (isNaN(numAmount) || numAmount <= 0) {
     return sendError(res, 400, 'INVALID_AMOUNT', 'O valor da cobrança (amount) deve ser um número maior que zero.');
