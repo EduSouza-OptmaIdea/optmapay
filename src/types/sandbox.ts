@@ -227,18 +227,22 @@ export interface CardPaymentResult {
 
 export interface SandboxWebhookConfig {
   id: string;
-  user_id: string;
+  user_id?: string;
   account_id: string;
   url: string;
   events: string[];
-  secret: string;
+  secret?: string;
+  secret_salt?: string;
+  secret_version?: number;
+  secret_last4?: string;
+  requires_secret_rotation?: boolean;
   active: boolean;
   created_at: string;
 }
 
 export interface SandboxWebhookLog {
   id: string;
-  user_id: string;
+  user_id?: string;
   webhook_config_id: string;
   event: string;
   payload: Record<string, any>;
@@ -246,14 +250,30 @@ export interface SandboxWebhookLog {
   response_body?: string;
   attempt_count: number;
   delivered_at: string;
+  event_id?: string;
+  delivery_job_id?: string;
+  delivery_id?: string;
+  attempt_no?: number;
+  duration_ms?: number;
+  request_timestamp?: string;
+  outcome?: string;
+  error_code?: string;
+  is_manual_retry?: boolean;
 }
 
 export interface SandboxApiKey {
   id: string;
-  user_id: string;
+  user_id?: string;
+  account_id?: string;
   key_name: string;
-  api_key: string;
+  key_id?: string;
+  key_prefix?: string;
+  key_last4?: string;
+  api_key?: string;
+  scopes?: string[];
   active: boolean;
   last_used_at?: string;
   created_at: string;
+  revoked_at?: string;
 }
+
