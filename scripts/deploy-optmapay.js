@@ -1,9 +1,6 @@
 import { execSync } from 'node:child_process';
 
 const PROJECT_REF = 'wertmoquxdrucdbobuie';
-const MASTER_KEY = '0c3d61e5e5ae6adff6fe2bc2f237ff3ac107b1f5260c1998b656954f521cf999';
-const INTERNAL_TOKEN = '3bb799acf793b12ada59ab74a7673066a48448d57baef750';
-const DISPATCHER_URL = 'https://optmapay.vercel.app';
 
 function run(cmd, desc) {
   console.log(`\n==================================================`);
@@ -21,12 +18,6 @@ function run(cmd, desc) {
 
 async function main() {
   console.log(`\n🚀 Iniciando Implantação Oficial no Supabase OptmaPay (${PROJECT_REF})`);
-
-  // 1. Configuração dos Segredos Criptográficos
-  run(
-    `npx supabase secrets set OPTMAPAY_WEBHOOK_MASTER_KEY="${MASTER_KEY}" OPTMAPAY_INTERNAL_DISPATCH_TOKEN="${INTERNAL_TOKEN}" OPTMAPAY_NODE_DISPATCHER_URL="${DISPATCHER_URL}" --project-ref ${PROJECT_REF}`,
-    'Configurando Segredos Criptográficos Oficiais no Supabase'
-  );
 
   // 2. Vinculação e Aplicação das Migrations
   run(

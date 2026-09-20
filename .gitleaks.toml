@@ -1,0 +1,13 @@
+[extend]
+# Use default gitleaks rules
+
+[allowlist]
+description = "Global allowlist for tests and examples"
+paths = [
+  '''^\.env\.example$''',
+  '''^tests/.*''',
+]
+regexes = [
+  '''ci-test-only-[a-zA-Z0-9-]+''',
+  '''00000000000000000000000000000000''',
+]

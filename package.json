@@ -13,6 +13,7 @@
     "check:edge": "npx deno check supabase/functions/webhook-dispatcher/index.ts supabase/functions/webhook-config-manager/index.ts supabase/functions/webhook-retry-worker/index.ts supabase/functions/pix-transfer/index.ts supabase/functions/retention-worker/index.ts",
     "deploy:optmapay": "node scripts/deploy-optmapay.js",
     "smoke:e2e": "node scripts/smoke-test-e2e.js",
+    "scan:secrets": "node scripts/scan-secrets.js",
     "preview": "vite preview"
   },
   "dependencies": {
