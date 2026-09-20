@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import https from 'node:https';
 import { getSupabaseAdmin } from './supabaseAdmin';
 import { validateWebhookUrlSsrf } from './ssrf';
 import { deriveWebhookSecret, signWebhookPayload } from './webhookSigner';
@@ -139,9 +140,11 @@ export async function dispatchWebhookJob(
   const rawBody = JSON.stringify(event.payload);
   const signature = signWebhookPayload(derivedSecret.publicSecret, unixTimestamp, event.id, rawBody);
 
-  // 5. Disparo HTTP POST com timeout de 5 segundos e redirect manual
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // 5. Disparo seguro com DNS Pinning (anti-rebinding): conecta diretamente ao IP público validado
+  const targetUrl = new URL(config.url);
+  const pinnedIp = ssrfValidation.resolvedIps && ssrfValidation.resolvedIps.length > 0
+    ? ssrfValidation.resolvedIps[0]
+    : targetUrl.hostname;
 
   let responseStatus = 0;
   let responseBody = '';
@@ -149,10 +152,11 @@ export async function dispatchWebhookJob(
   let errorCode: string | undefined = undefined;
 
   try {
-    const res = await fetch(config.url, {
-      method: 'POST',
-      headers: {
+    const postResult = await new Promise<{ status: number; text: string }>((resolve, reject) => {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(rawBody).toString(),
+        'Host': targetUrl.host,
         'x-optmapay-event': event.event_type,
         'x-optmapay-event-id': event.id,
         'x-optmapay-delivery-id': deliveryId,
@@ -161,16 +165,50 @@ export async function dispatchWebhookJob(
         'x-optmapay-signature': signature,
         'x-optmapay-real-money': 'false',
         'x-optmapay-environment': 'sandbox',
-      },
-      body: rawBody,
-      redirect: 'manual',
-      signal: controller.signal,
+      };
+
+      const req = https.request(
+        {
+          protocol: 'https:',
+          host: pinnedIp, // Conecta diretamente ao IP previamente validado (anti DNS-rebinding)
+          servername: targetUrl.hostname, // Preserva TLS SNI para o hostname original
+          port: targetUrl.port ? parseInt(targetUrl.port, 10) : 443,
+          method: 'POST',
+          path: targetUrl.pathname + targetUrl.search,
+          headers,
+          timeout: 5000,
+        },
+        (res) => {
+          let text = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            if (text.length < 4096) {
+              text += chunk;
+            }
+          });
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode || 0,
+              text: text.slice(0, 4096),
+            });
+          });
+        }
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error('TIMEOUT'));
+      });
+
+      req.on('error', (err) => {
+        reject(err);
+      });
+
+      req.write(rawBody);
+      req.end();
     });
 
-    clearTimeout(timeoutId);
-    responseStatus = res.status;
-    const text = await res.text();
-    responseBody = text.slice(0, 4096); // Cap de 4096 bytes
+    responseStatus = postResult.status;
+    responseBody = postResult.text;
 
     if (responseStatus >= 200 && responseStatus < 300) {
       outcome = 'success';
@@ -178,9 +216,8 @@ export async function dispatchWebhookJob(
       errorCode = `HTTP_${responseStatus}`;
     }
   } catch (err: any) {
-    clearTimeout(timeoutId);
     outcome = 'failed';
-    if (err.name === 'AbortError') {
+    if (err.message === 'TIMEOUT' || err.name === 'AbortError') {
       responseStatus = 504;
       responseBody = 'Timeout de conexão (limite de 5000ms excedido)';
       errorCode = 'TIMEOUT';

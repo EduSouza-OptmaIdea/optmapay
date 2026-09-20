@@ -2,8 +2,6 @@
 /// <reference path="../deno.d.ts" />
 import { validateDenoSsrf } from './webhookSecurity.ts';
 
-const DEFAULT_MASTER_KEY = 'optmapay_webhook_master_key_default_sandbox_secure_token_minimum_32_bytes_2026';
-
 async function hmacSha256(keyStr: string, messageStr: string): Promise<Uint8Array> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(keyStr);
@@ -37,7 +35,10 @@ export async function deriveSecretDeno(
   salt?: string,
   version: number = 1
 ): Promise<{ publicSecret: string; salt: string; version: number }> {
-  const masterKey = Deno.env.get('OPTMAPAY_WEBHOOK_MASTER_KEY') || DEFAULT_MASTER_KEY;
+  const masterKey = Deno.env.get('OPTMAPAY_WEBHOOK_MASTER_KEY');
+  if (!masterKey || masterKey.trim() === '') {
+    throw new Error('CONFIG_ERROR: OPTMAPAY_WEBHOOK_MASTER_KEY não configurada no ambiente Deno.');
+  }
   const effectiveSalt = salt || bufferToHex(crypto.getRandomValues(new Uint8Array(16)));
   const msg = `optmapay-webhook:${webhookConfigId}:v${version}:${effectiveSalt}`;
 

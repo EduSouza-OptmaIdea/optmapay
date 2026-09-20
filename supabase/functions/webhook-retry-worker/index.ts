@@ -16,27 +16,41 @@ serve(async (req: Request) => {
   }
 
   try {
+    // 1. Validação estrita de autenticação interna (OPTMAPAY_INTERNAL_DISPATCH_TOKEN)
+    const expectedToken = Deno.env.get("OPTMAPAY_INTERNAL_DISPATCH_TOKEN");
+    const incomingToken =
+      req.headers.get("x-optmapay-internal-token") ||
+      (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+
+    if (!expectedToken || !incomingToken || incomingToken !== expectedToken) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Token interno de dispatch ausente ou inválido." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const nowIso = new Date().toISOString();
+    const workerId = `worker-${crypto.randomUUID()}`;
 
-    // Busca até 50 jobs elegíveis para retry/entrega
-    const { data: eligibleJobs, error } = await adminClient
-      .from("webhook_delivery_jobs")
-      .select("id, status, attempt_count, next_attempt_at")
-      .in("status", ["pending", "retry"])
-      .lte("next_attempt_at", nowIso)
-      .order("next_attempt_at", { ascending: true })
-      .limit(50);
+    // 2. Claim atômico usando RPC com FOR UPDATE SKIP LOCKED
+    const { data: claimedJobs, error: claimErr } = await adminClient.rpc(
+      "claim_webhook_delivery_jobs",
+      {
+        p_limit: 50,
+        p_locked_by: workerId,
+      }
+    );
 
-    if (error) {
-      throw new Error(`Erro ao buscar jobs para retry: ${error.message}`);
+    if (claimErr) {
+      throw new Error(`Erro ao realizar claim atômico de jobs: ${claimErr.message}`);
     }
 
     const results = [];
-    for (const job of eligibleJobs || []) {
+    for (const job of claimedJobs || []) {
       try {
         const dispatchRes = await processJobDispatch(adminClient, job.id, false);
         results.push({ jobId: job.id, success: dispatchRes.success, status: dispatchRes.status });
@@ -47,6 +61,7 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
+        workerId,
         processedCount: results.length,
         results,
         executedAt: nowIso,

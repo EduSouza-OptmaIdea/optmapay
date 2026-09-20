@@ -110,6 +110,14 @@ export async function validateDenoSsrf(urlString: string): Promise<SsrfCheckResu
     return { valid: false, reason: `Falha na resolução DNS de "${hostname}": ${dnsErr.message}` };
   }
 
+  // Se nenhum IP foi resolvido, fail-closed obrigatório
+  if (resolvedIps.length === 0) {
+    return {
+      valid: false,
+      reason: `Nenhum endereço IP (A/AAAA) pôde ser resolvido para o host "${hostname}". Bloqueado fail-closed.`,
+    };
+  }
+
   for (const ip of resolvedIps) {
     if (ip.includes(':')) {
       if (isBlockedIpv6(ip)) {
