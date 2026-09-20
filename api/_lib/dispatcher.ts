@@ -6,7 +6,7 @@ import { deriveWebhookSecret, signWebhookPayload } from './webhookSigner';
 
 export interface DispatchJobResult {
   jobId: string;
-  status: 'delivered' | 'retry' | 'dead';
+  status: 'delivered' | 'retry' | 'dead' | 'delivering';
   httpStatus?: number;
   deliveryId: string;
   attemptNo: number;
@@ -29,26 +29,25 @@ export async function dispatchWebhookJob(
   const deliveryId = crypto.randomUUID();
   const requestTimestamp = new Date();
 
-  // 1. Carrega o job e valida sua existência
-  const { data: job, error: jobErr } = await supabase
-    .from('webhook_delivery_jobs')
-    .select('*')
-    .eq('id', jobId)
-    .single();
+  // 1. Claim atômico do job antes de qualquer envio
+  const { data: claimedRows, error: claimErr } = await supabase.rpc('claim_single_webhook_job', {
+    p_job_id: jobId,
+    p_locked_by: `dispatcher-${deliveryId}`,
+    p_force_retry: isManualRetry,
+  });
 
-  if (jobErr || !job) {
-    throw new Error(`Job de entrega de webhook não encontrado (id: ${jobId}).`);
-  }
-
-  // Se já foi entregue com sucesso e não for retry manual, não redespacha
-  if (job.status === 'delivered' && !isManualRetry) {
+  if (claimErr || !claimedRows || claimedRows.length === 0) {
+    // Não conseguiu claim (outro worker já capturou ou já foi entregue)
     return {
       jobId,
-      status: 'delivered',
+      status: 'delivering',
       deliveryId,
-      attemptNo: job.attempt_count,
+      attemptNo: 0,
+      errorMessage: 'Job não elegível para envio ou já em processamento concorrente.',
     };
   }
+
+  const job = claimedRows[0];
 
   // 2. Carrega o evento e a configuração do webhook
   const [eventRes, configRes] = await Promise.all([
@@ -65,19 +64,7 @@ export async function dispatchWebhookJob(
 
   const event = eventRes.data;
   const config = configRes.data;
-
   const attemptNo = job.attempt_count + 1;
-
-  // Marca status como delivering e locked_at
-  await supabase
-    .from('webhook_delivery_jobs')
-    .update({
-      status: 'delivering',
-      locked_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', jobId);
-
   const startTime = Date.now();
 
   // 3. Validação SSRF server-side com resolução DNS

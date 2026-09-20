@@ -1,7 +1,7 @@
 import { authenticateApiKey } from '../../../_lib/apiKeyAuth';
-import { processIdempotency, completeIdempotency } from '../../../_lib/idempotency';
+import { hashRequestBody } from '../../../_lib/idempotency';
 import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
-import { validateCardBin, calculateCardFee } from '../../../../src/lib/cardRules';
+import { validateCardBin } from '../../../../src/lib/cardRules';
 import { dispatchEventJobs } from '../../../_lib/dispatcher';
 import { sendError, sendSuccess } from '../../../_lib/http';
 
@@ -14,22 +14,18 @@ export default async function handler(req: any, res: any) {
   const auth = await authenticateApiKey(req, res, 'cards:charge');
   if (!auth) return;
 
-  // 2. Idempotência server-side obrigatória
-  const idempotencyKey = req.headers['idempotency-key'] as string;
-  const idemp = await processIdempotency(
-    res,
-    auth.accountId,
-    auth.key.id,
-    'cards:charge',
-    idempotencyKey,
-    req.body
-  );
-
-  if (idemp.action === 'error') return;
-
-  if (idemp.action === 'return_cached' && idemp.cachedResponse) {
-    return res.status(idemp.cachedResponse.status).json(idemp.cachedResponse.body);
+  // 2. Validação estrita de Idempotência (Validação de formato e cálculo canônico de hash na camada Node)
+  const rawIdempotencyKey = req.headers['idempotency-key'] as string;
+  if (!rawIdempotencyKey || typeof rawIdempotencyKey !== 'string' || !rawIdempotencyKey.trim()) {
+    return sendError(res, 400, 'MISSING_IDEMPOTENCY_KEY', 'Header Idempotency-Key é obrigatório para operações de cobrança.');
   }
+
+  const idempotencyKey = rawIdempotencyKey.trim();
+  if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
+    return sendError(res, 400, 'INVALID_IDEMPOTENCY_KEY', 'Idempotency-Key deve conter entre 1 e 128 caracteres.');
+  }
+
+  const requestHash = hashRequestBody(req.body);
 
   const {
     cardNumber,
@@ -97,10 +93,10 @@ export default async function handler(req: any, res: any) {
 
   // 4. Execução do motor bancário real via RPC process_card_payment (taxas e idempotência 100% atômicas no PostgreSQL)
   const supabase = getSupabaseAdmin();
-  const requestHash = idemp.requestHash || null;
 
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('process_card_payment', {
     p_merchant_account_id: auth.accountId,
+    p_api_key_id: auth.key.id,
     p_card_number: cleanNumber,
     p_cardholder_name: cardholderName ? String(cardholderName).trim().toUpperCase() : 'CLIENTE SANDBOX',
     p_validade: String(expirationDate).trim(),
@@ -111,7 +107,7 @@ export default async function handler(req: any, res: any) {
     p_plan: settlementPlan || 'standard',
     p_description: description ? String(description).trim() : `Venda Pedido ${orderId}`,
     p_external_reference: orderId,
-    p_idempotency_key: idempotencyKey || null,
+    p_idempotency_key: idempotencyKey,
     p_request_hash: requestHash,
   });
 
@@ -119,6 +115,9 @@ export default async function handler(req: any, res: any) {
     const msg = rpcErr.message || '';
     if (msg.includes('IDEMPOTENCY_KEY_REUSED')) {
       return sendError(res, 409, 'IDEMPOTENCY_KEY_REUSED', 'Esta Idempotency-Key já foi utilizada com parâmetros de requisição diferentes.');
+    }
+    if (msg.includes('IDEMPOTENCY_IN_PROGRESS')) {
+      return sendError(res, 409, 'IDEMPOTENCY_IN_PROGRESS', 'Uma requisição com esta Idempotency-Key já está em andamento.');
     }
     return sendError(
       res,
@@ -142,46 +141,51 @@ export default async function handler(req: any, res: any) {
   }
 
   // Se o resultado veio do cache de idempotência transacional persistido no PostgreSQL
-  if (rpcResult.from_cache && rpcResult.cached_response) {
-    return res.status(200).json(rpcResult.cached_response);
+  if (rpcResult.from_cache) {
+    return res.status(200).json(rpcResult);
   }
 
-  // 5. Resposta canônica estruturada autoritativa
+  // 5. Resposta canônica estruturada autoritativa (Contrato alinhado)
   const responseData = {
     success: true,
     status: 'approved',
     message: 'Transação autorizada com sucesso no OptmaPay Sandbox!',
     data: {
-      transactionId: rpcResult.transaction_in_id,
+      transactionId: rpcResult.transaction_in_id || rpcResult.transactionId,
       orderId: orderId,
-      amountGross: rpcResult.amount_gross || numAmount,
-      feePercent: rpcResult.fee_percent,
-      feeAmount: rpcResult.fee_amount,
-      amountNet: rpcResult.amount_net,
+      // Contrato alinhado: gross_amount/net_amount/plan vs amount_gross/amount_net/settlement_plan
+      amountGross: Number(rpcResult.amount_gross || rpcResult.gross_amount || numAmount),
+      grossAmount: Number(rpcResult.amount_gross || rpcResult.gross_amount || numAmount),
+      amount_gross: Number(rpcResult.amount_gross || rpcResult.gross_amount || numAmount),
+      gross_amount: Number(rpcResult.amount_gross || rpcResult.gross_amount || numAmount),
+
+      feePercent: Number(rpcResult.fee_percent ?? rpcResult.feePercent),
+      fee_percent: Number(rpcResult.fee_percent ?? rpcResult.feePercent),
+
+      feeAmount: Number(rpcResult.fee_amount ?? rpcResult.feeAmount),
+      fee_amount: Number(rpcResult.fee_amount ?? rpcResult.feeAmount),
+
+      amountNet: Number(rpcResult.amount_net || rpcResult.net_amount),
+      netAmount: Number(rpcResult.amount_net || rpcResult.net_amount),
+      amount_net: Number(rpcResult.amount_net || rpcResult.net_amount),
+      net_amount: Number(rpcResult.amount_net || rpcResult.net_amount),
+
       installments: numInstallments,
       tipo,
-      settlementPlan: rpcResult.settlement_plan || settlementPlan,
-      cardMasked: rpcResult.card_masked,
+      settlementPlan: rpcResult.settlement_plan || rpcResult.plan || settlementPlan,
+      plan: rpcResult.settlement_plan || rpcResult.plan || settlementPlan,
+      settlement_plan: rpcResult.settlement_plan || rpcResult.plan || settlementPlan,
+
+      cardMasked: rpcResult.card_masked || rpcResult.cardMasked,
       cardBrand: 'OptmaCard',
       cardholderName: cardholderName || 'CLIENTE SANDBOX',
-      authorizationCode: rpcResult.authorization_code,
+      authorizationCode: rpcResult.authorization_code || rpcResult.authorizationCode,
       nsu: rpcResult.nsu,
       tid: rpcResult.tid,
-      webhookEventId: rpcResult.webhook_event_id,
-      createdAt: new Date().toISOString(),
+      webhookEventId: rpcResult.webhook_event_id || rpcResult.webhookEventId,
+      createdAt: rpcResult.created_at || new Date().toISOString(),
     },
   };
-
-  // Se havia registro intermediário pelo middleware Node, completa para compatibilidade
-  if (idemp.recordId) {
-    await completeIdempotency(
-      idemp.recordId,
-      200,
-      responseData,
-      'transaction',
-      rpcResult.transaction_in_id
-    );
-  }
 
   // 6. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL
   if (rpcResult.webhook_event_id) {

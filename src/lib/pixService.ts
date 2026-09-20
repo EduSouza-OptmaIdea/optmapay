@@ -166,6 +166,7 @@ export interface PixTransferInput {
   amount: number;
   description?: string;
   externalReference?: string;
+  idempotencyKey?: string;
 }
 
 export interface PixTransferResult {
@@ -189,7 +190,7 @@ export interface PixTransferResult {
  * Uses PostgreSQL RPC transfer_pix to guarantee atomic multi-account execution without RLS 403 Forbidden.
  */
 export async function executePixTransfer(input: PixTransferInput): Promise<PixTransferResult> {
-  const { senderAccountId, destPixKeyOrPayload, amount, description, externalReference } = input;
+  const { senderAccountId, destPixKeyOrPayload, amount, description, externalReference, idempotencyKey: providedIdempKey } = input;
 
   if (!senderAccountId) {
     throw new Error('Conta pagadora não informada.');
@@ -230,15 +231,15 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   // Chave a ser enviada para busca no banco (se tiver accId no payload, usa accId como prioridade de busca)
   const lookupKey = parsed.accId || targetKey;
 
-  // 2. Idempotency Key para garantir mutação única server-side
-  const idempotencyKey = `pix-${senderAccountId}-${finalRef}`;
+  // 2. Chave de idempotência persistente que sobrevive ao retry
+  const idempotencyKey = providedIdempKey || `pix-${senderAccountId}-${finalRef}`;
 
-  // 3. Invoca a Edge Function pix-transfer (que executa a RPC e orquestra o outbox server-side de forma atômica)
+  // 3. Invoca a Edge Function pix-transfer
   let fnResult: any = null;
   let fnErr: any = null;
 
-  try {
-    const res = await supabase.functions.invoke('pix-transfer', {
+  async function callPixTransferFunction() {
+    return await supabase.functions.invoke('pix-transfer', {
       body: {
         senderAccountId,
         destPixKeyOrPayload: lookupKey,
@@ -248,10 +249,28 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
         idempotencyKey,
       },
     });
+  }
+
+  try {
+    const res = await callPixTransferFunction();
     fnResult = res.data;
     fnErr = res.error;
   } catch (e: any) {
     fnErr = e;
+  }
+
+  // Se falhou por erro transitório de rede ou timeout, tenta repetir uma vez com a MESMA idempotencyKey
+  // O motor PostgreSQL retornará o cache persistido sem duplicar movimentação
+  if (fnErr && !fnResult) {
+    try {
+      const retryRes = await callPixTransferFunction();
+      if (retryRes.data && retryRes.data.success) {
+        fnResult = retryRes.data;
+        fnErr = null;
+      }
+    } catch {
+      // Mantém o erro original
+    }
   }
 
   if (!fnErr && fnResult && fnResult.success) {
@@ -269,33 +288,6 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
       transactionDate: fnResult.transactionDate || new Date().toISOString(),
       externalReference: finalRef,
       webhooksDispatched: fnResult.webhooksDispatched || (fnResult.webhookEventId ? 1 : 0),
-    };
-  }
-
-  // Se houve erro de comunicação/timeout, consulta se a transação com a mesma chave/referência já foi gravada
-  // NUNCA executa uma segunda mutação ("por garantia")
-  const { data: existingTx } = await supabase
-    .from('transactions')
-    .select('id, amount, description, created_at, account_id')
-    .eq('account_id', senderAccountId)
-    .eq('type', 'pix_out')
-    .ilike('description', `%${finalRef}%`)
-    .maybeSingle();
-
-  if (existingTx) {
-    return {
-      success: true,
-      message: `Transferência Pix confirmada via conciliação!`,
-      amount,
-      senderName: sender.name,
-      receiverName: targetKey,
-      senderPixKey: sender.pix_key,
-      receiverPixKey: targetKey,
-      senderBalanceAfter: senderBalance - amount,
-      transactionOutId: existingTx.id,
-      transactionDate: existingTx.created_at,
-      externalReference: finalRef,
-      webhooksDispatched: 1,
     };
   }
 

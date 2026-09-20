@@ -68,21 +68,28 @@ serve(async (req: Request) => {
       });
     }
 
-    // Calcula request_hash seguro para idempotência
+    // Calcula request_hash seguro para idempotência incluindo destino, valor, descrição e referência
     let requestHash: string | null = null;
     if (idempotencyKey) {
-      const payloadStr = JSON.stringify({ senderAccountId, destPixKeyOrPayload, amount: Number(amount) });
+      const payloadStr = JSON.stringify({
+        senderAccountId,
+        destPixKeyOrPayload: String(destPixKeyOrPayload).trim().toLowerCase(),
+        amount: Number(amount),
+        description: description || "Transferência Pix Sandbox",
+        externalReference: externalReference || null,
+      });
       const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payloadStr));
       requestHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
     }
 
-    // 1. Invoca a RPC atômica transfer_pix com suporte a idempotência transacional no PostgreSQL
+    // 1. Invoca a RPC atômica transfer_pix com actor_user_id do usuário validado e idempotência em SQL
     const { data: rpcResult, error: rpcErr } = await adminClient.rpc("transfer_pix", {
       p_sender_account_id: senderAccountId,
       p_receiver_pix_key: destPixKeyOrPayload,
       p_amount: Number(amount),
       p_description: description || "Transferência Pix Sandbox",
       p_external_reference: externalReference || null,
+      p_actor_user_id: user.id,
       p_idempotency_key: idempotencyKey || null,
       p_request_hash: requestHash,
     });

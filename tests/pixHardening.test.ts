@@ -38,6 +38,7 @@ describe('Pix Hardening: Single Mutation & Resilient Retry', () => {
     };
 
     let rpcCallCount = 0;
+    let invokeCalls = 0;
 
     vi.mocked(supabase.from).mockImplementation((table: string) => {
       if (table === 'accounts') {
@@ -49,38 +50,32 @@ describe('Pix Hardening: Single Mutation & Resilient Retry', () => {
           }),
         } as any;
       }
-
-      if (table === 'transactions') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                ilike: vi.fn().mockReturnValue({
-                  // Simula que a transação já foi processada e gravada no banco pelo servidor
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: {
-                      id: 'txn-existing-12345',
-                      amount: 100.0,
-                      description: 'Transferência Pix Sandbox REF-PIX-RETRY-999',
-                      created_at: new Date().toISOString(),
-                      account_id: senderAccount.id,
-                    },
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
-          }),
-        } as any;
-      }
-
       return {} as any;
     });
 
-    // Simula que a chamada de rede à Edge Function falhou (timeout ou perda de conexão na resposta)
-    vi.mocked(supabase.functions.invoke).mockRejectedValue(new Error('Network timeout / connection lost'));
+    // 1ª chamada falha (resposta de rede perdida).
+    // 2ª chamada (retry automático com mesma chave) devolve a resposta cacheada pelo PostgreSQL.
+    vi.mocked(supabase.functions.invoke).mockImplementation(async () => {
+      invokeCalls++;
+      if (invokeCalls === 1) {
+        throw new Error('Network timeout / connection lost');
+      }
+      return {
+        data: {
+          success: true,
+          from_cache: true,
+          transactionOutId: 'txn-pix-cached-12345',
+          transactionInId: 'txn-pix-in-67890',
+          amount: 100.0,
+          senderName: senderAccount.name,
+          receiverName: 'Destinatário Pix',
+          message: 'Transferência Pix concluída com sucesso!',
+        },
+        error: null,
+      } as any;
+    });
 
-    // Spy na RPC transfer_pix para garantir que o cliente NÃO executa uma segunda mutação por fallback
+    // Spy na RPC transfer_pix para garantir que o cliente NUNCA executa fallback direto no banco
     vi.mocked(supabase.rpc).mockImplementation(async (fnName: string) => {
       if (fnName === 'transfer_pix') {
         rpcCallCount++;
@@ -93,13 +88,14 @@ describe('Pix Hardening: Single Mutation & Resilient Retry', () => {
 
     // Validações
     expect(result.success).toBe(true);
-    expect(result.transactionOutId).toBe('txn-existing-12345');
+    expect(result.transactionOutId).toBe('txn-pix-cached-12345');
+    // Duas tentativas HTTP foram executadas com a mesma chave de idempotência
+    expect(invokeCalls).toBe(2);
     // A RPC direta transfer_pix NUNCA deve ser chamada pelo browser como fallback
     expect(rpcCallCount).toBe(0);
-    expect(result.message).toContain('Transferência Pix confirmada via conciliação');
   });
 
-  it('deve falhar de forma segura quando a Edge Function falhar e a transação não existir', async () => {
+  it('deve falhar de forma segura quando a Edge Function falhar e não recuperar no retry', async () => {
     const input = {
       senderAccountId: senderAccount.id,
       destPixKeyOrPayload: 'destino@optmapay.com',
@@ -116,19 +112,6 @@ describe('Pix Hardening: Single Mutation & Resilient Retry', () => {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               single: vi.fn().mockResolvedValue({ data: senderAccount, error: null }),
-            }),
-          }),
-        } as any;
-      }
-      if (table === 'transactions') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                ilike: vi.fn().mockReturnValue({
-                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-                }),
-              }),
             }),
           }),
         } as any;

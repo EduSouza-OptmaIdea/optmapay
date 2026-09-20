@@ -1,0 +1,44 @@
+name: OptmaPay Sandbox Quality Gates
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Test Suite (Vitest)
+        run: npm run test:run
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Strict API Typecheck
+        run: npm run typecheck:api
+
+      - name: Run Deno Check on Edge Functions
+        run: npm run check:edge
+
+      - name: Run Production Bundle Build
+        run: npm run build

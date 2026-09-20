@@ -10,7 +10,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck:api": "tsc --project tsconfig.api.json",
-    "check:edge": "npx deno check supabase/functions/webhook-dispatcher/index.ts supabase/functions/webhook-config-manager/index.ts supabase/functions/webhook-retry-worker/index.ts supabase/functions/pix-transfer/index.ts",
+    "check:edge": "npx deno check supabase/functions/webhook-dispatcher/index.ts supabase/functions/webhook-config-manager/index.ts supabase/functions/webhook-retry-worker/index.ts supabase/functions/pix-transfer/index.ts supabase/functions/retention-worker/index.ts",
     "preview": "vite preview"
   },
   "dependencies": {

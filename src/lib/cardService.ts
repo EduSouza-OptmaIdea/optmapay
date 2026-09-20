@@ -119,12 +119,10 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
 
   const cleanNumber = cardNumber.replace(/\D/g, '');
 
-  // 3. Cálculo das Taxas MDR com o Plano Efetivo
-  const feeCalc = calculateCardFee(amount, tipo, installments, effectivePlan);
-
-  // 4. Chamada à RPC PostgreSQL no Supabase
+  // 3. Chamada à RPC PostgreSQL autoritativa no Supabase
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('process_card_payment', {
     p_merchant_account_id: merchantAccountId,
+    p_card_id: cardId || null,
     p_card_number: cleanNumber,
     p_cardholder_name: cardholderName ? cardholderName.trim().toUpperCase() : 'CLIENTE FICTÍCIO',
     p_validade: validade,
@@ -133,13 +131,8 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
     p_tipo: tipo,
     p_installments: installments,
     p_plan: effectivePlan,
-    p_fee_percent: feeCalc.feePercent,
-    p_fee_amount: feeCalc.feeAmount,
-    p_net_amount: feeCalc.netAmount,
     p_description: description,
     p_external_reference: orderId || null,
-    p_pin: pin || null,
-    p_card_id: cardId || null,
   });
 
   if (rpcErr) {
@@ -150,7 +143,7 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
     throw new Error(rpcResult?.message || 'Falha ao autorizar pagamento com cartão.');
   }
 
-  // 4. A criação do evento card.paid e a geração dos delivery jobs agora ocorrem
+  // 4. A criação do evento card.paid e a geração dos delivery jobs ocorrem
   // atomicamente no PostgreSQL dentro da RPC process_card_payment (Outbox Pattern).
   const webhooksDispatched = rpcResult.webhook_event_id ? 1 : 0;
 
@@ -159,16 +152,21 @@ export async function executeCardPayment(input: CardPaymentInput): Promise<CardP
   const authCode = rpcResult.authorization_code || rpcResult.auth_code;
   const cardMasked = rpcResult.card_masked || rpcResult.masked_card || `•••• ${cleanNumber.slice(-4)}`;
 
+  // Exibe valores autoritativos calculados no banco de dados (sem recálculo no cliente)
+  const authoritativeFeePercent = Number(rpcResult.fee_percent ?? rpcResult.feePercent ?? 0);
+  const authoritativeFeeAmount = Number(rpcResult.fee_amount ?? rpcResult.feeAmount ?? 0);
+  const authoritativeNetAmount = Number(rpcResult.amount_net ?? rpcResult.net_amount ?? (amount - authoritativeFeeAmount));
+
   return {
     success: true,
     status: rpcResult.status === 'scheduled' ? 'declined' : 'approved',
     message: rpcResult.message || 'Transação aprovada com sucesso!',
-    amountGross: amount,
-    feePercent: feeCalc.feePercent,
-    feeAmount: feeCalc.feeAmount,
-    amountNet: feeCalc.netAmount,
-    installments: feeCalc.totalInstallments,
-    plan,
+    amountGross: Number(rpcResult.amount_gross ?? rpcResult.gross_amount ?? amount),
+    feePercent: authoritativeFeePercent,
+    feeAmount: authoritativeFeeAmount,
+    amountNet: authoritativeNetAmount,
+    installments: Number(rpcResult.installments || installments),
+    plan: rpcResult.settlement_plan || rpcResult.plan || plan,
     tipo,
     cardId: rpcResult.card_id,
     cardBrand: rpcResult.card_brand || 'OptmaCard',

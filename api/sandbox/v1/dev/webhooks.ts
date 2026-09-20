@@ -17,6 +17,35 @@ async function getAuthenticatedUser(req: any) {
 }
 
 export default async function handler(req: any, res: any) {
+  const action = (req.query?.action as string) || (req.body?.action as string) || 'list';
+
+  // 0. INTERNAL-DISPATCH: Rota interna segura consumida por Edge Functions via token interno
+  if (action === 'internal-dispatch' && req.method === 'POST') {
+    const expectedToken = process.env.OPTMAPAY_INTERNAL_DISPATCH_TOKEN;
+    const internalToken =
+      req.headers['x-optmapay-internal-token'] ||
+      (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+
+    if (!expectedToken || !internalToken || internalToken !== expectedToken) {
+      return sendError(res, 401, 'UNAUTHORIZED', 'Token interno de dispatch ausente ou inválido.');
+    }
+
+    const { jobId, isManualRetry } = req.body || {};
+    if (!jobId) {
+      return sendError(res, 400, 'MISSING_JOB_ID', 'jobId é obrigatório para disparo interno.');
+    }
+
+    try {
+      const dispatchResult = await dispatchWebhookJob(jobId, Boolean(isManualRetry));
+      return sendSuccess(res, 200, {
+        success: dispatchResult.status === 'delivered',
+        dispatchResult,
+      });
+    } catch (err: any) {
+      return sendError(res, 500, 'DISPATCH_ERROR', err.message || 'Erro ao processar disparo interno.');
+    }
+  }
+
   const authInfo = await getAuthenticatedUser(req);
   if (!authInfo) {
     return sendError(res, 401, 'UNAUTHORIZED', 'Sessão de usuário inválida ou expirada.');
@@ -25,7 +54,6 @@ export default async function handler(req: any, res: any) {
   const { user, token } = authInfo;
   const adminClient = getSupabaseAdmin();
   const userClient = getSupabaseUserClient(token);
-  const action = (req.query?.action as string) || (req.body?.action as string) || 'list';
 
   // 1. LIST: Listar webhooks de uma conta (com validação estrita de ownership)
   if (req.method === 'GET' || action === 'list') {
