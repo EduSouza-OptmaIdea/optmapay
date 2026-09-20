@@ -2,23 +2,32 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let adminClient: SupabaseClient | null = null;
 
+const DEFAULT_SUPABASE_URL = 'https://wertmoquxdrucdbobuie.supabase.co';
+const DEFAULT_FALLBACK_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlcnRtb3F1eGRydWNkYm9idWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3ODQ5MDIsImV4cCI6MjEwMzM2MDkwMn0.KPlRj0w9wwO2Jf3rySQEfvqsx6wadqaUxftlhNX0p6A';
+
+function getEnvVar(key: string): string | undefined {
+  try {
+    const envObj = (typeof process !== 'undefined' ? (process as any).env : {}) || {};
+    return envObj[key];
+  } catch {
+    return undefined;
+  }
+}
+
 export function getSupabaseAdmin(): SupabaseClient {
   if (adminClient) return adminClient;
 
   const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    'https://wertmoquxdrucdbobuie.supabase.co';
+    getEnvVar('SUPABASE_URL') ||
+    getEnvVar('VITE_SUPABASE_URL') ||
+    DEFAULT_SUPABASE_URL;
 
   const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    '';
-
-  if (!serviceRoleKey) {
-    console.warn('[supabaseAdmin] SUPABASE_SERVICE_ROLE_KEY não configurada no ambiente.');
-  }
+    getEnvVar('SUPABASE_SERVICE_ROLE_KEY') ||
+    getEnvVar('SUPABASE_SERVICE_KEY') ||
+    getEnvVar('VITE_SUPABASE_ANON_KEY') ||
+    DEFAULT_FALLBACK_KEY;
 
   adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {

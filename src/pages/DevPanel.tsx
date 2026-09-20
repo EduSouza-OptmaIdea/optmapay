@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxApiKey, SandboxWebhookConfig, SandboxWebhookLog } from '../types/sandbox';
@@ -59,8 +59,8 @@ export const DevPanel: React.FC = () => {
     return session?.access_token || null;
   };
 
-  const fetchDevData = async () => {
-    if (!activeAccount) return;
+  const fetchDevData = useCallback(async () => {
+    if (!activeAccount?.id) return;
 
     // 1. Fetch API Keys via endpoint seguro
     setLoadingKeys(true);
@@ -107,11 +107,11 @@ export const DevPanel: React.FC = () => {
     }
     const { data: lg } = await logQuery.order('delivered_at', { ascending: false }).limit(30);
     setLogs((lg || []) as SandboxWebhookLog[]);
-  };
+  }, [activeAccount?.id, activeAccount?.user_id]);
 
   useEffect(() => {
     fetchDevData();
-  }, [activeAccount]);
+  }, [fetchDevData]);
 
   // Criação de Endpoint Webhook via backend com segredo derivado
   const handleAddWebhook = async (e: React.FormEvent) => {
