@@ -44,9 +44,17 @@ export default async function handler(req: any, res: any) {
     settlementPlan = 'standard',
   } = req.body || {};
 
-  // 3. Validação de dados de entrada
+  // 3. Validação rigorosa de dados de entrada
   if (!orderId || typeof orderId !== 'string' || !orderId.trim()) {
     return sendError(res, 400, 'MISSING_ORDER_ID', 'O campo orderId é obrigatório para conciliação.');
+  }
+
+  if (!expirationDate || typeof expirationDate !== 'string' || !expirationDate.trim()) {
+    return sendError(res, 400, 'MISSING_EXPIRATION_DATE', 'A data de expiração do cartão (expirationDate no formato MM/AA) é obrigatória.');
+  }
+
+  if (!cvv || typeof cvv !== 'string' || !cvv.trim() || !/^\d{3,4}$/.test(cvv.trim())) {
+    return sendError(res, 400, 'INVALID_CVV', 'O código de segurança CVV é obrigatório e deve conter 3 ou 4 dígitos numéricos.');
   }
 
   const cleanNumber = (cardNumber || '').replace(/\D/g, '');
@@ -87,47 +95,58 @@ export default async function handler(req: any, res: any) {
     return sendError(res, 400, 'DESCRIPTION_TOO_LONG', 'A descrição deve ter no máximo 500 caracteres.');
   }
 
-  // 4. Cálculo das taxas MDR server-side
-  const feeCalc = calculateCardFee(numAmount, tipo, numInstallments, settlementPlan);
-
-  // 5. Execução do motor bancário real via RPC process_card_payment
+  // 4. Execução do motor bancário real via RPC process_card_payment (taxas e idempotência 100% atômicas no PostgreSQL)
   const supabase = getSupabaseAdmin();
+  const requestHash = idemp.requestHash || null;
+
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('process_card_payment', {
     p_merchant_account_id: auth.accountId,
     p_card_number: cleanNumber,
     p_cardholder_name: cardholderName ? String(cardholderName).trim().toUpperCase() : 'CLIENTE SANDBOX',
-    p_validade: expirationDate ? String(expirationDate).trim() : '12/29',
-    p_cvv: cvv ? String(cvv).trim() : '123',
+    p_validade: String(expirationDate).trim(),
+    p_cvv: String(cvv).trim(),
     p_amount: numAmount,
     p_tipo: tipo,
     p_installments: numInstallments,
-    p_plan: feeCalc.plan,
-    p_fee_percent: feeCalc.feePercent,
-    p_fee_amount: feeCalc.feeAmount,
-    p_net_amount: feeCalc.netAmount,
+    p_plan: settlementPlan || 'standard',
     p_description: description ? String(description).trim() : `Venda Pedido ${orderId}`,
     p_external_reference: orderId,
+    p_idempotency_key: idempotencyKey || null,
+    p_request_hash: requestHash,
   });
 
   if (rpcErr) {
+    const msg = rpcErr.message || '';
+    if (msg.includes('IDEMPOTENCY_KEY_REUSED')) {
+      return sendError(res, 409, 'IDEMPOTENCY_KEY_REUSED', 'Esta Idempotency-Key já foi utilizada com parâmetros de requisição diferentes.');
+    }
     return sendError(
       res,
       400,
       'PAYMENT_PROCESSING_FAILED',
-      rpcErr.message || 'Erro ao processar cobrança com cartão no banco de dados.'
+      msg || 'Erro ao processar cobrança com cartão no banco de dados.'
     );
   }
 
   if (!rpcResult || !rpcResult.success) {
+    const msg = rpcResult?.message || '';
+    if (msg.includes('IDEMPOTENCY_KEY_REUSED') || rpcResult?.code === 'IDEMPOTENCY_KEY_REUSED') {
+      return sendError(res, 409, 'IDEMPOTENCY_KEY_REUSED', 'Esta Idempotency-Key já foi utilizada com parâmetros de requisição diferentes.');
+    }
     return sendError(
       res,
       422,
-      'TRANSACTION_DECLINED',
-      rpcResult?.message || 'Transação com cartão não autorizada.'
+      rpcResult?.code || 'TRANSACTION_DECLINED',
+      msg || 'Transação com cartão não autorizada.'
     );
   }
 
-  // 6. Resposta canônica estruturada
+  // Se o resultado veio do cache de idempotência transacional persistido no PostgreSQL
+  if (rpcResult.from_cache && rpcResult.cached_response) {
+    return res.status(200).json(rpcResult.cached_response);
+  }
+
+  // 5. Resposta canônica estruturada autoritativa
   const responseData = {
     success: true,
     status: 'approved',
@@ -135,13 +154,13 @@ export default async function handler(req: any, res: any) {
     data: {
       transactionId: rpcResult.transaction_in_id,
       orderId: orderId,
-      amountGross: numAmount,
-      feePercent: feeCalc.feePercent,
-      feeAmount: feeCalc.feeAmount,
-      amountNet: feeCalc.netAmount,
+      amountGross: rpcResult.amount_gross || numAmount,
+      feePercent: rpcResult.fee_percent,
+      feeAmount: rpcResult.fee_amount,
+      amountNet: rpcResult.amount_net,
       installments: numInstallments,
       tipo,
-      settlementPlan: rpcResult.settlement_plan || feeCalc.plan,
+      settlementPlan: rpcResult.settlement_plan || settlementPlan,
       cardMasked: rpcResult.card_masked,
       cardBrand: 'OptmaCard',
       cardholderName: cardholderName || 'CLIENTE SANDBOX',
@@ -153,7 +172,7 @@ export default async function handler(req: any, res: any) {
     },
   };
 
-  // 7. Persistência na tabela de idempotência
+  // Se havia registro intermediário pelo middleware Node, completa para compatibilidade
   if (idemp.recordId) {
     await completeIdempotency(
       idemp.recordId,
@@ -164,7 +183,7 @@ export default async function handler(req: any, res: any) {
     );
   }
 
-  // 8. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL
+  // 6. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL
   if (rpcResult.webhook_event_id) {
     dispatchEventJobs(rpcResult.webhook_event_id).catch(() => {});
   }

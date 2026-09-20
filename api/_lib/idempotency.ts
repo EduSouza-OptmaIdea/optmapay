@@ -5,6 +5,7 @@ import { sendError } from './http';
 export interface IdempotencyCheckResult {
   action: 'proceed' | 'return_cached' | 'error';
   recordId?: string;
+  requestHash?: string;
   cachedResponse?: {
     status: number;
     body: any;
@@ -80,6 +81,7 @@ export async function processIdempotency(
     if (existing.status === 'completed') {
       return {
         action: 'return_cached',
+        requestHash,
         cachedResponse: {
           status: existing.response_status || 200,
           body: existing.response_body,
@@ -124,6 +126,7 @@ export async function processIdempotency(
   return {
     action: 'proceed',
     recordId: inserted?.id,
+    requestHash,
   };
 }
 
