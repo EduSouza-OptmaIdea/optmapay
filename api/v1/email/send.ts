@@ -59,11 +59,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         if (brevoRes.ok) {
-          const brevoData = await brevoRes.json();
+          const brevoData: any = await brevoRes.json();
           return res.status(200).json({
             success: true,
             provider: 'brevo-https-api',
-            messageId: brevoData.messageId,
+            messageId: brevoData?.messageId,
           });
         } else {
           const brevoErr = await brevoRes.text();

@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "test": "vitest",
     "test:run": "vitest run",
+    "typecheck:api": "tsc --project tsconfig.api.json",
+    "check:edge": "npx deno check supabase/functions/webhook-dispatcher/index.ts supabase/functions/webhook-config-manager/index.ts supabase/functions/webhook-retry-worker/index.ts supabase/functions/pix-transfer/index.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -27,6 +29,7 @@
     "@types/node": "^22.7.4",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
+    "@vercel/node": "^13.0.1",
     "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
