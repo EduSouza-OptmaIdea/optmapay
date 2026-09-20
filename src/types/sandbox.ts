@@ -265,15 +265,22 @@ export interface SandboxApiKey {
   id: string;
   user_id?: string;
   account_id?: string;
+  accountId?: string;
   key_name: string;
+  keyName?: string;
   key_id?: string;
+  keyId?: string;
   key_prefix?: string;
+  prefix?: string;
   key_last4?: string;
+  last4?: string;
   api_key?: string;
   scopes?: string[];
   active: boolean;
   last_used_at?: string;
+  lastUsedAt?: string;
   created_at: string;
+  createdAt?: string;
   revoked_at?: string;
 }
 

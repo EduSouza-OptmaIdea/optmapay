@@ -47,13 +47,19 @@ export default async function handler(req: any, res: any) {
       keys: (keys || []).map((k: any) => ({
         id: k.id,
         accountId: k.account_id,
+        account_id: k.account_id,
         keyName: k.key_name,
+        key_name: k.key_name,
         prefix: k.key_prefix,
+        key_prefix: k.key_prefix,
         last4: k.key_last4,
+        key_last4: k.key_last4,
         scopes: k.scopes || [],
         active: k.active,
         lastUsedAt: k.last_used_at,
+        last_used_at: k.last_used_at,
         createdAt: k.created_at,
+        created_at: k.created_at,
       })),
     });
   }

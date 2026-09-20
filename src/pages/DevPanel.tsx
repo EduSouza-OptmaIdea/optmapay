@@ -440,7 +440,9 @@ export const DevPanel: React.FC = () => {
               apiKeys.map((k) => (
                 <div key={k.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{k.key_name}</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {k.key_name || k.keyName || 'Chave Sandbox API'}
+                    </span>
                     <div className="flex items-center gap-2">
                       {k.active ? (
                         <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
@@ -463,7 +465,9 @@ export const DevPanel: React.FC = () => {
                     </div>
                   </div>
                   <p className="font-mono text-[11px] text-purple-600 dark:text-purple-400 truncate">
-                    {k.key_prefix ? `${k.key_prefix}_••••${k.key_last4 || ''}` : 'Chave Legada Inativa'}
+                    {(k.key_prefix || k.prefix)
+                      ? `${k.key_prefix || k.prefix}_••••${k.key_last4 || k.last4 || ''}`
+                      : 'Chave Legada Inativa'}
                   </p>
                   <div className="flex flex-wrap gap-1 pt-1">
                     {(k.scopes || []).map((sc) => (
