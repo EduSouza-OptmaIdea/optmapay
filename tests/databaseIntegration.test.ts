@@ -547,16 +547,132 @@ describe('Real PostgreSQL Integration & Invariants Hardening Test (Pacote 01D)',
     const checkJob = await client.query(`SELECT status FROM public.webhook_delivery_jobs WHERE id = $1`, [jobId]);
     expect(checkJob.rows[0].status).toBe('retry');
 
-    // 2. Dois workers simultâneos chamam claim_single_webhook_job
-    const [claim1, claim2] = await Promise.all([
-      client.query(`SELECT * FROM public.claim_single_webhook_job($1, 'worker-alpha', false)`, [jobId]),
-      client.query(`SELECT * FROM public.claim_single_webhook_job($1, 'worker-beta', false)`, [jobId]),
+    // 2. Duas conexões pg.Client físicas e distintas disputam claim_single_webhook_job concorrentemente
+    const clientAlpha = new Client({ connectionString: TEST_DB_URL });
+    const clientBeta = new Client({ connectionString: TEST_DB_URL });
+    await Promise.all([clientAlpha.connect(), clientBeta.connect()]);
+
+    await Promise.all([
+      clientAlpha.query(`SET ROLE service_role;`),
+      clientBeta.query(`SET ROLE service_role;`),
     ]);
+
+    const [claim1, claim2] = await Promise.all([
+      clientAlpha.query(`SELECT * FROM public.claim_single_webhook_job($1, 'worker-alpha', false)`, [jobId]),
+      clientBeta.query(`SELECT * FROM public.claim_single_webhook_job($1, 'worker-beta', false)`, [jobId]),
+    ]);
+
+    await Promise.all([clientAlpha.end(), clientBeta.end()]);
 
     const claimsCount = claim1.rows.length + claim2.rows.length;
     expect(claimsCount).toBe(1);
 
     const winnerWorker = claim1.rows.length === 1 ? claim1.rows[0].locked_by : claim2.rows[0].locked_by;
     expect(['worker-alpha', 'worker-beta']).toContain(winnerWorker);
+  });
+
+  it('13. Ciclo Completo de Retry no Banco: 1º envio resulta em 500, worker seleciona e 2º envio 200 entrega com logs imutáveis', async () => {
+    await client.query(`SET ROLE service_role;`);
+
+    // 1. Setup de webhook config e evento
+    const configRes = await client.query(`
+      INSERT INTO public.webhooks_config (account_id, url, events, secret)
+      VALUES ($1, 'https://merchant-api.example.com/webhook', ARRAY['card.paid'], 'whsec_test_retry_123')
+      RETURNING id;
+    `, [merchantAccId]);
+    const configId = configRes.rows[0].id;
+
+    const eventRes = await client.query(`
+      INSERT INTO public.webhook_events (account_id, event_type, resource_type, resource_id, idempotency_key, payload)
+      VALUES ($1, 'card.paid', 'transaction', gen_random_uuid()::text, gen_random_uuid()::text, '{"orderId": "PED-RETRY-001", "amount": 120.0}'::jsonb)
+      RETURNING id;
+    `, [merchantAccId]);
+    const eventId = eventRes.rows[0].id;
+
+    const jobRes = await client.query(`
+      INSERT INTO public.webhook_delivery_jobs (event_id, webhook_config_id, status, attempt_count, next_attempt_at)
+      VALUES ($1, $2, 'pending', 0, now())
+      RETURNING id;
+    `, [eventId, configId]);
+    const jobId = jobRes.rows[0].id;
+
+    // 2. Primeira tentativa: claim atômico pelo dispatcher
+    const claim1 = await client.query(`
+      SELECT * FROM public.claim_single_webhook_job($1, 'dispatcher-node-1', false);
+    `, [jobId]);
+    expect(claim1.rows.length).toBe(1);
+    expect(claim1.rows[0].status).toBe('delivering');
+
+    // Simula resposta HTTP 500 na fronteira de transporte do webhook
+    await client.query(`
+      UPDATE public.webhook_delivery_jobs
+      SET status = 'retry',
+          attempt_count = 1,
+          last_response_status = 500,
+          last_error = 'HTTP 500 Internal Server Error',
+          locked_at = null,
+          locked_by = null,
+          next_attempt_at = now() - INTERVAL '1 second'
+      WHERE id = $1;
+    `, [jobId]);
+
+    await client.query(`
+      INSERT INTO public.webhooks_log (
+        user_id, webhook_config_id, event, payload, response_status, response_body, attempt_count, delivered_at
+      ) VALUES (
+        $1, $2, 'card.paid', '{"orderId": "PED-RETRY-001"}'::jsonb, 500, '{"error": "Internal Error"}', 1, now()
+      );
+    `, [userAId, configId]);
+
+    // 3. Worker executa busca de jobs elegíveis: encontra o job com status 'retry' vencido
+    const eligibleRes = await client.query(`
+      SELECT id FROM public.get_eligible_webhook_job_ids(50);
+    `);
+    const eligibleIds = eligibleRes.rows.map((r) => r.id);
+    expect(eligibleIds).toContain(jobId);
+
+    // 4. Segunda tentativa (retry): claim atômico pelo dispatcher
+    const claim2 = await client.query(`
+      SELECT * FROM public.claim_single_webhook_job($1, 'dispatcher-node-2', false);
+    `, [jobId]);
+    expect(claim2.rows.length).toBe(1);
+    expect(claim2.rows[0].status).toBe('delivering');
+
+    // Simula resposta HTTP 200 na fronteira de transporte
+    await client.query(`
+      UPDATE public.webhook_delivery_jobs
+      SET status = 'delivered',
+          attempt_count = 2,
+          last_response_status = 200,
+          last_error = null,
+          locked_at = null,
+          locked_by = null
+      WHERE id = $1;
+    `, [jobId]);
+
+    await client.query(`
+      INSERT INTO public.webhooks_log (
+        user_id, webhook_config_id, event, payload, response_status, response_body, attempt_count, delivered_at
+      ) VALUES (
+        $1, $2, 'card.paid', '{"orderId": "PED-RETRY-001"}'::jsonb, 200, '{"received": true}', 2, now()
+      );
+    `, [userAId, configId]);
+
+    // 5. Verificação final dos dados no PostgreSQL
+    const finalJob = await client.query(`SELECT status, attempt_count, last_response_status FROM public.webhook_delivery_jobs WHERE id = $1`, [jobId]);
+    expect(finalJob.rows[0].status).toBe('delivered');
+    expect(finalJob.rows[0].attempt_count).toBe(2);
+    expect(finalJob.rows[0].last_response_status).toBe(200);
+
+    // Valida os logs imutáveis: exatamente 2 registros de auditoria (1 falha 500 e 1 sucesso 200)
+    const logs = await client.query(`
+      SELECT attempt_count, response_status
+      FROM public.webhooks_log
+      WHERE webhook_config_id = $1
+      ORDER BY attempt_count ASC;
+    `, [configId]);
+    expect(logs.rows.length).toBe(2);
+    expect(logs.rows[0].response_status).toBe(500);
+    expect(logs.rows[1].response_status).toBe(200);
   });
 });

@@ -10,7 +10,7 @@ describe('Webhook HMAC-SHA256 v1 & Anti-Replay', () => {
   beforeAll(() => {
     process.env.OPTMAPAY_WEBHOOK_MASTER_KEY =
       process.env.OPTMAPAY_WEBHOOK_MASTER_KEY ||
-      '1120dca10ff3e2431842f68255ba32958f868c78ed7391c95254ac7d5b66c66c';
+      'ci-test-only-master-key-00000000000000000000000000000000';
   });
 
   const secret = 'whsec_optmapay_test_secret_for_unit_tests_2026';

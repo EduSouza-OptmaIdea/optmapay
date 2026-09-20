@@ -10,8 +10,28 @@
 -- ==============================================================================
 
 -- ------------------------------------------------------------------------------
--- 1. LIMPEZA DE IDEMPOTÊNCIAS LEGADAS ABANDONADAS (Manutenção fora da RPC financeira)
+-- 1. ATUALIZAÇÃO DO CHECK CONSTRAINT DE IDEMPOTÊNCIA (Permite status='failed')
+-- E LIMPEZA DE IDEMPOTÊNCIAS LEGADAS ABANDONADAS (Manutenção fora da RPC financeira)
 -- ------------------------------------------------------------------------------
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'public.api_idempotency_keys'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%status%'
+  LOOP
+    EXECUTE 'ALTER TABLE public.api_idempotency_keys DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
+  END LOOP;
+END $$;
+
+ALTER TABLE public.api_idempotency_keys
+  ADD CONSTRAINT api_idempotency_keys_status_check
+  CHECK (status IN ('in_progress', 'completed', 'failed'));
 
 UPDATE public.api_idempotency_keys
 SET status = 'failed',
@@ -1040,3 +1060,53 @@ $$;
 REVOKE ALL ON FUNCTION public.transfer_pix(UUID, TEXT, NUMERIC, TEXT, TEXT, UUID, TEXT, TEXT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.transfer_pix(UUID, TEXT, NUMERIC, TEXT, TEXT, UUID, TEXT, TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.transfer_pix(UUID, TEXT, NUMERIC, TEXT, TEXT, UUID, TEXT, TEXT) TO authenticated, service_role;
+
+-- ------------------------------------------------------------------------------
+-- 6. SCHEDULER: pg_cron para webhook-retry-worker (Cadência recomendada: 1 minuto)
+-- Busca a URL e o token de autenticação exclusivamente do Supabase Vault,
+-- garantindo que credenciais NUNCA fiquem versionadas em código ou repositório.
+-- ------------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.unschedule('optmapay-webhook-retry-worker');
+    PERFORM cron.schedule(
+      'optmapay-webhook-retry-worker',
+      '* * * * *', -- A cada 1 minuto
+      $cron$
+      DO $inner$
+      DECLARE
+        v_token TEXT;
+        v_url TEXT;
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'vault' AND table_name = 'decrypted_secrets') THEN
+          SELECT decrypted_secret INTO v_token
+          FROM vault.decrypted_secrets
+          WHERE name = 'OPTMAPAY_INTERNAL_DISPATCH_TOKEN'
+          LIMIT 1;
+
+          SELECT decrypted_secret INTO v_url
+          FROM vault.decrypted_secrets
+          WHERE name = 'OPTMAPAY_WEBHOOK_RETRY_WORKER_URL'
+          LIMIT 1;
+
+          IF v_token IS NOT NULL AND v_url IS NOT NULL AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+            PERFORM net.http_post(
+              url := v_url,
+              headers := jsonb_build_object(
+                'Content-Type', 'application/json',
+                'x-optmapay-internal-token', v_token
+              ),
+              body := '{}'::jsonb
+            );
+          END IF;
+        END IF;
+      END;
+      $inner$;
+      $cron$
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
