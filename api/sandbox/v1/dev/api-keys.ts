@@ -158,6 +158,7 @@ export default async function handler(req: any, res: any) {
       scopes: effectiveScopes,
       active: true,
       createdAt,
+    });
   }
 
   // 3. DELETE: Revogação lógica da chave (active=false, revoked_at=now())
