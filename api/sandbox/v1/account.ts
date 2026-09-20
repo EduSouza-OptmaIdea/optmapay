@@ -1,27 +1,35 @@
-export default function handler(req: any, res: any) {
-  res.setHeader('x-optmapay-real-money', 'false');
-  res.setHeader('x-optmapay-environment', 'sandbox');
+import { authenticateApiKey } from '../../_lib/apiKeyAuth';
+import { getSupabaseAdmin } from '../../_lib/supabaseAdmin';
+import { sendError, sendSuccess } from '../../_lib/http';
 
-  const apiKey = req.headers['x-api-key'] || req.headers['authorization'];
-  if (!apiKey) {
-    return res.status(401).json({
-      error: 'Missing x-api-key header',
-      realMoney: false,
-      environment: 'sandbox',
-    });
+export default async function handler(req: any, res: any) {
+  if (req.method !== 'GET') {
+    return sendError(res, 405, 'METHOD_NOT_ALLOWED', `Método ${req.method} não permitido. Utilize GET.`);
   }
 
-  return res.status(200).json({
+  const auth = await authenticateApiKey(req, res, 'account:read');
+  if (!auth) return;
+
+  const supabase = getSupabaseAdmin();
+  const { data: account, error } = await supabase
+    .from('accounts')
+    .select('id, name, type, balance, pix_key, agency, account_number')
+    .eq('id', auth.accountId)
+    .maybeSingle();
+
+  if (error || !account) {
+    return sendError(res, 404, 'ACCOUNT_NOT_FOUND', 'Conta vinculada à API key não foi encontrada.');
+  }
+
+  return sendSuccess(res, 200, {
     account: {
-      name: 'OptmaIdea Tecnologia & Vendas LTDA',
-      type: 'merchant',
-      cpf_cnpj: '45.892.102/0001-90',
-      balance: 15420.00,
-      pix_key: 'vendas@optmaidea.com.br',
-      agency: '0001',
-      account_number: '100500-1',
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      balance: Number(account.balance),
+      pixKey: account.pix_key,
+      agency: account.agency || '0001',
+      accountNumber: account.account_number,
     },
-    realMoney: false,
-    environment: 'sandbox',
   });
 }

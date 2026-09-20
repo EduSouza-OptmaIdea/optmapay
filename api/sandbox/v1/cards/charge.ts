@@ -1,13 +1,34 @@
-export default function handler(req: any, res: any) {
-  res.setHeader('x-optmapay-real-money', 'false');
-  res.setHeader('x-optmapay-environment', 'sandbox');
+import { authenticateApiKey } from '../../../_lib/apiKeyAuth';
+import { processIdempotency, completeIdempotency } from '../../../_lib/idempotency';
+import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
+import { validateCardBin, calculateCardFee } from '../../../../src/lib/cardRules';
+import { dispatchEventJobs } from '../../../_lib/dispatcher';
+import { sendError, sendSuccess } from '../../../_lib/http';
 
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: 'Method not allowed',
-      realMoney: false,
-      environment: 'sandbox',
-    });
+    return sendError(res, 405, 'METHOD_NOT_ALLOWED', `Método ${req.method} não permitido. Utilize POST.`);
+  }
+
+  // 1. Autenticação e validação do escopo
+  const auth = await authenticateApiKey(req, res, 'cards:charge');
+  if (!auth) return;
+
+  // 2. Idempotência server-side obrigatória
+  const idempotencyKey = req.headers['idempotency-key'] as string;
+  const idemp = await processIdempotency(
+    res,
+    auth.accountId,
+    auth.key.id,
+    'cards:charge',
+    idempotencyKey,
+    req.body
+  );
+
+  if (idemp.action === 'error') return;
+
+  if (idemp.action === 'return_cached' && idemp.cachedResponse) {
+    return res.status(idemp.cachedResponse.status).json(idemp.cachedResponse.body);
   }
 
   const {
@@ -20,55 +41,133 @@ export default function handler(req: any, res: any) {
     tipo = 'credito',
     orderId,
     description,
+    settlementPlan = 'standard',
   } = req.body || {};
 
-  const cleanNumber = (cardNumber || '').replace(/\D/g, '');
-
-  // Strict BIN validation
-  if (!cleanNumber.startsWith('5899') && !cleanNumber.startsWith('5898')) {
-    return res.status(400).json({
-      error: 'Card declined',
-      code: 'ERR_REAL_CARD_BLOCKED',
-      message: 'Operação Recusada: Cartão real não permitido no Sandbox. Use apenas cartões fictícios OptmaPay com prefixo 5899 ou 5898.',
-      realMoney: false,
-      environment: 'sandbox',
-    });
+  // 3. Validação de dados de entrada
+  if (!orderId || typeof orderId !== 'string' || !orderId.trim()) {
+    return sendError(res, 400, 'MISSING_ORDER_ID', 'O campo orderId é obrigatório para conciliação.');
   }
 
-  const numAmount = parseFloat(amount) || 100.0;
-  const numInstallments = Math.max(1, Math.min(12, parseInt(installments, 10) || 1));
+  const cleanNumber = (cardNumber || '').replace(/\D/g, '');
+  const binValidation = validateCardBin(cleanNumber);
 
-  // Fee calculation (standard plan)
-  const feePercent = tipo === 'debito' ? 0.85 : (numInstallments === 1 ? 2.89 : 2.89 + (numInstallments * 0.65));
-  const feeAmount = Math.round((numAmount * (feePercent / 100)) * 100) / 100;
-  const netAmount = Math.round((numAmount - feeAmount) * 100) / 100;
+  if (!binValidation.isValid) {
+    return sendError(
+      res,
+      400,
+      binValidation.isRealCardBlocked ? 'ERR_REAL_CARD_BLOCKED' : 'INVALID_CARD_NUMBER',
+      binValidation.errorMessage || 'Cartão recusado no Sandbox.'
+    );
+  }
 
-  const nsu = String(Math.floor(10000000 + Math.random() * 90000000));
-  const authorizationCode = `AUTH-${Math.floor(100000 + Math.random() * 900000)}`;
-  const tid = `TID-${Date.now().toString().slice(-8)}`;
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return sendError(res, 400, 'INVALID_AMOUNT', 'O valor da cobrança (amount) deve ser um número maior que zero.');
+  }
 
-  return res.status(200).json({
+  if (Math.round(numAmount * 100) / 100 !== numAmount) {
+    return sendError(res, 400, 'INVALID_AMOUNT_PRECISION', 'O valor da cobrança deve ter no máximo 2 casas decimais.');
+  }
+
+  if (tipo !== 'debito' && tipo !== 'credito') {
+    return sendError(res, 400, 'INVALID_CARD_TYPE', 'O tipo de pagamento deve ser "debito" ou "credito".');
+  }
+
+  const numInstallments = parseInt(installments, 10) || 1;
+  if (tipo === 'debito' && numInstallments !== 1) {
+    return sendError(res, 400, 'INVALID_INSTALLMENTS_DEBIT', 'Vendas na modalidade débito não aceitam parcelamento (installments deve ser 1).');
+  }
+
+  if (numInstallments < 1 || numInstallments > 12) {
+    return sendError(res, 400, 'INVALID_INSTALLMENTS', 'Número de parcelas deve estar entre 1 e 12.');
+  }
+
+  if (description && description.length > 500) {
+    return sendError(res, 400, 'DESCRIPTION_TOO_LONG', 'A descrição deve ter no máximo 500 caracteres.');
+  }
+
+  // 4. Cálculo das taxas MDR server-side
+  const feeCalc = calculateCardFee(numAmount, tipo, numInstallments, settlementPlan);
+
+  // 5. Execução do motor bancário real via RPC process_card_payment
+  const supabase = getSupabaseAdmin();
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc('process_card_payment', {
+    p_merchant_account_id: auth.accountId,
+    p_card_number: cleanNumber,
+    p_cardholder_name: cardholderName ? String(cardholderName).trim().toUpperCase() : 'CLIENTE SANDBOX',
+    p_validade: expirationDate ? String(expirationDate).trim() : '12/29',
+    p_cvv: cvv ? String(cvv).trim() : '123',
+    p_amount: numAmount,
+    p_tipo: tipo,
+    p_installments: numInstallments,
+    p_plan: feeCalc.plan,
+    p_fee_percent: feeCalc.feePercent,
+    p_fee_amount: feeCalc.feeAmount,
+    p_net_amount: feeCalc.netAmount,
+    p_description: description ? String(description).trim() : `Venda Pedido ${orderId}`,
+    p_external_reference: orderId,
+  });
+
+  if (rpcErr) {
+    return sendError(
+      res,
+      400,
+      'PAYMENT_PROCESSING_FAILED',
+      rpcErr.message || 'Erro ao processar cobrança com cartão no banco de dados.'
+    );
+  }
+
+  if (!rpcResult || !rpcResult.success) {
+    return sendError(
+      res,
+      422,
+      'TRANSACTION_DECLINED',
+      rpcResult?.message || 'Transação com cartão não autorizada.'
+    );
+  }
+
+  // 6. Resposta canônica estruturada
+  const responseData = {
     success: true,
-    status: 'paid',
+    status: 'approved',
     message: 'Transação autorizada com sucesso no OptmaPay Sandbox!',
     data: {
-      transactionId: `tx_card_${Date.now()}`,
-      orderId: orderId || `ORD-${Date.now().toString().slice(-6)}`,
+      transactionId: rpcResult.transaction_in_id,
+      orderId: orderId,
       amountGross: numAmount,
-      feePercent,
-      feeAmount,
-      amountNet: netAmount,
+      feePercent: feeCalc.feePercent,
+      feeAmount: feeCalc.feeAmount,
+      amountNet: feeCalc.netAmount,
       installments: numInstallments,
       tipo,
-      cardMasked: `${cleanNumber.slice(0, 4)} **** **** ${cleanNumber.slice(-4)}`,
+      settlementPlan: rpcResult.settlement_plan || feeCalc.plan,
+      cardMasked: rpcResult.card_masked,
       cardBrand: 'OptmaCard',
       cardholderName: cardholderName || 'CLIENTE SANDBOX',
-      authorizationCode,
-      nsu,
-      tid,
-      realMoney: false,
-      environment: 'sandbox',
-      timestamp: new Date().toISOString(),
+      authorizationCode: rpcResult.authorization_code,
+      nsu: rpcResult.nsu,
+      tid: rpcResult.tid,
+      webhookEventId: rpcResult.webhook_event_id,
+      createdAt: new Date().toISOString(),
     },
-  });
+  };
+
+  // 7. Persistência na tabela de idempotência
+  if (idemp.recordId) {
+    await completeIdempotency(
+      idemp.recordId,
+      200,
+      responseData,
+      'transaction',
+      rpcResult.transaction_in_id
+    );
+  }
+
+  // 8. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL
+  if (rpcResult.webhook_event_id) {
+    dispatchEventJobs(rpcResult.webhook_event_id).catch(() => {});
+  }
+
+  return sendSuccess(res, 200, responseData);
 }
