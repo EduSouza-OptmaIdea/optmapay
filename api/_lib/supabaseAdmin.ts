@@ -38,3 +38,26 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   return adminClient;
 }
+
+export function getSupabaseUserClient(token: string): SupabaseClient {
+  const supabaseUrl =
+    getEnvVar('SUPABASE_URL') ||
+    getEnvVar('VITE_SUPABASE_URL') ||
+    DEFAULT_SUPABASE_URL;
+
+  const anonKey =
+    getEnvVar('VITE_SUPABASE_ANON_KEY') ||
+    DEFAULT_FALLBACK_KEY;
+
+  return createClient(supabaseUrl, anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}

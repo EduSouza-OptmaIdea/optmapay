@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
+import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin';
 import { generateApiKeyTokens } from '../../../_lib/apiKeyAuth';
 import { sendError, sendSuccess } from '../../../_lib/http';
 
@@ -11,22 +11,24 @@ async function getAuthenticatedUser(req: any) {
   const { data: { user }, error } = await supabase.auth.getUser(token);
 
   if (error || !user) return null;
-  return user;
+  return { user, token };
 }
 
 export default async function handler(req: any, res: any) {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
+  const authInfo = await getAuthenticatedUser(req);
+  if (!authInfo) {
     return sendError(res, 401, 'UNAUTHORIZED', 'Sessão de usuário inválida ou expirada.');
   }
 
-  const supabase = getSupabaseAdmin();
+  const { user, token } = authInfo;
+  const adminClient = getSupabaseAdmin();
+  const userClient = getSupabaseUserClient(token);
 
   // 1. GET: Listar chaves do usuário (apenas metadados)
   if (req.method === 'GET') {
     const accountId = req.query?.accountId as string;
 
-    let query = supabase
+    let query = userClient
       .from('api_keys')
       .select('id, account_id, key_name, key_prefix, key_last4, scopes, active, last_used_at, created_at')
       .eq('user_id', user.id);
@@ -64,12 +66,11 @@ export default async function handler(req: any, res: any) {
       return sendError(res, 400, 'MISSING_ACCOUNT_ID', 'O accountId é obrigatório para geração da chave.');
     }
 
-    // Confirma se accountId pertence ao usuário da sessão
-    const { data: account, error: accErr } = await supabase
+    // Confirma se accountId pertence ao usuário da sessão usando o token do usuário
+    const { data: account, error: accErr } = await userClient
       .from('accounts')
       .select('id')
       .eq('id', accountId)
-      .eq('user_id', user.id)
       .maybeSingle();
 
     if (accErr || !account) {
@@ -83,30 +84,72 @@ export default async function handler(req: any, res: any) {
 
     const tokens = generateApiKeyTokens(effectiveScopes);
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from('api_keys')
-      .insert({
-        user_id: user.id,
-        account_id: accountId,
-        key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
-        key_id: tokens.keyId,
-        key_hash: tokens.keyHash,
-        key_prefix: tokens.keyPrefix,
-        key_last4: tokens.keyLast4,
-        scopes: effectiveScopes,
-        active: true,
-        created_by: user.id,
-      })
-      .select('id, created_at')
-      .single();
+    // Tenta primeiro via RPC segura
+    const { data: rpcRes, error: rpcErr } = await userClient.rpc('create_sandbox_api_key', {
+      p_account_id: accountId,
+      p_key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
+      p_key_id: tokens.keyId,
+      p_key_hash: tokens.keyHash,
+      p_key_prefix: tokens.keyPrefix,
+      p_key_last4: tokens.keyLast4,
+      p_scopes: effectiveScopes,
+    });
 
-    if (insertErr || !inserted) {
-      return sendError(res, 500, 'KEY_GENERATION_FAILED', 'Erro ao salvar a nova chave de API.');
+    let insertedId: string | null = null;
+    let createdAt: string = new Date().toISOString();
+
+    if (!rpcErr && rpcRes && rpcRes.success) {
+      insertedId = rpcRes.id;
+      createdAt = rpcRes.created_at;
+    } else {
+      // Fallback: inserção direta via adminClient ou userClient
+      let insertRes = await adminClient
+        .from('api_keys')
+        .insert({
+          user_id: user.id,
+          account_id: accountId,
+          key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
+          key_id: tokens.keyId,
+          key_hash: tokens.keyHash,
+          key_prefix: tokens.keyPrefix,
+          key_last4: tokens.keyLast4,
+          scopes: effectiveScopes,
+          active: true,
+          created_by: user.id,
+        })
+        .select('id, created_at')
+        .single();
+
+      if (insertRes.error) {
+        insertRes = await userClient
+          .from('api_keys')
+          .insert({
+            user_id: user.id,
+            account_id: accountId,
+            key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
+            key_id: tokens.keyId,
+            key_hash: tokens.keyHash,
+            key_prefix: tokens.keyPrefix,
+            key_last4: tokens.keyLast4,
+            scopes: effectiveScopes,
+            active: true,
+            created_by: user.id,
+          })
+          .select('id, created_at')
+          .single();
+      }
+
+      if (insertRes.error || !insertRes.data) {
+        return sendError(res, 500, 'KEY_GENERATION_FAILED', `Erro ao salvar a nova chave de API: ${insertRes.error?.message || ''}`);
+      }
+
+      insertedId = insertRes.data.id;
+      createdAt = insertRes.data.created_at;
     }
 
     // Retorna a chave completa UMA ÚNICA VEZ
     return sendSuccess(res, 201, {
-      id: inserted.id,
+      id: insertedId,
       accountId,
       keyName: keyName || 'Chave Sandbox API',
       fullKey: tokens.fullKey, // Exibida apenas neste retorno
@@ -114,8 +157,7 @@ export default async function handler(req: any, res: any) {
       last4: tokens.keyLast4,
       scopes: effectiveScopes,
       active: true,
-      createdAt: inserted.created_at,
-    });
+      createdAt,
   }
 
   // 3. DELETE: Revogação lógica da chave (active=false, revoked_at=now())
@@ -126,14 +168,30 @@ export default async function handler(req: any, res: any) {
       return sendError(res, 400, 'MISSING_KEY_ID', 'ID da chave a ser revogada é obrigatório.');
     }
 
-    const { error: revokeErr } = await supabase
-      .from('api_keys')
-      .update({
-        active: false,
-        revoked_at: new Date().toISOString(),
-      })
-      .eq('id', keyId)
-      .eq('user_id', user.id);
+    let revokeErr: any = null;
+    const { error: rpcErr } = await userClient.rpc('revoke_sandbox_api_key', { p_key_id: keyId });
+    if (rpcErr) {
+      const adminRes = await adminClient
+        .from('api_keys')
+        .update({
+          active: false,
+          revoked_at: new Date().toISOString(),
+        })
+        .eq('id', keyId)
+        .eq('user_id', user.id);
+
+      if (adminRes.error) {
+        const userRes = await userClient
+          .from('api_keys')
+          .update({
+            active: false,
+            revoked_at: new Date().toISOString(),
+          })
+          .eq('id', keyId)
+          .eq('user_id', user.id);
+        revokeErr = userRes.error;
+      }
+    }
 
     if (revokeErr) {
       return sendError(res, 500, 'REVOCATION_FAILED', 'Erro ao revogar chave de API.');

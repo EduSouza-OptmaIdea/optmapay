@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
+import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin';
 import { deriveWebhookSecret } from '../../../_lib/webhookSigner';
 import { dispatchWebhookJob } from '../../../_lib/dispatcher';
 import { sendError, sendSuccess } from '../../../_lib/http';
@@ -13,23 +13,25 @@ async function getAuthenticatedUser(req: any) {
   const { data: { user }, error } = await supabase.auth.getUser(token);
 
   if (error || !user) return null;
-  return user;
+  return { user, token };
 }
 
 export default async function handler(req: any, res: any) {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
+  const authInfo = await getAuthenticatedUser(req);
+  if (!authInfo) {
     return sendError(res, 401, 'UNAUTHORIZED', 'Sessão de usuário inválida ou expirada.');
   }
 
-  const supabase = getSupabaseAdmin();
+  const { user, token } = authInfo;
+  const adminClient = getSupabaseAdmin();
+  const userClient = getSupabaseUserClient(token);
   const action = (req.query?.action as string) || (req.body?.action as string) || 'list';
 
   // 1. LIST: Listar webhooks de uma conta
   if (req.method === 'GET' || action === 'list') {
     const accountId = (req.query?.accountId as string) || (req.body?.accountId as string);
 
-    let query = supabase
+    let query = userClient
       .from('webhooks_config')
       .select('id, account_id, url, events, active, secret_last4, requires_secret_rotation, created_at');
 
@@ -37,10 +39,9 @@ export default async function handler(req: any, res: any) {
       query = query.eq('account_id', accountId);
     } else {
       // Filtra pelas contas do usuário logado
-      const { data: userAccounts } = await supabase
+      const { data: userAccounts } = await userClient
         .from('accounts')
-        .select('id')
-        .eq('user_id', user.id);
+        .select('id');
       const accIds = (userAccounts || []).map((a: any) => a.id);
       query = query.in('account_id', accIds);
     }
@@ -73,12 +74,11 @@ export default async function handler(req: any, res: any) {
       return sendError(res, 400, 'MISSING_FIELDS', 'accountId e url são obrigatórios.');
     }
 
-    // Valida propriedade da conta
-    const { data: account } = await supabase
+    // Valida propriedade da conta usando o cliente do usuário
+    const { data: account } = await userClient
       .from('accounts')
       .select('id')
       .eq('id', accountId)
-      .eq('user_id', user.id)
       .maybeSingle();
 
     if (!account) {
@@ -88,27 +88,39 @@ export default async function handler(req: any, res: any) {
     const configId = crypto.randomUUID();
     const derived = deriveWebhookSecret(configId);
 
-    const { data: inserted, error } = await supabase
+    const newConfigData = {
+      id: configId,
+      user_id: user.id,
+      account_id: accountId,
+      url: String(url).trim(),
+      events: Array.isArray(events) && events.length > 0
+        ? events
+        : ['pix.paid', 'card.paid', 'payment.settled', 'order.paid'],
+      secret_salt: derived.salt,
+      secret_version: derived.version,
+      secret_last4: derived.last4,
+      requires_secret_rotation: false,
+      active: true,
+    };
+
+    let { data: inserted, error } = await adminClient
       .from('webhooks_config')
-      .insert({
-        id: configId,
-        user_id: user.id,
-        account_id: accountId,
-        url: String(url).trim(),
-        events: Array.isArray(events) && events.length > 0
-          ? events
-          : ['pix.paid', 'card.paid', 'payment.settled', 'order.paid'],
-        secret_salt: derived.salt,
-        secret_version: derived.version,
-        secret_last4: derived.last4,
-        requires_secret_rotation: false,
-        active: true,
-      })
+      .insert(newConfigData)
       .select('*')
       .single();
 
+    if (error) {
+      const userInsert = await userClient
+        .from('webhooks_config')
+        .insert(newConfigData)
+        .select('*')
+        .single();
+      inserted = userInsert.data;
+      error = userInsert.error;
+    }
+
     if (error || !inserted) {
-      return sendError(res, 500, 'WEBHOOK_CREATION_FAILED', 'Erro ao cadastrar endpoint de webhook.');
+      return sendError(res, 500, 'WEBHOOK_CREATION_FAILED', `Erro ao cadastrar endpoint de webhook: ${error?.message || ''}`);
     }
 
     // Retorna o segredo completo uma única vez
