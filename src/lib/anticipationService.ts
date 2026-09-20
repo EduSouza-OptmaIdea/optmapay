@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { triggerWebhookEvents } from './webhookEngine';
 import { AnticipationCalculationResult } from './businessDays';
 
 export interface ExecuteAnticipationInput {
@@ -80,31 +79,6 @@ export async function executeAnticipationSettlement(input: ExecuteAnticipationIn
       real_money: false,
       environment: 'sandbox',
     });
-  }
-
-  // 4. Disparo de Webhooks para conciliação
-  try {
-    await triggerWebhookEvents({
-      userId: account.user_id,
-      accountId: accountId,
-      event: 'payment.settled',
-      payloadData: {
-        orderId: orderId || transactionId || `ANT-${Date.now()}`,
-        transactionId: transactionId || null,
-        type: 'anticipation',
-        grossAmount: calculation.grossAmount,
-        netAmount: calculation.netAnticipatedAmount,
-        anticipationFeeAmount: calculation.anticipationFeeAmount,
-        proRataFeePercent: calculation.proRataFeePercent,
-        daysRemaining: calculation.daysRemaining,
-        status: 'settled',
-        realMoney: false,
-        environment: 'sandbox',
-        settledAt: new Date().toISOString(),
-      },
-    });
-  } catch (whErr) {
-    console.warn('[Anticipation Webhook Dispatch Warning]', whErr);
   }
 
   return {

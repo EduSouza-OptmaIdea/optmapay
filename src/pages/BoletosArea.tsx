@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxBoleto } from '../types/sandbox';
-import { triggerWebhookEvents } from '../lib/webhookEngine';
 import { FileText, Plus, CheckCircle, Clock, Copy, Check } from 'lucide-react';
 
 export const BoletosArea: React.FC = () => {
@@ -86,26 +85,9 @@ export const BoletosArea: React.FC = () => {
 
       if (error) throw new Error(error.message);
 
-      // Trigger Webhooks
-      await triggerWebhookEvents({
-        userId: activeAccount.user_id,
-        accountId: activeAccount.id,
-        event: 'boleto.paid',
-        payloadData: {
-          boletoId: boleto.id,
-          barcode: boleto.barcode,
-          externalReference: boleto.external_reference,
-          amount: boleto.amount,
-          status: 'paid',
-          payerName: boleto.payer_name,
-          realMoney: false,
-          environment: 'sandbox',
-        },
-      });
-
       await refreshAccounts();
       await fetchBoletos();
-      alert('✅ Boleto quitado com sucesso e Webhooks disparados!');
+      alert('✅ Boleto quitado com sucesso!');
     } catch (err: any) {
       alert(`❌ Erro ao quitar boleto: ${err.message}`);
     } finally {

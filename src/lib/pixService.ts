@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { triggerWebhookEvents } from './webhookEngine';
 
 export interface ParsedPixData {
   cleanKey: string;
@@ -231,7 +230,46 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   // Chave a ser enviada para busca no banco (se tiver accId no payload, usa accId como prioridade de busca)
   const lookupKey = parsed.accId || targetKey;
 
-  // 2. Tenta executar via RPC transfer_pix (SECURITY DEFINER no PostgreSQL)
+  // 2. Invoca a Edge Function pix-transfer (que executa a RPC e orquestra o outbox server-side)
+  // com fallback resiliente para RPC direta
+  let fnResult: any = null;
+  let fnErr: any = null;
+
+  try {
+    const res = await supabase.functions.invoke('pix-transfer', {
+      body: {
+        senderAccountId,
+        destPixKeyOrPayload: lookupKey,
+        amount,
+        description: finalDesc,
+        externalReference: finalRef,
+      },
+    });
+    fnResult = res.data;
+    fnErr = res.error;
+  } catch (e) {
+    fnErr = e;
+  }
+
+  if (!fnErr && fnResult && fnResult.success) {
+    return {
+      success: true,
+      message: fnResult.message || `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${fnResult.receiverName}!`,
+      amount,
+      senderName: fnResult.senderName || sender.name,
+      receiverName: fnResult.receiverName,
+      senderPixKey: sender.pix_key,
+      receiverPixKey: targetKey,
+      senderBalanceAfter: senderBalance - amount,
+      transactionOutId: fnResult.transactionOutId,
+      transactionInId: fnResult.transactionInId,
+      transactionDate: fnResult.transactionDate || new Date().toISOString(),
+      externalReference: finalRef,
+      webhooksDispatched: fnResult.webhooksDispatched || (fnResult.webhookEventId ? 1 : 0),
+    };
+  }
+
+  // Fallback: executa via RPC transfer_pix (que já cria o outbox atomicamente no PostgreSQL)
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('transfer_pix', {
     p_sender_account_id: senderAccountId,
     p_receiver_pix_key: lookupKey,
@@ -241,64 +279,26 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   });
 
   if (!rpcErr && rpcResult && rpcResult.success) {
-    const receiverAccountId = rpcResult.receiver_account_id;
-    const receiverName = rpcResult.receiver_name;
-    const outTxId = rpcResult.transaction_out_id;
-    const inTxId = rpcResult.transaction_in_id;
-
-    // Dispara Webhook para a conta recebedora (se houver webhook cadastrado)
-    let dispatched = 0;
-    try {
-      const { data: receiverAcc } = await supabase
-        .from('accounts')
-        .select('user_id, pix_key')
-        .eq('id', receiverAccountId)
-        .single();
-
-      dispatched = await triggerWebhookEvents({
-        userId: receiverAcc?.user_id || '',
-        accountId: receiverAccountId,
-        event: 'pix.paid',
-        payloadData: {
-          transactionId: inTxId || `tx_pix_${Date.now()}`,
-          orderId: finalRef,
-          externalReference: finalRef,
-          amount,
-          status: 'paid',
-          senderName: sender.name,
-          senderPixKey: sender.pix_key,
-          receiverName,
-          receiverPixKey: receiverAcc?.pix_key || targetKey,
-          realMoney: false,
-          environment: 'sandbox',
-          paidAt: new Date().toISOString(),
-        },
-      });
-    } catch (whErr) {
-      console.warn('Falha no webhook Pix:', whErr);
-    }
-
     return {
       success: true,
-      message: `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${receiverName}!`,
+      message: `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${rpcResult.receiver_name}!`,
       amount,
       senderName: sender.name,
-      receiverName,
+      receiverName: rpcResult.receiver_name,
       senderPixKey: sender.pix_key,
       receiverPixKey: targetKey,
       senderBalanceAfter: senderBalance - amount,
-      transactionOutId: outTxId,
-      transactionInId: inTxId,
+      transactionOutId: rpcResult.transaction_out_id,
+      transactionInId: rpcResult.transaction_in_id,
       transactionDate: new Date().toISOString(),
       externalReference: finalRef,
-      webhooksDispatched: dispatched,
+      webhooksDispatched: rpcResult.webhook_event_id ? 1 : 0,
     };
   }
 
-  // Se o RPC retornou erro de negócio
   if (rpcErr) {
     throw new Error(rpcErr.message || 'Erro ao processar transferência Pix via banco de dados.');
   }
 
-  throw new Error('Falha ao concluir transferência Pix.');
+  throw new Error(fnErr?.message || 'Falha ao concluir transferência Pix.');
 }

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { triggerWebhookEvents } from '../lib/webhookEngine';
 import { ArrowLeftRight, Building2, User, CheckCircle2, Clock, QrCode, FileText, CreditCard, Zap } from 'lucide-react';
 import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
 import { getSettlementCountdown, SettlementPlan } from '../lib/businessDays';
@@ -110,30 +109,13 @@ export const SettlementSimulator: React.FC = () => {
         environment: 'sandbox',
       });
 
-      // 4. Fire Webhooks to Merchant
-      const dispatched = await triggerWebhookEvents({
-        userId: merchantAccount.user_id,
-        accountId: merchantAccount.id,
-        event: 'order.paid',
-        payloadData: {
-          orderId: order.orderId,
-          externalReference: order.orderId,
-          amount: order.amount,
-          paymentMethod,
-          status: 'paid',
-          payerName: activeAccount.name,
-          realMoney: false,
-          environment: 'sandbox',
-        },
-      });
-
       // Update local state
       setOrders((prev) =>
         prev.map((o) => (o.id === order.id ? { ...o, status: 'paid' } : o))
       );
 
       await refreshAccounts();
-      setSettleMsg(`✅ Pedido ${order.orderId} liquidado com sucesso por ${paymentMethod.toUpperCase()}! ${dispatched} Webhook(s) entregue(s).`);
+      setSettleMsg(`✅ Pedido ${order.orderId} liquidado com sucesso por ${paymentMethod.toUpperCase()}!`);
     } catch (err: any) {
       setSettleMsg(`❌ Falha na baixa: ${err.message}`);
     } finally {
