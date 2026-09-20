@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 
-const DEFAULT_FALLBACK_MASTER_KEY = 'optmapay_webhook_master_key_default_sandbox_secure_token_minimum_32_bytes_2026';
-
 export function getWebhookMasterKey(): string {
-  return (
-    process.env.OPTMAPAY_WEBHOOK_MASTER_KEY ||
-    process.env.WEBHOOK_MASTER_KEY ||
-    DEFAULT_FALLBACK_MASTER_KEY
-  );
+  const masterKey =
+    (typeof process !== 'undefined' ? process.env?.OPTMAPAY_WEBHOOK_MASTER_KEY || process.env?.WEBHOOK_MASTER_KEY : undefined);
+
+  if (!masterKey || masterKey.trim() === '') {
+    throw new Error('CONFIG_ERROR: OPTMAPAY_WEBHOOK_MASTER_KEY não configurada no ambiente.');
+  }
+
+  return masterKey.trim();
 }
 
 export interface DerivedWebhookSecret {

@@ -90,68 +90,30 @@ export default async function handler(req: any, res: any) {
 
     const tokens = generateApiKeyTokens(effectiveScopes);
 
-    // Tenta primeiro via RPC segura
-    const { data: rpcRes, error: rpcErr } = await userClient.rpc('create_sandbox_api_key', {
-      p_account_id: accountId,
-      p_key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
-      p_key_id: tokens.keyId,
-      p_key_hash: tokens.keyHash,
-      p_key_prefix: tokens.keyPrefix,
-      p_key_last4: tokens.keyLast4,
-      p_scopes: effectiveScopes,
-    });
+    // Inserção estrita e direta via service_role após validação do JWT e ownership
+    const insertRes = await adminClient
+      .from('api_keys')
+      .insert({
+        user_id: user.id,
+        account_id: accountId,
+        key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
+        key_id: tokens.keyId,
+        key_hash: tokens.keyHash,
+        key_prefix: tokens.keyPrefix,
+        key_last4: tokens.keyLast4,
+        scopes: effectiveScopes,
+        active: true,
+        created_by: user.id,
+      })
+      .select('id, created_at')
+      .single();
 
-    let insertedId: string | null = null;
-    let createdAt: string = new Date().toISOString();
-
-    if (!rpcErr && rpcRes && rpcRes.success) {
-      insertedId = rpcRes.id;
-      createdAt = rpcRes.created_at;
-    } else {
-      // Fallback: inserção direta via adminClient ou userClient
-      let insertRes = await adminClient
-        .from('api_keys')
-        .insert({
-          user_id: user.id,
-          account_id: accountId,
-          key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
-          key_id: tokens.keyId,
-          key_hash: tokens.keyHash,
-          key_prefix: tokens.keyPrefix,
-          key_last4: tokens.keyLast4,
-          scopes: effectiveScopes,
-          active: true,
-          created_by: user.id,
-        })
-        .select('id, created_at')
-        .single();
-
-      if (insertRes.error) {
-        insertRes = await userClient
-          .from('api_keys')
-          .insert({
-            user_id: user.id,
-            account_id: accountId,
-            key_name: keyName ? String(keyName).trim() : 'Chave Sandbox API',
-            key_id: tokens.keyId,
-            key_hash: tokens.keyHash,
-            key_prefix: tokens.keyPrefix,
-            key_last4: tokens.keyLast4,
-            scopes: effectiveScopes,
-            active: true,
-            created_by: user.id,
-          })
-          .select('id, created_at')
-          .single();
-      }
-
-      if (insertRes.error || !insertRes.data) {
-        return sendError(res, 500, 'KEY_GENERATION_FAILED', `Erro ao salvar a nova chave de API: ${insertRes.error?.message || ''}`);
-      }
-
-      insertedId = insertRes.data.id;
-      createdAt = insertRes.data.created_at;
+    if (insertRes.error || !insertRes.data) {
+      return sendError(res, 500, 'KEY_GENERATION_FAILED', `Erro ao salvar a nova chave de API: ${insertRes.error?.message || ''}`);
     }
+
+    const insertedId = insertRes.data.id;
+    const createdAt = insertRes.data.created_at;
 
     // Retorna a chave completa UMA ÚNICA VEZ
     return sendSuccess(res, 201, {
@@ -167,7 +129,7 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // 3. DELETE: Revogação lógica da chave (active=false, revoked_at=now())
+  // 3. DELETE: Revogação lógica da chave (active=false, revoked_at=now()) estritamente via service_role
   if (req.method === 'DELETE') {
     const keyId = (req.query?.id as string) || req.body?.id;
 
@@ -175,30 +137,26 @@ export default async function handler(req: any, res: any) {
       return sendError(res, 400, 'MISSING_KEY_ID', 'ID da chave a ser revogada é obrigatório.');
     }
 
-    let revokeErr: any = null;
-    const { error: rpcErr } = await userClient.rpc('revoke_sandbox_api_key', { p_key_id: keyId });
-    if (rpcErr) {
-      const adminRes = await adminClient
-        .from('api_keys')
-        .update({
-          active: false,
-          revoked_at: new Date().toISOString(),
-        })
-        .eq('id', keyId)
-        .eq('user_id', user.id);
+    // Valida ownership da chave antes de revogar
+    const { data: existingKey, error: findErr } = await adminClient
+      .from('api_keys')
+      .select('id, user_id')
+      .eq('id', keyId)
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-      if (adminRes.error) {
-        const userRes = await userClient
-          .from('api_keys')
-          .update({
-            active: false,
-            revoked_at: new Date().toISOString(),
-          })
-          .eq('id', keyId)
-          .eq('user_id', user.id);
-        revokeErr = userRes.error;
-      }
+    if (findErr || !existingKey) {
+      return sendError(res, 404, 'KEY_NOT_FOUND', 'Chave de API não encontrada ou não pertence ao usuário.');
     }
+
+    const { error: revokeErr } = await adminClient
+      .from('api_keys')
+      .update({
+        active: false,
+        revoked_at: new Date().toISOString(),
+      })
+      .eq('id', keyId)
+      .eq('user_id', user.id);
 
     if (revokeErr) {
       return sendError(res, 500, 'REVOCATION_FAILED', 'Erro ao revogar chave de API.');

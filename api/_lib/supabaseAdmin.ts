@@ -20,14 +20,17 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   const supabaseUrl =
     getEnvVar('SUPABASE_URL') ||
-    getEnvVar('VITE_SUPABASE_URL') ||
-    DEFAULT_SUPABASE_URL;
+    getEnvVar('VITE_SUPABASE_URL');
 
   const serviceRoleKey =
     getEnvVar('SUPABASE_SERVICE_ROLE_KEY') ||
-    getEnvVar('SUPABASE_SERVICE_KEY') ||
-    getEnvVar('VITE_SUPABASE_ANON_KEY') ||
-    DEFAULT_FALLBACK_KEY;
+    getEnvVar('SUPABASE_SERVICE_KEY');
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      'CONFIG_ERROR: getSupabaseAdmin() requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to be set. Fallback to anon key is strictly prohibited.'
+    );
+  }
 
   adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {

@@ -44,8 +44,24 @@ serve(async (req: Request) => {
     const body = await req.json();
     const { action, accountId, url, events, configId, deliveryJobId } = body || {};
 
-    // 1. LIST
+    // 1. LIST: Listar webhooks com validação estrita de ownership de accountId
     if (action === "list") {
+      if (accountId) {
+        const { data: acc, error: accErr } = await adminClient
+          .from("accounts")
+          .select("id")
+          .eq("id", accountId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (accErr || !acc) {
+          return new Response(JSON.stringify({ error: "Conta não encontrada ou não autorizada." }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       let query = adminClient
         .from("webhooks_config")
         .select("id, account_id, url, events, active, secret_last4, requires_secret_rotation, created_at");
@@ -55,7 +71,7 @@ serve(async (req: Request) => {
       } else {
         const { data: userAccounts } = await adminClient.from("accounts").select("id").eq("user_id", user.id);
         const accIds = (userAccounts || []).map((a: any) => a.id);
-        query = query.in("account_id", accIds);
+        query = query.in("account_id", accIds.length > 0 ? accIds : ["00000000-0000-0000-0000-000000000000"]);
       }
 
       const { data: configs, error } = await query.order("created_at", { ascending: false });
@@ -196,11 +212,39 @@ serve(async (req: Request) => {
       });
     }
 
-    // 5. RETRY (POR JOB_ID EXCLUSIVAMENTE)
+    // 5. RETRY (POR JOB_ID EXCLUSIVAMENTE, COM VALIDAÇÃO DE OWNERSHIP)
     if (action === "retry") {
       if (!deliveryJobId) {
         return new Response(JSON.stringify({ error: "deliveryJobId é obrigatório." }), {
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Valida ownership do job antes de despachar
+      const { data: job, error: jobErr } = await adminClient
+        .from("webhook_delivery_jobs")
+        .select(`
+          id,
+          webhook_config_id,
+          webhooks_config (
+            user_id
+          )
+        `)
+        .eq("id", deliveryJobId)
+        .maybeSingle();
+
+      if (jobErr || !job || !job.webhooks_config) {
+        return new Response(JSON.stringify({ error: "Job de entrega não encontrado." }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const jobOwner = (job.webhooks_config as any).user_id;
+      if (jobOwner !== user.id) {
+        return new Response(JSON.stringify({ error: "Acesso negado: o job de entrega não pertence ao seu usuário." }), {
+          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

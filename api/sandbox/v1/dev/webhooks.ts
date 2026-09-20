@@ -27,46 +27,77 @@ export default async function handler(req: any, res: any) {
   const userClient = getSupabaseUserClient(token);
   const action = (req.query?.action as string) || (req.body?.action as string) || 'list';
 
-  // 1. LIST: Listar webhooks de uma conta
+  // 1. LIST: Listar webhooks de uma conta (com validação estrita de ownership)
   if (req.method === 'GET' || action === 'list') {
     const accountId = (req.query?.accountId as string) || (req.body?.accountId as string);
 
-    let query = userClient
-      .from('webhooks_config')
-      .select('id, account_id, url, events, active, secret_last4, requires_secret_rotation, created_at');
-
     if (accountId) {
-      query = query.eq('account_id', accountId);
+      // Valida se a conta pertence ao usuário solicitante
+      const { data: accCheck, error: accErr } = await userClient
+        .from('accounts')
+        .select('id')
+        .eq('id', accountId)
+        .maybeSingle();
+
+      if (accErr || !accCheck) {
+        return sendError(res, 403, 'FORBIDDEN_ACCOUNT', 'A conta indicada não pertence ao usuário autenticado.');
+      }
+
+      const { data: configs, error } = await userClient
+        .from('webhooks_config')
+        .select('id, account_id, url, events, active, secret_last4, requires_secret_rotation, created_at')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return sendError(res, 500, 'DATABASE_ERROR', 'Erro ao consultar configurações de webhooks.');
+      }
+
+      return sendSuccess(res, 200, {
+        webhooks: (configs || []).map((c: any) => ({
+          id: c.id,
+          accountId: c.account_id,
+          url: c.url,
+          events: c.events || [],
+          active: c.active,
+          secretLast4: c.secret_last4,
+          requiresSecretRotation: c.requires_secret_rotation,
+          createdAt: c.created_at,
+        })),
+      });
     } else {
       // Filtra pelas contas do usuário logado
       const { data: userAccounts } = await userClient
         .from('accounts')
         .select('id');
       const accIds = (userAccounts || []).map((a: any) => a.id);
-      query = query.in('account_id', accIds);
+
+      const { data: configs, error } = await userClient
+        .from('webhooks_config')
+        .select('id, account_id, url, events, active, secret_last4, requires_secret_rotation, created_at')
+        .in('account_id', accIds.length > 0 ? accIds : ['00000000-0000-0000-0000-000000000000'])
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return sendError(res, 500, 'DATABASE_ERROR', 'Erro ao consultar configurações de webhooks.');
+      }
+
+      return sendSuccess(res, 200, {
+        webhooks: (configs || []).map((c: any) => ({
+          id: c.id,
+          accountId: c.account_id,
+          url: c.url,
+          events: c.events || [],
+          active: c.active,
+          secretLast4: c.secret_last4,
+          requiresSecretRotation: c.requires_secret_rotation,
+          createdAt: c.created_at,
+        })),
+      });
     }
-
-    const { data: configs, error } = await query.order('created_at', { ascending: false });
-
-    if (error) {
-      return sendError(res, 500, 'DATABASE_ERROR', 'Erro ao consultar configurações de webhooks.');
-    }
-
-    return sendSuccess(res, 200, {
-      webhooks: (configs || []).map((c: any) => ({
-        id: c.id,
-        accountId: c.account_id,
-        url: c.url,
-        events: c.events || [],
-        active: c.active,
-        secretLast4: c.secret_last4,
-        requiresSecretRotation: c.requires_secret_rotation,
-        createdAt: c.created_at,
-      })),
-    });
   }
 
-  // 2. CREATE: Cadastrar novo webhook com segredo derivado
+  // 2. CREATE: Cadastrar novo webhook com segredo derivado estritamente via service_role
   if (action === 'create' && req.method === 'POST') {
     const { accountId, url, events } = req.body || {};
 
@@ -75,13 +106,13 @@ export default async function handler(req: any, res: any) {
     }
 
     // Valida propriedade da conta usando o cliente do usuário
-    const { data: account } = await userClient
+    const { data: account, error: accErr } = await userClient
       .from('accounts')
       .select('id')
       .eq('id', accountId)
       .maybeSingle();
 
-    if (!account) {
+    if (accErr || !account) {
       return sendError(res, 403, 'FORBIDDEN_ACCOUNT', 'A conta indicada não pertence ao usuário.');
     }
 
@@ -103,21 +134,11 @@ export default async function handler(req: any, res: any) {
       active: true,
     };
 
-    let { data: inserted, error } = await adminClient
+    const { data: inserted, error } = await adminClient
       .from('webhooks_config')
       .insert(newConfigData)
       .select('*')
       .single();
-
-    if (error) {
-      const userInsert = await userClient
-        .from('webhooks_config')
-        .insert(newConfigData)
-        .select('*')
-        .single();
-      inserted = userInsert.data;
-      error = userInsert.error;
-    }
 
     if (error || !inserted) {
       return sendError(res, 500, 'WEBHOOK_CREATION_FAILED', `Erro ao cadastrar endpoint de webhook: ${error?.message || ''}`);
@@ -136,7 +157,7 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // 3. ROTATE-SECRET: Rotacionar segredo de webhook
+  // 3. ROTATE-SECRET: Rotacionar segredo de webhook via service_role com verificação de user_id
   if (action === 'rotate-secret' && req.method === 'POST') {
     const { configId } = req.body || {};
 
@@ -144,21 +165,21 @@ export default async function handler(req: any, res: any) {
       return sendError(res, 400, 'MISSING_CONFIG_ID', 'ID da configuração de webhook é obrigatório.');
     }
 
-    const { data: config } = await supabase
+    const { data: config, error: findErr } = await adminClient
       .from('webhooks_config')
       .select('*')
       .eq('id', configId)
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (!config) {
-      return sendError(res, 404, 'CONFIG_NOT_FOUND', 'Configuração de webhook não encontrada.');
+    if (findErr || !config) {
+      return sendError(res, 404, 'CONFIG_NOT_FOUND', 'Configuração de webhook não encontrada ou não pertence ao usuário.');
     }
 
     const nextVersion = (config.secret_version || 1) + 1;
     const derived = deriveWebhookSecret(config.id, undefined, nextVersion);
 
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await adminClient
       .from('webhooks_config')
       .update({
         secret_salt: derived.salt,
@@ -167,7 +188,8 @@ export default async function handler(req: any, res: any) {
         requires_secret_rotation: false,
         active: true,
       })
-      .eq('id', configId);
+      .eq('id', configId)
+      .eq('user_id', user.id);
 
     if (updateErr) {
       return sendError(res, 500, 'ROTATION_FAILED', 'Erro ao rotacionar segredo do webhook.');
@@ -183,12 +205,36 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  // 4. RETRY-DELIVERY: Reenvio manual baseado exclusivamente em delivery_job_id
+  // 4. RETRY-DELIVERY: Reenvio manual validando estritamente que o job pertence ao usuário solicitante
   if (action === 'retry-delivery' && req.method === 'POST') {
     const { deliveryJobId } = req.body || {};
 
     if (!deliveryJobId) {
       return sendError(res, 400, 'MISSING_JOB_ID', 'deliveryJobId é obrigatório para reenvio.');
+    }
+
+    // Validação estrita: job -> config -> account/user pertence ao usuário
+    const { data: job, error: jobErr } = await adminClient
+      .from('webhook_delivery_jobs')
+      .select(`
+        id,
+        webhook_config_id,
+        webhooks_config (
+          id,
+          user_id,
+          account_id
+        )
+      `)
+      .eq('id', deliveryJobId)
+      .maybeSingle();
+
+    if (jobErr || !job || !job.webhooks_config) {
+      return sendError(res, 404, 'JOB_NOT_FOUND', 'Job de entrega não encontrado.');
+    }
+
+    const configOwnerId = (job.webhooks_config as any).user_id;
+    if (configOwnerId !== user.id) {
+      return sendError(res, 403, 'FORBIDDEN_JOB', 'O job de entrega informado não pertence à sua conta.');
     }
 
     try {
