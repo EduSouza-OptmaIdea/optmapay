@@ -42,7 +42,7 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const { senderAccountId, destPixKeyOrPayload, amount, description, externalReference } = body || {};
+    const { senderAccountId, destPixKeyOrPayload, amount, description, externalReference, idempotencyKey } = body || {};
 
     if (!senderAccountId || !destPixKeyOrPayload || !amount) {
       return new Response(JSON.stringify({ error: "Parâmetros obrigatórios ausentes." }), {
@@ -68,25 +68,57 @@ serve(async (req: Request) => {
       });
     }
 
-    // 1. Invoca a RPC atômica transfer_pix
+    // Calcula request_hash seguro para idempotência
+    let requestHash: string | null = null;
+    if (idempotencyKey) {
+      const payloadStr = JSON.stringify({ senderAccountId, destPixKeyOrPayload, amount: Number(amount) });
+      const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payloadStr));
+      requestHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    // 1. Invoca a RPC atômica transfer_pix com suporte a idempotência transacional no PostgreSQL
     const { data: rpcResult, error: rpcErr } = await adminClient.rpc("transfer_pix", {
       p_sender_account_id: senderAccountId,
       p_receiver_pix_key: destPixKeyOrPayload,
       p_amount: Number(amount),
       p_description: description || "Transferência Pix Sandbox",
       p_external_reference: externalReference || null,
+      p_idempotency_key: idempotencyKey || null,
+      p_request_hash: requestHash,
     });
 
     if (rpcErr) {
-      return new Response(JSON.stringify({ error: rpcErr.message }), {
+      const msg = rpcErr.message || "";
+      if (msg.includes("IDEMPOTENCY_KEY_REUSED")) {
+        return new Response(
+          JSON.stringify({ error: "IDEMPOTENCY_KEY_REUSED", message: "Esta Idempotency-Key já foi utilizada com parâmetros de requisição diferentes." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({ error: msg }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!rpcResult || !rpcResult.success) {
-      return new Response(JSON.stringify({ error: "Falha na transferência Pix." }), {
+      const msg = rpcResult?.message || "";
+      if (msg.includes("IDEMPOTENCY_KEY_REUSED") || rpcResult?.code === "IDEMPOTENCY_KEY_REUSED") {
+        return new Response(
+          JSON.stringify({ error: "IDEMPOTENCY_KEY_REUSED", message: "Esta Idempotency-Key já foi utilizada com parâmetros de requisição diferentes." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({ error: msg || "Falha na transferência Pix." }), {
         status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Se o resultado é idempotente vindo de cache
+    if (rpcResult.from_cache && rpcResult.cached_response) {
+      return new Response(JSON.stringify(rpcResult.cached_response), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

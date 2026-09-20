@@ -230,8 +230,10 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
   // Chave a ser enviada para busca no banco (se tiver accId no payload, usa accId como prioridade de busca)
   const lookupKey = parsed.accId || targetKey;
 
-  // 2. Invoca a Edge Function pix-transfer (que executa a RPC e orquestra o outbox server-side)
-  // com fallback resiliente para RPC direta
+  // 2. Idempotency Key para garantir mutação única server-side
+  const idempotencyKey = `pix-${senderAccountId}-${finalRef}`;
+
+  // 3. Invoca a Edge Function pix-transfer (que executa a RPC e orquestra o outbox server-side de forma atômica)
   let fnResult: any = null;
   let fnErr: any = null;
 
@@ -243,11 +245,12 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
         amount,
         description: finalDesc,
         externalReference: finalRef,
+        idempotencyKey,
       },
     });
     fnResult = res.data;
     fnErr = res.error;
-  } catch (e) {
+  } catch (e: any) {
     fnErr = e;
   }
 
@@ -269,36 +272,32 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     };
   }
 
-  // Fallback: executa via RPC transfer_pix (que já cria o outbox atomicamente no PostgreSQL)
-  const { data: rpcResult, error: rpcErr } = await supabase.rpc('transfer_pix', {
-    p_sender_account_id: senderAccountId,
-    p_receiver_pix_key: lookupKey,
-    p_amount: amount,
-    p_description: finalDesc,
-    p_external_reference: finalRef,
-  });
+  // Se houve erro de comunicação/timeout, consulta se a transação com a mesma chave/referência já foi gravada
+  // NUNCA executa uma segunda mutação ("por garantia")
+  const { data: existingTx } = await supabase
+    .from('transactions')
+    .select('id, amount, description, created_at, account_id')
+    .eq('account_id', senderAccountId)
+    .eq('type', 'pix_out')
+    .ilike('description', `%${finalRef}%`)
+    .maybeSingle();
 
-  if (!rpcErr && rpcResult && rpcResult.success) {
+  if (existingTx) {
     return {
       success: true,
-      message: `Transferência Pix de R$ ${amount.toFixed(2)} enviada com sucesso para ${rpcResult.receiver_name}!`,
+      message: `Transferência Pix confirmada via conciliação!`,
       amount,
       senderName: sender.name,
-      receiverName: rpcResult.receiver_name,
+      receiverName: targetKey,
       senderPixKey: sender.pix_key,
       receiverPixKey: targetKey,
       senderBalanceAfter: senderBalance - amount,
-      transactionOutId: rpcResult.transaction_out_id,
-      transactionInId: rpcResult.transaction_in_id,
-      transactionDate: new Date().toISOString(),
+      transactionOutId: existingTx.id,
+      transactionDate: existingTx.created_at,
       externalReference: finalRef,
-      webhooksDispatched: rpcResult.webhook_event_id ? 1 : 0,
+      webhooksDispatched: 1,
     };
   }
 
-  if (rpcErr) {
-    throw new Error(rpcErr.message || 'Erro ao processar transferência Pix via banco de dados.');
-  }
-
-  throw new Error(fnErr?.message || 'Falha ao concluir transferência Pix.');
+  throw new Error(`Falha ao processar transferência Pix (${fnErr?.message || fnResult?.error || 'Erro de comunicação'}). Nenhuma movimentação duplicada foi executada.`);
 }
