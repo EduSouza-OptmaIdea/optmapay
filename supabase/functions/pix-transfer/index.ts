@@ -122,17 +122,12 @@ serve(async (req: Request) => {
       });
     }
 
-    // Se o resultado é idempotente vindo de cache
-    if (rpcResult.from_cache && rpcResult.cached_response) {
-      return new Response(JSON.stringify(rpcResult.cached_response), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const isFromCache = Boolean(rpcResult.from_cache);
+    const persistedDate = rpcResult.created_at || rpcResult.createdAt || rpcResult.cached_response?.transactionDate || new Date().toISOString();
 
-    // 2. Dispara imediatamente os delivery jobs gerados para o evento criado no banco
+    // 2. Dispara imediatamente os delivery jobs gerados para o evento criado no banco (apenas na 1ª execução)
     let webhooksDispatched = 0;
-    if (rpcResult.webhook_event_id) {
+    if (!isFromCache && rpcResult.webhook_event_id) {
       const { data: pendingJobs } = await adminClient
         .from("webhook_delivery_jobs")
         .select("id")
@@ -149,22 +144,28 @@ serve(async (req: Request) => {
       }
     }
 
+    // 3. Resposta canônica idêntica para o 1º processamento e retries idempotentes
+    const responsePayload = {
+      success: true,
+      message: isFromCache
+        ? "Transferência Pix recuperada com sucesso via cache de idempotência!"
+        : (rpcResult.message || "Transferência Pix concluída com sucesso!"),
+      amount: Number(rpcResult.amount),
+      senderName: rpcResult.sender_name || rpcResult.senderName,
+      receiverName: rpcResult.receiver_name || rpcResult.receiverName,
+      senderAccountId: rpcResult.sender_account_id || rpcResult.senderAccountId,
+      receiverAccountId: rpcResult.receiver_account_id || rpcResult.receiverAccountId,
+      transactionOutId: rpcResult.transaction_out_id || rpcResult.transactionOutId,
+      transactionInId: rpcResult.transaction_in_id || rpcResult.transactionInId,
+      webhookEventId: rpcResult.webhook_event_id || rpcResult.webhookEventId,
+      webhooksDispatched: isFromCache ? 0 : webhooksDispatched,
+      externalReference: rpcResult.external_reference || rpcResult.externalReference || externalReference || null,
+      transactionDate: persistedDate,
+      fromCache: isFromCache,
+    };
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: rpcResult.message,
-        amount: rpcResult.amount,
-        senderName: rpcResult.sender_name,
-        receiverName: rpcResult.receiver_name,
-        senderAccountId: rpcResult.sender_account_id,
-        receiverAccountId: rpcResult.receiver_account_id,
-        transactionOutId: rpcResult.transaction_out_id,
-        transactionInId: rpcResult.transaction_in_id,
-        webhookEventId: rpcResult.webhook_event_id,
-        webhooksDispatched,
-        externalReference: externalReference || null,
-        transactionDate: new Date().toISOString(),
-      }),
+      JSON.stringify(responsePayload),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -140,16 +140,14 @@ export default async function handler(req: any, res: any) {
     );
   }
 
-  // Se o resultado veio do cache de idempotência transacional persistido no PostgreSQL
-  if (rpcResult.from_cache) {
-    return res.status(200).json(rpcResult);
-  }
-
-  // 5. Resposta canônica estruturada autoritativa (Contrato alinhado)
+  // 5. Resposta canônica estruturada autoritativa (Contrato normalizado tanto no 1º processamento quanto no replay)
+  const isFromCache = Boolean(rpcResult.from_cache);
   const responseData = {
     success: true,
     status: 'approved',
-    message: 'Transação autorizada com sucesso no OptmaPay Sandbox!',
+    message: isFromCache
+      ? 'Transação recuperada com sucesso via cache de idempotência (OptmaPay Sandbox)!'
+      : 'Transação autorizada com sucesso no OptmaPay Sandbox!',
     data: {
       transactionId: rpcResult.transaction_in_id || rpcResult.transactionId,
       orderId: orderId,
@@ -183,12 +181,13 @@ export default async function handler(req: any, res: any) {
       nsu: rpcResult.nsu,
       tid: rpcResult.tid,
       webhookEventId: rpcResult.webhook_event_id || rpcResult.webhookEventId,
-      createdAt: rpcResult.created_at || new Date().toISOString(),
+      createdAt: rpcResult.created_at || rpcResult.createdAt || new Date().toISOString(),
+      fromCache: isFromCache,
     },
   };
 
-  // 6. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL
-  if (rpcResult.webhook_event_id) {
+  // 6. Despacho assíncrono dos jobs de webhook gerados pelo PostgreSQL (apenas na 1ª execução)
+  if (!isFromCache && rpcResult.webhook_event_id) {
     dispatchEventJobs(rpcResult.webhook_event_id).catch(() => {});
   }
 
