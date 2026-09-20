@@ -6,10 +6,37 @@ const DEFAULT_SUPABASE_URL = 'https://wertmoquxdrucdbobuie.supabase.co';
 const DEFAULT_FALLBACK_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlcnRtb3F1eGRydWNkYm9idWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3ODQ5MDIsImV4cCI6MjEwMzM2MDkwMn0.KPlRj0w9wwO2Jf3rySQEfvqsx6wadqaUxftlhNX0p6A';
 
+import fs from 'node:fs';
+import path from 'node:path';
+
+function loadEnvFile(filename: string) {
+  try {
+    const filePath = path.resolve(process.cwd(), filename);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx > 0) {
+          const k = trimmed.slice(0, eqIdx).trim();
+          const v = trimmed.slice(eqIdx + 1).trim();
+          if (typeof process !== 'undefined' && process.env && !process.env[k]) {
+            process.env[k] = v;
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
 function getEnvVar(key: string): string | undefined {
   try {
     const envObj = (typeof process !== 'undefined' ? (process as any).env : {}) || {};
-    return envObj[key];
+    if (envObj[key]) return envObj[key];
+    loadEnvFile('.env.local');
+    loadEnvFile('.env');
+    return (typeof process !== 'undefined' ? (process as any).env : {})[key];
   } catch {
     return undefined;
   }

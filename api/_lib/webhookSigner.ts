@@ -1,8 +1,37 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
+function loadEnvFile(filename: string) {
+  try {
+    const filePath = path.resolve(process.cwd(), filename);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx > 0) {
+          const k = trimmed.slice(0, eqIdx).trim();
+          const v = trimmed.slice(eqIdx + 1).trim();
+          if (typeof process !== 'undefined' && process.env && !process.env[k]) {
+            process.env[k] = v;
+          }
+        }
+      }
+    }
+  } catch {}
+}
 
 export function getWebhookMasterKey(): string {
-  const masterKey =
+  let masterKey =
     (typeof process !== 'undefined' ? process.env?.OPTMAPAY_WEBHOOK_MASTER_KEY || process.env?.WEBHOOK_MASTER_KEY : undefined);
+
+  if (!masterKey || masterKey.trim() === '') {
+    loadEnvFile('.env.local');
+    loadEnvFile('.env');
+    masterKey = (typeof process !== 'undefined' ? process.env?.OPTMAPAY_WEBHOOK_MASTER_KEY || process.env?.WEBHOOK_MASTER_KEY : undefined);
+  }
 
   if (!masterKey || masterKey.trim() === '') {
     throw new Error('CONFIG_ERROR: OPTMAPAY_WEBHOOK_MASTER_KEY não configurada no ambiente.');
