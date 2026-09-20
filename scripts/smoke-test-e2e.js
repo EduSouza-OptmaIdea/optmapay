@@ -2,12 +2,32 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Carrega .env.local caso exista no diretório raiz
+if (fs.existsSync('.env.local')) {
+  const content = fs.readFileSync('.env.local', 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx > 0) {
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (!process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  }
+}
+
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://wertmoquxdrucdbobuie.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const MASTER_KEY = process.env.OPTMAPAY_WEBHOOK_MASTER_KEY || '0c3d61e5e5ae6adff6fe2bc2f237ff3ac107b1f5260c1998b656954f521cf999';
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('❌ SUPABASE_SERVICE_ROLE_KEY não configurada no ambiente.');
+  console.error('❌ SUPABASE_SERVICE_ROLE_KEY não configurada no ambiente nem em .env.local.');
   console.error('Execute definindo a chave service_role do projeto wertmoquxdrucdbobuie.');
   process.exit(1);
 }

@@ -116,10 +116,12 @@ CREATE INDEX IF NOT EXISTS idx_webhook_events_account_id ON public.webhook_event
 CREATE INDEX IF NOT EXISTS idx_webhook_events_created_at ON public.webhook_events(created_at DESC);
 
 ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "webhook_events_select_policy" ON public.webhook_events;
 CREATE POLICY "webhook_events_select_policy" ON public.webhook_events
   FOR SELECT TO authenticated
   USING (account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "webhook_events_service_role_all" ON public.webhook_events;
 CREATE POLICY "webhook_events_service_role_all" ON public.webhook_events
   FOR ALL TO service_role
   USING (true)
@@ -147,6 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_jobs_status_next ON public.webhook_deliv
 CREATE INDEX IF NOT EXISTS idx_delivery_jobs_webhook_config_id ON public.webhook_delivery_jobs(webhook_config_id);
 
 ALTER TABLE public.webhook_delivery_jobs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "webhook_delivery_jobs_select_policy" ON public.webhook_delivery_jobs;
 CREATE POLICY "webhook_delivery_jobs_select_policy" ON public.webhook_delivery_jobs
   FOR SELECT TO authenticated
   USING (webhook_config_id IN (
@@ -155,6 +158,7 @@ CREATE POLICY "webhook_delivery_jobs_select_policy" ON public.webhook_delivery_j
     )
   ));
 
+DROP POLICY IF EXISTS "webhook_delivery_jobs_service_role_all" ON public.webhook_delivery_jobs;
 CREATE POLICY "webhook_delivery_jobs_service_role_all" ON public.webhook_delivery_jobs
   FOR ALL TO service_role
   USING (true)
@@ -188,6 +192,7 @@ CREATE POLICY "webhooks_log_select_policy" ON public.webhooks_log
   ));
 
 -- Inserção de log apenas via service_role (backend/dispatcher)
+DROP POLICY IF EXISTS "webhooks_log_service_role_all" ON public.webhooks_log;
 CREATE POLICY "webhooks_log_service_role_all" ON public.webhooks_log
   FOR ALL TO service_role
   USING (true)
@@ -222,6 +227,7 @@ CREATE POLICY "webhooks_config_select_policy" ON public.webhooks_config
   FOR SELECT TO authenticated
   USING (account_id IN (SELECT id FROM public.accounts WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "webhooks_config_service_role_all" ON public.webhooks_config;
 CREATE POLICY "webhooks_config_service_role_all" ON public.webhooks_config
   FOR ALL TO service_role
   USING (true)

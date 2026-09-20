@@ -28,9 +28,14 @@ async function main() {
     'Configurando Segredos Criptográficos Oficiais no Supabase'
   );
 
-  // 2. Aplicação das Migrations
+  // 2. Vinculação e Aplicação das Migrations
   run(
-    `npx supabase db push --project-ref ${PROJECT_REF}`,
+    `npx supabase link --project-ref ${PROJECT_REF}`,
+    'Garantindo vinculação ao projeto oficial'
+  );
+
+  run(
+    `npx supabase db push --yes`,
     'Aplicando as 20 Migrations (forward-only) no Banco Oficial'
   );
 

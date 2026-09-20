@@ -64,15 +64,19 @@ ALTER TABLE public.cofrinhos_poupanca ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.emprestimos_edu ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de Acesso
+DROP POLICY IF EXISTS "Permitir leitura de contas a pagar pelo titular" ON public.contas_pagar;
 CREATE POLICY "Permitir leitura de contas a pagar pelo titular" ON public.contas_pagar
   FOR SELECT USING (auth.uid() = user_id OR auth.uid() IS NULL);
 
+DROP POLICY IF EXISTS "Permitir inserção e atualização de contas a pagar" ON public.contas_pagar;
 CREATE POLICY "Permitir inserção e atualização de contas a pagar" ON public.contas_pagar
   FOR ALL USING (auth.uid() = user_id OR auth.uid() IS NULL);
 
+DROP POLICY IF EXISTS "Permitir gestão de cofrinhos pelo titular" ON public.cofrinhos_poupanca;
 CREATE POLICY "Permitir gestão de cofrinhos pelo titular" ON public.cofrinhos_poupanca
   FOR ALL USING (auth.uid() = user_id OR auth.uid() IS NULL);
 
+DROP POLICY IF EXISTS "Permitir gestão de empréstimos pelo titular" ON public.emprestimos_edu;
 CREATE POLICY "Permitir gestão de empréstimos pelo titular" ON public.emprestimos_edu
   FOR ALL USING (auth.uid() = user_id OR auth.uid() IS NULL);
 
