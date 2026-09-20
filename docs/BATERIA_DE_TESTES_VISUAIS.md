@@ -166,14 +166,14 @@ Acesse: `/cartoes?tab=invoices` (com a **Conta Pagadora** selecionada)
 Acesse: Página Inicial `/` (deslogado ou a partir da home pública)
 
 - [ ] **7.1. Tela de Login Limpa**
-  - [ ] Acessou `/login` e constatou que **não há mais qualquer menção, botão ou modal de Super Admin**
-  - [ ] O aviso legal no rodapé cita ausência de valores reais e normas do BACEN
+  - [x] Acessou `/login` e constatou que **não há mais qualquer menção, botão ou modal de Super Admin**
+  - [x] O aviso legal no rodapé cita ausência de valores reais e normas do BACEN
 - [ ] **7.2. Link "Acesso Restrito" no Rodapé**
-  - [ ] Foi até o rodapé da home page ([PublicHome.tsx](file:///d:/OptmaIdea/optmapay/src/pages/PublicHome.tsx))
-  - [ ] Localizou o link simples e discreto `Acesso Restrito` ao lado dos termos
+  - [x] Foi até o rodapé da home page ([PublicHome.tsx](file:///d:/OptmaIdea/optmapay/src/pages/PublicHome.tsx))
+  - [x] Localizou o link simples e discreto `Acesso Restrito` ao lado dos termos
 - [ ] **7.3. Autenticação e Bloqueio de Não-Autorizados**
-  - [ ] Tentou digitar um e-mail comum (ex: `cliente@teste.com`): sistema bloqueia informando que o acesso é restrito ao administrador central
-  - [ ] Informou as credenciais da conta `edu.souza`: login efetuado com sucesso e redirecionamento direto para `/master-admin`
+  - [x] Tentou digitar um e-mail comum (ex: `cliente@teste.com`): sistema bloqueia informando que o acesso é restrito ao administrador central
+  - [x] Informou as credenciais da conta `edu.souza`: login efetuado com sucesso e redirecionamento direto para `/master-admin`
 - [ ] **7.4. Operações no Console Master**
   - [ ] Visualizou a lista de todas as contas e empresas cadastradas
   - [ ] Testou a calibração de tarifas do banco em `Parâmetros do Banco`
