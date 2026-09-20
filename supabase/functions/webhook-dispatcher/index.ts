@@ -1,12 +1,13 @@
 // Edge Function: Webhook Dispatcher
-// Dispara notificações HTTPS para os endpoints cadastrados pelos desenvolvedores
+// Dispara notificações HTTPS autoritativas exclusivamente a partir de jobs do banco
 /// <reference path="../deno.d.ts" />
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { processJobDispatch } from "../_shared/webhookDispatcher.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-optmapay-internal-token",
 };
 
 serve(async (req: Request) => {
@@ -15,82 +16,41 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { webhook_config_id, event, payload } = await req.json();
+    const internalToken = req.headers.get("x-optmapay-internal-token");
+    const expectedToken = Deno.env.get("OPTMAPAY_INTERNAL_DISPATCH_TOKEN");
+    const authHeader = req.headers.get("authorization") || "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+    // Validação de segurança: apenas chamadas autorizadas internas
+    const isServiceRole = authHeader.includes(serviceRoleKey) && serviceRoleKey.length > 0;
+    const isTokenValid = expectedToken && internalToken === expectedToken;
+
+    if (!isServiceRole && !isTokenValid) {
+      return new Response(
+        JSON.stringify({ error: "Acesso não autorizado ao dispatcher interno." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const body = await req.json();
+    const { jobId, isManualRetry } = body || {};
+
+    if (!jobId) {
+      return new Response(
+        JSON.stringify({ error: "O campo jobId é obrigatório. Não é permitido enviar URL/payload arbitrários." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Busca configuração do webhook
-    const { data: config, error: configError } = await supabase
-      .from("webhooks_config")
-      .select("*")
-      .eq("id", webhook_config_id)
-      .single();
+    const result = await processJobDispatch(supabase, jobId, Boolean(isManualRetry));
 
-    if (configError || !config) {
-      throw new Error("Configuração de Webhook não encontrada.");
-    }
-
-    // Disparo HTTP POST com timeout de 5s
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    let responseStatus = 0;
-    let responseBody = "";
-
-    try {
-      const res = await fetch(config.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-optmapay-event": event,
-          "x-optmapay-real-money": "false",
-          "x-optmapay-environment": "sandbox",
-          "x-optmapay-secret": config.secret,
-        },
-        body: JSON.stringify({
-          event,
-          realMoney: false,
-          environment: "sandbox",
-          data: payload,
-          timestamp: new Date().toISOString(),
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-      responseStatus = res.status;
-      responseBody = await res.text();
-    } catch (err: any) {
-      clearTimeout(timeout);
-      responseStatus = 504;
-      responseBody = err.message || "Timeout ou falha de conexão com endpoint de destino";
-    }
-
-    // Grava log de auditoria
-    await supabase.from("webhooks_log").insert({
-      user_id: config.user_id,
-      webhook_config_id: config.id,
-      event,
-      payload,
-      response_status: responseStatus,
-      response_body: responseBody.slice(0, 1000),
-      attempt_count: 1,
-      delivered_at: new Date().toISOString(),
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
-    return new Response(
-      JSON.stringify({
-        success: responseStatus >= 200 && responseStatus < 300,
-        status: responseStatus,
-        body: responseBody,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
