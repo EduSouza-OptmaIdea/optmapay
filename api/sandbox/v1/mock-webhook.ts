@@ -30,11 +30,18 @@ function sendResponse(res: any, status: number, payload: any) {
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
-    const envKeys = Object.keys(process.env).sort();
     return sendResponse(res, 200, {
       status: 'ok',
       service: 'OptmaPay Controlled Mock Webhook Receiver',
-      envKeys,
+      deployment: {
+        deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
+        commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
+        projectId: process.env.VERCEL_PROJECT_ID,
+        projectName: process.env.VERCEL_PROJECT_NAME,
+        url: process.env.VERCEL_URL,
+        productionUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL,
+        region: process.env.VERCEL_REGION,
+      },
       timestamp: new Date().toISOString(),
       realMoney: false,
       environment: 'sandbox',
