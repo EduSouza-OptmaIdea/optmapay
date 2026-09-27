@@ -1,4 +1,4 @@
-import { CardFeeRates, SettlementPlanType, InstallmentReceivable } from '../types/sandbox';
+import type { CardFeeRates, SettlementPlanType, InstallmentReceivable } from '../types/sandbox.ts';
 
 // ==============================================================================
 // 1. TABELAS OFICIAIS DE TAXAS MDR (D+0 ONTIME, D+1, D+7, D+15 E VENCIMENTO)

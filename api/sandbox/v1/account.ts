@@ -1,6 +1,6 @@
-import { authenticateApiKey } from '../../_lib/apiKeyAuth';
-import { getSupabaseAdmin } from '../../_lib/supabaseAdmin';
-import { sendError, sendSuccess } from '../../_lib/http';
+import { authenticateApiKey } from '../../_lib/apiKeyAuth.ts';
+import { getSupabaseAdmin } from '../../_lib/supabaseAdmin.ts';
+import { sendError, sendSuccess } from '../../_lib/http.ts';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'GET') {

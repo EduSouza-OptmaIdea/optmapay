@@ -1,9 +1,9 @@
-import { authenticateApiKey } from '../../../_lib/apiKeyAuth';
-import { hashRequestBody } from '../../../_lib/idempotency';
-import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
-import { validateCardBin } from '../../../../src/lib/cardRules';
-import { dispatchEventJobs } from '../../../_lib/dispatcher';
-import { sendError, sendSuccess } from '../../../_lib/http';
+import { authenticateApiKey } from '../../../_lib/apiKeyAuth.ts';
+import { hashRequestBody } from '../../../_lib/idempotency.ts';
+import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin.ts';
+import { validateCardBin } from '../../../../src/lib/cardRules.ts';
+import { dispatchEventJobs } from '../../../_lib/dispatcher.ts';
+import { sendError, sendSuccess } from '../../../_lib/http.ts';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

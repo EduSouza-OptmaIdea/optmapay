@@ -1,6 +1,6 @@
-import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin';
-import { generateApiKeyTokens } from '../../../_lib/apiKeyAuth';
-import { sendError, sendSuccess } from '../../../_lib/http';
+import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin.ts';
+import { generateApiKeyTokens } from '../../../_lib/apiKeyAuth.ts';
+import { sendError, sendSuccess } from '../../../_lib/http.ts';
 
 async function getAuthenticatedUser(req: any) {
   const authHeader = req.headers['authorization'];

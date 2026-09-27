@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin';
-import { deriveWebhookSecret } from '../../../_lib/webhookSigner';
-import { dispatchWebhookJob } from '../../../_lib/dispatcher';
-import { sendError, sendSuccess } from '../../../_lib/http';
+import { getSupabaseAdmin, getSupabaseUserClient } from '../../../_lib/supabaseAdmin.ts';
+import { deriveWebhookSecret } from '../../../_lib/webhookSigner.ts';
+import { dispatchWebhookJob } from '../../../_lib/dispatcher.ts';
+import { sendError, sendSuccess } from '../../../_lib/http.ts';
 
 async function getAuthenticatedUser(req: any) {
   const authHeader = req.headers['authorization'];
