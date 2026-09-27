@@ -47,7 +47,15 @@ export function sendError(
     realMoney: false,
     environment: 'sandbox',
   };
-  return res.status(status).json(payload);
+
+  if (typeof res.status === 'function' && typeof res.json === 'function') {
+    return res.status(status).json(payload);
+  }
+  res.statusCode = status;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/json');
+  }
+  return res.end(JSON.stringify(payload));
 }
 
 export function sendSuccess(
@@ -57,10 +65,19 @@ export function sendSuccess(
   requestId?: string
 ) {
   const reqId = setStandardSandboxHeaders(res, requestId);
-  return res.status(status).json({
+  const payload = {
     ...data,
     requestId: reqId,
     realMoney: false,
     environment: 'sandbox',
-  });
+  };
+
+  if (typeof res.status === 'function' && typeof res.json === 'function') {
+    return res.status(status).json(payload);
+  }
+  res.statusCode = status;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/json');
+  }
+  return res.end(JSON.stringify(payload));
 }

@@ -34,6 +34,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LOG_OPTS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || (github.event.before != '0000000000000000000000000000000000000000' && format('{0}..{1}', github.event.before, github.event.after) || '--max-count=5') }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
