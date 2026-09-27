@@ -30,18 +30,9 @@ function sendResponse(res: any, status: number, payload: any) {
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
-    let devWebhooksDiag = 'not_tested';
-    try {
-      await import('./dev/webhooks.js');
-      devWebhooksDiag = 'import_success';
-    } catch (e: any) {
-      devWebhooksDiag = `import_error: ${e.message} (code: ${e.code})`;
-    }
-
     return sendResponse(res, 200, {
       status: 'ok',
       service: 'OptmaPay Controlled Mock Webhook Receiver',
-      devWebhooksDiag,
       timestamp: new Date().toISOString(),
       realMoney: false,
       environment: 'sandbox',
