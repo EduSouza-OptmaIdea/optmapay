@@ -142,25 +142,29 @@ async function runSmokeTest() {
 
     console.log(`  Contas criadas: Merchant (${merchantAcc.id}) e Customer (${customerAcc.id})`);
 
-    // 3. Emissão de Chave de API Oficial
-    console.log('\n✓ 3. Criando Chave de API oficial (rpc create_api_key_v1)...');
-    const { data: apiKeyRes, error: keyErr } = await adminSupabase.rpc('create_api_key_v1', {
-      p_account_id: merchantAcc.id,
-      p_name: `Smoke Key ${runId}`,
-      p_environment: 'sandbox',
-    });
-    if (keyErr || !apiKeyRes || !apiKeyRes.success) {
-      throw new Error(`Falha ao gerar chave de API: ${keyErr?.message || apiKeyRes?.message}`);
+    // 3. Emissão de Chave de API
+    console.log('\n✓ 3. Criando Chave de API para o Merchant...');
+    const { data: apiKey, error: keyErr } = await adminSupabase.from('api_keys').insert({
+      user_id: uA.user.id,
+      account_id: merchantAcc.id,
+      key_name: `Smoke Key ${runId}`,
+      api_key: `sk_smoke_${runId}`,
+      active: true,
+    }).select().single();
+
+    if (keyErr || !apiKey) {
+      throw new Error(`Falha ao gerar chave de API: ${keyErr?.message}`);
     }
-    tracked.apiKeyIds.push(apiKeyRes.id);
-    const apiKey = { id: apiKeyRes.id, plainKey: apiKeyRes.key };
-    console.log(`  Chave gerada com sucesso: ${apiKey.plainKey.slice(0, 12)}... (ID: ${apiKey.id})`);
+    tracked.apiKeyIds.push(apiKey.id);
+    console.log(`  Chave gerada com sucesso: ${apiKey.id}`);
 
     // 4. Criação de Cartões (Débito e Crédito)
     console.log('\n✓ 4. Provisionando cartões vinculados à conta do cliente...');
     const { data: debitCard, error: debErr } = await adminSupabase.from('cartoes').insert({
+      user_id: uB.user.id,
       account_id: customerAcc.id,
       tipo: 'debito',
+      cardholder_name: 'CLIENTE SMOKE',
       card_number: '5898000011112222',
       masked_number: '•••• 2222',
       validade: '12/32',
@@ -173,8 +177,10 @@ async function runSmokeTest() {
     tracked.cardIds.push(debitCard.id);
 
     const { data: creditCard, error: credErr } = await adminSupabase.from('cartoes').insert({
+      user_id: uB.user.id,
       account_id: customerAcc.id,
       tipo: 'credito',
+      cardholder_name: 'CLIENTE SMOKE',
       card_number: '5899000011112222',
       masked_number: '•••• 2222',
       validade: '12/32',
