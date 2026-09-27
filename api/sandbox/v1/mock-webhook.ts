@@ -30,12 +30,11 @@ function sendResponse(res: any, status: number, payload: any) {
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
+    const envKeys = Object.keys(process.env).sort();
     return sendResponse(res, 200, {
       status: 'ok',
       service: 'OptmaPay Controlled Mock Webhook Receiver',
-      hasInternalToken: Boolean(process.env.OPTMAPAY_INTERNAL_DISPATCH_TOKEN),
-      hasMasterKey: Boolean(process.env.OPTMAPAY_WEBHOOK_MASTER_KEY),
-      hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      envKeys,
       timestamp: new Date().toISOString(),
       realMoney: false,
       environment: 'sandbox',
