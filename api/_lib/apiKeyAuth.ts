@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { getSupabaseAdmin } from './supabaseAdmin.ts';
-import { sendError } from './http.ts';
+import { getSupabaseAdmin } from './supabaseAdmin.js';
+import { sendError } from './http.js';
 
 export interface AuthenticatedApiKey {
   id: string;

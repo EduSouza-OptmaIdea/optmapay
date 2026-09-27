@@ -32,7 +32,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     let devWebhooksDiag = 'not_tested';
     try {
-      await import('./dev/webhooks.ts');
+      await import('./dev/webhooks.js');
       devWebhooksDiag = 'import_success';
     } catch (e: any) {
       devWebhooksDiag = `import_error: ${e.message} (code: ${e.code})`;

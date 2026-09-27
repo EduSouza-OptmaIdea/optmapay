@@ -1,6 +1,6 @@
-import { authenticateApiKey } from '../../_lib/apiKeyAuth.ts';
-import { getSupabaseAdmin } from '../../_lib/supabaseAdmin.ts';
-import { sendError, sendSuccess } from '../../_lib/http.ts';
+import { authenticateApiKey } from '../../_lib/apiKeyAuth.js';
+import { getSupabaseAdmin } from '../../_lib/supabaseAdmin.js';
+import { sendError, sendSuccess } from '../../_lib/http.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'POST') {

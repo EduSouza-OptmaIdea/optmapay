@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import https from 'node:https';
-import { getSupabaseAdmin } from './supabaseAdmin.ts';
-import { validateWebhookUrlSsrf } from './ssrf.ts';
-import { deriveWebhookSecret, signWebhookPayload } from './webhookSigner.ts';
+import { getSupabaseAdmin } from './supabaseAdmin.js';
+import { validateWebhookUrlSsrf } from './ssrf.js';
+import { deriveWebhookSecret, signWebhookPayload } from './webhookSigner.js';
 
 export interface DispatchJobResult {
   jobId: string;
