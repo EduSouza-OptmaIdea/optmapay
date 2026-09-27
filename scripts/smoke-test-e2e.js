@@ -23,7 +23,7 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://wertmoquxdrucdbob
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlcnRtb3F1eGRydWNkYm9idWllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3ODQ5MDIsImV4cCI6MjEwMzM2MDkwMn0.KPlRj0w9wwO2Jf3rySQEfvqsx6wadqaUxftlhNX0p6A';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const INTERNAL_DISPATCH_TOKEN = process.env.OPTMAPAY_INTERNAL_DISPATCH_TOKEN;
-const NODE_DISPATCHER_URL = (process.env.OPTMAPAY_NODE_DISPATCHER_URL || 'https://optmapay.vercel.app').replace(/\/$/, '');
+const NODE_DISPATCHER_URL = (process.env.OPTMAPAY_NODE_DISPATCHER_URL || 'https://optmapay.optmaidea.com.br').replace(/\/$/, '');
 
 // Fail-closed estrito: credenciais essenciais para o teste devem vir exclusivamente do ambiente
 if (!SUPABASE_SERVICE_ROLE_KEY) {
