@@ -290,9 +290,7 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
     return await supabase.functions.invoke('pix-transfer', {
       body: {
         senderAccountId,
-        // O servidor recebe a instrução original para validar expiração,
-        // valor fixo e referência antes de resolver a conta recebedora.
-        destPixKeyOrPayload,
+        destPixKeyOrPayload: lookupKey,
         amount,
         description: finalDesc,
         externalReference: finalRef,
