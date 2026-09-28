@@ -227,6 +227,7 @@ export interface PixTransferResult {
   transactionDate: string;
   externalReference: string;
   webhooksDispatched: number;
+  fromCache?: boolean;
 }
 
 /**
@@ -330,12 +331,15 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
       receiverName: fnResult.receiverName,
       senderPixKey: sender.pix_key,
       receiverPixKey: targetKey,
-      senderBalanceAfter: senderBalance - amount,
-      transactionOutId: fnResult.transactionOutId,
-      transactionInId: fnResult.transactionInId,
-      transactionDate: fnResult.transactionDate || new Date().toISOString(),
-      externalReference: finalRef,
-      webhooksDispatched: fnResult.webhooksDispatched || (fnResult.webhookEventId ? 1 : 0),
+      senderBalanceAfter: fnResult.from_cache || fnResult.fromCache
+        ? senderBalance
+        : senderBalance - amount,
+      transactionOutId: fnResult.transactionOutId || fnResult.transaction_out_id,
+      transactionInId: fnResult.transactionInId || fnResult.transaction_in_id,
+      transactionDate: fnResult.transactionDate || fnResult.created_at || fnResult.occurred_at || new Date().toISOString(),
+      externalReference: fnResult.externalReference || fnResult.external_reference || finalRef,
+      webhooksDispatched: fnResult.webhooksDispatched || (fnResult.webhookEventId || fnResult.webhook_event_id ? 1 : 0),
+      fromCache: Boolean(fnResult.from_cache || fnResult.fromCache),
     };
   }
 
