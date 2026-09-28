@@ -77,7 +77,7 @@ export const PixArea: React.FC = () => {
   const [generatedPayload, setGeneratedPayload] = useState<string | null>(null);
   const [generatedTxRef, setGeneratedTxRef] = useState<string | null>(null);
   const [generatedExpiresAt, setGeneratedExpiresAt] = useState<number | null>(null);
-  const [countdownSeconds, setCountdownSeconds] = useState<number>(600);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(900);
   const [copiedDynamicPayload, setCopiedDynamicPayload] = useState(false);
 
   // Histórico de Cobranças Geradas
@@ -190,7 +190,7 @@ export const PixArea: React.FC = () => {
     });
   }, [pixTransactions]);
 
-  // Timer de Contagem Regressiva de 10 Minutos (600 segundos)
+  // Timer de Contagem Regressiva de 15 Minutos (900 segundos)
   useEffect(() => {
     if (!generatedExpiresAt || dynamicChargePaid?.paid) return;
 
@@ -338,21 +338,10 @@ export const PixArea: React.FC = () => {
     const parsed = parsePixPayload(val);
     setParsedData(parsed);
 
-    // Valida se a instrução expirou (regra de 10 minutos)
-    if (parsed.isOptmaPayCode && val.includes('ts=')) {
-      try {
-        const urlParams = new URLSearchParams(val.split('?')[1]);
-        const tsStr = urlParams.get('ts');
-        if (tsStr) {
-          const creationTs = parseInt(tsStr, 10);
-          const tenMinutesMs = 10 * 60 * 1000;
-          if (Date.now() - creationTs > tenMinutesMs) {
-            setErrorMessage('Atenção: Esta instrução de cobrança Pix expirou após 10 minutos e não pode mais ser paga.');
-          }
-        }
-      } catch {
-        // Ignora
-      }
+    // A expiração faz parte do payload. O parser também reconhece os dois
+    // formatos legados usados antes do contrato ts+exp.
+    if (parsed.isOptmaPayCode && parsed.expiresAt && parsed.expiresAt <= Date.now()) {
+      setErrorMessage('Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.');
     }
 
     if (parsed.amount && parsed.amount > 0) {
@@ -393,7 +382,7 @@ export const PixArea: React.FC = () => {
     const randomTxRef = `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
     const finalDescription = pixDesc.trim() || 'Cobrança Pix Sandbox';
     const now = Date.now();
-    const expiresAt = now + 10 * 60 * 1000; // 10 Minutos
+    const expiresAt = now + 15 * 60 * 1000;
 
     const payload = generateOptmaPayPixPayload({
       receiverPixKey: activeAccount.pix_key,
@@ -402,12 +391,14 @@ export const PixArea: React.FC = () => {
       amount: isNaN(val) ? 0 : val,
       orderId: randomTxRef,
       description: finalDescription,
+      issuedAtMs: now,
+      expiresAtMs: expiresAt,
     });
 
     setGeneratedTxRef(randomTxRef);
     setGeneratedPayload(payload);
     setGeneratedExpiresAt(expiresAt);
-    setCountdownSeconds(600);
+    setCountdownSeconds(900);
     setDynamicChargePaid(null);
 
     const newCharge: StoredPixCharge = {
@@ -433,6 +424,11 @@ export const PixArea: React.FC = () => {
     const targetKey = parsedData?.cleanKey || rawPixInput.trim();
     if (!targetKey) {
       setErrorMessage('Informe a chave Pix ou código de instrução de destino.');
+      return;
+    }
+
+    if (parsedData?.isOptmaPayCode && parsedData.expiresAt && parsedData.expiresAt <= Date.now()) {
+      setErrorMessage('Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.');
       return;
     }
 
@@ -582,7 +578,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             Área Pix Sandbox & Cobranças
           </h1>
           <p className="text-xs text-slate-500">
-            Transfira fundos, emita QR Codes com baixa automática em tempo real e validade de 10 minutos
+            Transfira fundos, emita QR Codes com baixa automática em tempo real e validade de 15 minutos
           </p>
         </div>
 
@@ -881,7 +877,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       )}
 
-      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM VALIDADE DE 10 MINUTOS & BAIXA INSTANTÂNEA */}
+      {/* ABA 3: GERAR COBRANÇA DINÂMICA COM VALIDADE DE 15 MINUTOS & BAIXA INSTANTÂNEA */}
       {activeTab === 'generate' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 space-y-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -889,7 +885,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             Gerar Cobrança Pix com Valor
           </h2>
           <p className="text-xs text-slate-500">
-            Gera um QR Code dinâmico com valor predefinido válido por <strong>10 minutos</strong> e baixa automática em tempo real.
+            Gera um QR Code dinâmico com valor predefinido válido por <strong>15 minutos</strong> e baixa automática em tempo real.
           </p>
 
           <form onSubmit={handleGenerateDynamic} className="space-y-4">
@@ -928,7 +924,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
               className="w-full py-3 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-md shadow-orange-950/20 flex items-center justify-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Gerar Instrução de Cobrança Pix (Válida por 10 Minutos)</span>
+              <span>Gerar Instrução de Cobrança Pix (Válida por 15 Minutos)</span>
             </button>
           </form>
 
@@ -954,7 +950,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
                 ) : (
                   <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 text-xs flex items-center gap-2">
                     <Lock className="w-4 h-4 text-rose-500" />
-                    <span>Cobrança Pix Expirada após 10 minutos (Não pode mais ser utilizada)</span>
+                    <span>Cobrança Pix Expirada após 15 minutos (Não pode mais ser utilizada)</span>
                   </div>
                 )}
               </div>
