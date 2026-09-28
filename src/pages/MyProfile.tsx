@@ -158,7 +158,7 @@ export const MyProfile: React.FC = () => {
                 {activeAccount?.name || user?.email || 'Titular da Conta'}
               </h2>
               <p className="text-xs text-slate-400 font-mono">
-                {activeAccount?.type === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'} • ID: {user?.id}
+                {activeAccount?.type === 'merchant' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'} • ID: {activeAccount?.id || user?.id}
               </p>
             </div>
           </div>
