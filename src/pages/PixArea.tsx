@@ -68,6 +68,11 @@ export const PixArea: React.FC = () => {
   const [payDesc, setPayDesc] = useState('');
   const [paying, setPaying] = useState(false);
   const [transferReceipt, setTransferReceipt] = useState<PixTransferResult | null>(null);
+  const [instructionNotice, setInstructionNotice] = useState<{
+    kind: 'paid' | 'expired';
+    message: string;
+    receipt?: PixTransferResult;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedReceiptText, setCopiedReceiptText] = useState(false);
 
@@ -327,6 +332,7 @@ export const PixArea: React.FC = () => {
   const handlePixInputChange = (val: string) => {
     setRawPixInput(val);
     setErrorMessage(null);
+    setInstructionNotice(null);
 
     if (!val.trim()) {
       setParsedData(null);
@@ -338,10 +344,44 @@ export const PixArea: React.FC = () => {
     const parsed = parsePixPayload(val);
     setParsedData(parsed);
 
-    // A expiração faz parte do payload. O parser também reconhece os dois
-    // formatos legados usados antes do contrato ts+exp.
+    // A expiração faz parte do próprio payload.
     if (parsed.isOptmaPayCode && parsed.expiresAt && parsed.expiresAt <= Date.now()) {
-      setErrorMessage('Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.');
+      setInstructionNotice({
+        kind: 'expired',
+        message: 'Este código Pix expirou e não pode mais ser utilizado. Solicite ou gere um novo código.',
+      });
+    } else if (parsed.isOptmaPayCode && parsed.orderId) {
+      const alreadyPaid = pixTransactions.find(
+        (tx) =>
+          tx.type === 'pix' &&
+          tx.direction === 'out' &&
+          tx.status === 'completed' &&
+          tx.external_reference === parsed.orderId
+      );
+
+      if (alreadyPaid) {
+        const receipt: PixTransferResult = {
+          success: true,
+          message: 'Pagamento já realizado.',
+          amount: Number(alreadyPaid.amount),
+          senderName: activeAccount.name,
+          receiverName: alreadyPaid.counterparty_name || parsed.merchantName || 'Recebedor Pix',
+          senderPixKey: activeAccount.pix_key,
+          receiverPixKey: parsed.cleanKey,
+          senderBalanceAfter: activeAccount.balance,
+          transactionOutId: alreadyPaid.id,
+          transactionDate: alreadyPaid.created_at,
+          externalReference: alreadyPaid.external_reference || parsed.orderId,
+          webhooksDispatched: 0,
+          fromCache: true,
+        };
+
+        setInstructionNotice({
+          kind: 'paid',
+          message: `Este código Pix já foi pago em ${new Date(alreadyPaid.created_at).toLocaleString('pt-BR')}.`,
+          receipt,
+        });
+      }
     }
 
     if (parsed.amount && parsed.amount > 0) {
@@ -427,8 +467,18 @@ export const PixArea: React.FC = () => {
       return;
     }
 
-    if (parsedData?.isOptmaPayCode && parsedData.expiresAt && parsedData.expiresAt <= Date.now()) {
-      setErrorMessage('Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.');
+    if (instructionNotice?.kind === 'paid') {
+      return;
+    }
+
+    if (
+      instructionNotice?.kind === 'expired' ||
+      (parsedData?.isOptmaPayCode && parsedData.expiresAt && parsedData.expiresAt <= Date.now())
+    ) {
+      setInstructionNotice({
+        kind: 'expired',
+        message: 'Este código Pix expirou e não pode mais ser utilizado. Solicite ou gere um novo código.',
+      });
       return;
     }
 
@@ -455,14 +505,27 @@ export const PixArea: React.FC = () => {
         description: payDesc.trim() || undefined,
       });
 
-      setTransferReceipt(result);
+      if (result.fromCache) {
+        setInstructionNotice({
+          kind: 'paid',
+          message: 'Este código Pix já havia sido pago. Nenhum novo débito foi realizado.',
+          receipt: result,
+        });
+        setTransferReceipt(null);
+      } else {
+        setTransferReceipt(result);
+        setInstructionNotice(null);
+      }
+
       await refreshAccounts();
       await fetchPixTransactions();
 
-      setRawPixInput('');
-      setParsedData(null);
-      setPayAmount('0.00');
-      setPayDesc('');
+      if (!result.fromCache) {
+        setRawPixInput('');
+        setParsedData(null);
+        setPayAmount('0.00');
+        setPayDesc('');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao processar transferência Pix.');
     } finally {
@@ -541,22 +604,23 @@ export const PixArea: React.FC = () => {
 
   const handleCopyReceiptText = () => {
     if (!transferReceipt) return;
-    const text = `COMPROVANTE DE TRANSFERÊNCIA PIX - OPTMAPAY SANDBOX
-------------------------------------------------
+    const transactionId = transferReceipt.transactionOutId || transferReceipt.externalReference;
+    const text = `COMPROVANTE PIX - OPTMAPAY SANDBOX
 Valor: R$ ${transferReceipt.amount.toFixed(2)}
 Data/Hora: ${new Date(transferReceipt.transactionDate).toLocaleString('pt-BR')}
-Autenticação: ${transferReceipt.externalReference}
+Meio: Pix
 
-ORIGEM:
-Nome: ${transferReceipt.senderName}
-Chave Pix: ${transferReceipt.senderPixKey || 'N/A'}
+ORIGEM
+${transferReceipt.senderName}
+Chave Pix: ${transferReceipt.senderPixKey || 'Não informada'}
 
-DESTINO:
-Nome: ${transferReceipt.receiverName}
-Chave Pix: ${transferReceipt.receiverPixKey || 'N/A'}
+DESTINO
+${transferReceipt.receiverName}
+Chave Pix: ${transferReceipt.receiverPixKey || 'Não informada'}
 
-Ambiente: Sandbox Dev Bank (realMoney: false)
-------------------------------------------------`;
+ID da transação: ${transactionId}
+Referência: ${transferReceipt.externalReference}
+Ambiente: Sandbox — sem dinheiro real`;
     navigator.clipboard.writeText(text);
     setCopiedReceiptText(true);
     setTimeout(() => setCopiedReceiptText(false), 2000);
@@ -669,83 +733,94 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
         </div>
       </div>
 
-      {/* MODAL COMPROVANTE PROFISSIONAL DE TRANSFERÊNCIA PIX */}
+      {/* COMPROVANTE PIX — propositalmente simples e sem exibir saldo */}
       {transferReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl space-y-0">
-            <div className="bg-[#29324E] text-white p-6 text-center relative border-b-4 border-[#19A999]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-amber-100 bg-[#fffdf4] text-slate-900 shadow-2xl">
+            <div className="relative px-6 pb-4 pt-6">
               <button
                 onClick={() => setTransferReceipt(null)}
-                className="absolute right-4 top-4 text-slate-400 hover:text-white transition"
+                className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition hover:bg-black/5 hover:text-slate-700"
+                aria-label="Fechar comprovante"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center mb-2">
-                <FileCheck2 className="w-6 h-6" />
+
+              <div className="flex items-center gap-2 text-sm font-black tracking-tight">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-lime-500">
+                  <span className="h-2 w-2 rounded-full bg-slate-900" />
+                </span>
+                <span>OptmaPay</span>
+                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
+                  Sandbox
+                </span>
               </div>
-              <h3 className="text-lg font-bold">Comprovante de Transferência Pix</h3>
-              <p className="text-xs text-teal-300">OptmaPay Sandbox Dev Bank</p>
+
+              <p className="mt-5 text-[11px] font-bold text-slate-500">Comprovante Pix</p>
+              <p className="mt-1 text-4xl font-black tracking-tight">
+                {transferReceipt.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {new Date(transferReceipt.transactionDate).toLocaleString('pt-BR')}
+              </p>
             </div>
 
-            <div className="p-6 space-y-5 text-xs text-slate-700 dark:text-slate-300">
-              <div className="text-center py-2 border-b border-slate-100 dark:border-slate-800 space-y-1">
-                <span className="text-[11px] text-slate-400 font-semibold uppercase">Valor Transferido</span>
-                <p className="text-3xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
-                  R$ {transferReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  {new Date(transferReceipt.transactionDate).toLocaleString('pt-BR')}
-                </p>
+            <div className="border-t border-slate-300/70 px-6 py-4">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-slate-500">Meio</span>
+                <span className="font-black">Pix</span>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Origem (Pagador)</span>
-                  <p className="font-bold text-slate-900 dark:text-white text-xs">{transferReceipt.senderName}</p>
-                  <p className="font-mono text-[10px] text-slate-500 truncate">{transferReceipt.senderPixKey}</p>
-                  <p className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-bold pt-1">
-                    Seu Saldo: R$ {transferReceipt.senderBalanceAfter.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <div className="border-t border-slate-300/70 px-6 py-5">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Origem</p>
+              <p className="mt-2 text-sm font-black">{transferReceipt.senderName}</p>
+              <p className="mt-1 break-all text-[11px] text-slate-500">
+                Chave Pix: {transferReceipt.senderPixKey || 'Não informada'}
+              </p>
+            </div>
+
+            <div className="border-t border-slate-300/70 px-6 py-5">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Destino</p>
+              <p className="mt-2 text-sm font-black">{transferReceipt.receiverName}</p>
+              <p className="mt-1 break-all text-[11px] text-slate-500">
+                Chave Pix: {transferReceipt.receiverPixKey || 'Não informada'}
+              </p>
+            </div>
+
+            <div className="border-t border-slate-300/70 px-6 py-5 text-[10px] text-slate-500">
+              <div className="space-y-2">
+                <div>
+                  <p className="font-bold uppercase tracking-wide">ID da transação</p>
+                  <p className="mt-0.5 break-all font-mono text-slate-700">
+                    {transferReceipt.transactionOutId || transferReceipt.externalReference}
                   </p>
                 </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Destino (Recebedor)</span>
-                  <p className="font-bold text-slate-900 dark:text-white text-xs">{transferReceipt.receiverName}</p>
-                  <p className="font-mono text-[10px] text-slate-500 truncate">{transferReceipt.receiverPixKey}</p>
-                  <p className="text-[10px] text-slate-400 italic pt-1">Transferência creditada instantaneamente</p>
+                <div>
+                  <p className="font-bold uppercase tracking-wide">Referência</p>
+                  <p className="mt-0.5 break-all font-mono text-slate-700">{transferReceipt.externalReference}</p>
                 </div>
               </div>
+              <p className="mt-4 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                OptmaPay Sandbox · sem movimentação de dinheiro real
+              </p>
+            </div>
 
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] font-mono text-slate-500 space-y-1">
-                <div className="flex justify-between">
-                  <span>Autenticação Digital:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{transferReceipt.externalReference}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Ambiente:</span>
-                  <span>Sandbox (realMoney: false)</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleCopyReceiptText}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
-                >
-                  {copiedReceiptText ? <Check className="w-4 h-4 text-teal-500" /> : <Copy className="w-4 h-4" />}
-                  <span>{copiedReceiptText ? 'Copiado!' : 'Copiar Texto'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 bg-[#19A999] hover:bg-[#158f81] text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-md"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Imprimir / Salvar PDF</span>
-                </button>
-              </div>
+            <div className="flex gap-2 border-t border-slate-300/70 bg-white/55 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleCopyReceiptText}
+                className="flex-1 rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-black transition hover:bg-white"
+              >
+                {copiedReceiptText ? 'Copiado!' : 'Copiar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-black text-white transition hover:bg-slate-800"
+              >
+                Imprimir / PDF
+              </button>
             </div>
           </div>
         </div>
@@ -774,6 +849,35 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
             <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {instructionNotice && (
+            <div className={`p-4 rounded-xl border text-xs flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${
+              instructionNotice.kind === 'paid'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-100'
+                : 'bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-100'
+            }`}>
+              <div className="flex items-start gap-2">
+                {instructionNotice.kind === 'paid'
+                  ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  : <Clock className="w-4 h-4 shrink-0 mt-0.5" />}
+                <div>
+                  <p className="font-black">
+                    {instructionNotice.kind === 'paid' ? 'Código Pix já utilizado' : 'Código Pix expirado'}
+                  </p>
+                  <p className="mt-0.5 opacity-85">{instructionNotice.message}</p>
+                </div>
+              </div>
+              {instructionNotice.kind === 'paid' && instructionNotice.receipt && (
+                <button
+                  type="button"
+                  onClick={() => setTransferReceipt(instructionNotice.receipt || null)}
+                  className="shrink-0 rounded-lg border border-emerald-400 px-3 py-2 font-black hover:bg-emerald-100 dark:border-emerald-700 dark:hover:bg-emerald-900/50"
+                >
+                  Abrir comprovante
+                </button>
+              )}
             </div>
           )}
 
@@ -824,7 +928,7 @@ Ambiente: Sandbox Dev Bank (realMoney: false)
 
             <button
               type="submit"
-              disabled={paying}
+              disabled={paying || Boolean(instructionNotice)}
               className="w-full py-3.5 bg-[#F1613A] hover:bg-[#d94f2a] text-white font-bold text-xs rounded-xl transition shadow-lg shadow-orange-950/20 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {paying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
