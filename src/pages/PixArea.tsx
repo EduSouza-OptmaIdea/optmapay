@@ -8,8 +8,10 @@ import {
   parsePixPayload,
   executePixTransfer,
   generateOptmaPayPixPayload,
+  getPixInstructionStatus,
   PixTransferResult,
   ParsedPixData,
+  PixInstructionStatus,
 } from '../lib/pixService';
 import {
   QrCode,
@@ -110,6 +112,7 @@ export const PixArea: React.FC = () => {
   const [loadingPixTx, setLoadingPixTx] = useState(false);
 
   const activeAccountRef = useRef(activeAccount);
+  const pixInstructionInspectionRef = useRef(0);
   activeAccountRef.current = activeAccount;
 
   // Carrega cobranças salvas do localStorage
@@ -328,11 +331,36 @@ export const PixArea: React.FC = () => {
     receiverAccountId: activeAccount.id,
   });
 
+  const receiptFromInstructionStatus = (
+    status: PixInstructionStatus,
+    parsed: ParsedPixData,
+  ): PixTransferResult | undefined => {
+    if (!status.receiptAvailable || !status.receipt) return undefined;
+
+    return {
+      success: true,
+      message: 'Pagamento já realizado.',
+      amount: Number(status.amount || parsed.amount || 0),
+      senderName: status.receipt.senderName || activeAccount.name,
+      receiverName: status.receipt.receiverName || parsed.merchantName || 'Recebedor Pix',
+      senderPixKey: status.receipt.senderPixKey || activeAccount.pix_key,
+      receiverPixKey: status.receipt.receiverPixKey || parsed.cleanKey,
+      senderBalanceAfter: activeAccount.balance,
+      transactionOutId: status.receipt.transactionOutId,
+      transactionInId: status.receipt.transactionInId || undefined,
+      transactionDate: status.paidAt || new Date().toISOString(),
+      externalReference: status.externalReference,
+      webhooksDispatched: 0,
+      fromCache: true,
+    };
+  };
+
   // Validação de entrada de Pix
   const handlePixInputChange = (val: string) => {
     setRawPixInput(val);
     setErrorMessage(null);
     setInstructionNotice(null);
+    const inspectionId = ++pixInstructionInspectionRef.current;
 
     if (!val.trim()) {
       setParsedData(null);
@@ -381,6 +409,22 @@ export const PixArea: React.FC = () => {
           message: `Este código Pix já foi pago em ${new Date(alreadyPaid.created_at).toLocaleString('pt-BR')}.`,
           receipt,
         });
+      } else {
+        void getPixInstructionStatus(parsed.orderId)
+          .then((status) => {
+            if (inspectionId !== pixInstructionInspectionRef.current || status.status !== 'paid') return;
+            const receipt = receiptFromInstructionStatus(status, parsed);
+            setInstructionNotice({
+              kind: 'paid',
+              message: status.paidAt
+                ? `Este código Pix já foi pago em ${new Date(status.paidAt).toLocaleString('pt-BR')}.`
+                : 'Este código Pix já foi pago e não pode ser utilizado novamente.',
+              receipt,
+            });
+          })
+          .catch((statusError) => {
+            console.warn('[PIX] Não foi possível consultar previamente o estado da instrução:', statusError);
+          });
       }
     }
 
@@ -480,6 +524,25 @@ export const PixArea: React.FC = () => {
         message: 'Este código Pix expirou e não pode mais ser utilizado. Solicite ou gere um novo código.',
       });
       return;
+    }
+
+    if (parsedData?.isOptmaPayCode && parsedData.orderId) {
+      try {
+        const status = await getPixInstructionStatus(parsedData.orderId);
+        if (status.status === 'paid') {
+          const receipt = receiptFromInstructionStatus(status, parsedData);
+          setInstructionNotice({
+            kind: 'paid',
+            message: status.paidAt
+              ? `Este código Pix já foi pago em ${new Date(status.paidAt).toLocaleString('pt-BR')}. Nenhum novo débito foi realizado.`
+              : 'Este código Pix já foi pago. Nenhum novo débito foi realizado.',
+            receipt,
+          });
+          return;
+        }
+      } catch (statusError) {
+        console.warn('[PIX] Pré-validação remota indisponível; a idempotência do motor permanece ativa:', statusError);
+      }
     }
 
     const val = parseFloat(payAmount);
