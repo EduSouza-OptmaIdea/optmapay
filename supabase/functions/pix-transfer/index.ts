@@ -10,6 +10,58 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type ParsedServerPixInstruction = {
+  receiver: string;
+  amount?: number;
+  externalReference?: string;
+  expiresAt?: number;
+  isOptmaPayInstruction: boolean;
+};
+
+function normalizeEpochMs(value: string | null) {
+  if (!value) return undefined;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return undefined;
+  return numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+}
+
+function parseServerPixInstruction(raw: unknown): ParsedServerPixInstruction {
+  const input = String(raw || "").trim();
+  if (!input.toUpperCase().startsWith("OPTMAPAY://PIX") && !input.toUpperCase().startsWith("OPTMAPAY:PIX")) {
+    return { receiver: input, isOptmaPayInstruction: false };
+  }
+
+  const query = input.includes("?") ? input.split("?").slice(1).join("?") : "";
+  const params = new URLSearchParams(query);
+  const receiver = (params.get("accId") || params.get("to") || "").trim();
+  const amountRaw = Number(params.get("amount") || "");
+  const externalReference = (params.get("ref") || "").trim() || undefined;
+  const tsRaw = params.get("ts");
+  const expRaw = params.get("exp");
+
+  let expiresAt = normalizeEpochMs(expRaw);
+  if (!expiresAt && tsRaw) {
+    const numericTs = Number(tsRaw);
+    if (Number.isFinite(numericTs) && numericTs > 0) {
+      if (numericTs < 100_000_000_000) {
+        // Contrato legado OptmaMenu: ts em segundos representava expiração.
+        expiresAt = numericTs * 1000;
+      } else {
+        // Contrato legado OptmaPay: ts em ms representava emissão e valia 10 min.
+        expiresAt = numericTs + 10 * 60 * 1000;
+      }
+    }
+  }
+
+  return {
+    receiver,
+    amount: Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : undefined,
+    externalReference,
+    expiresAt,
+    isOptmaPayInstruction: true,
+  };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -51,6 +103,62 @@ serve(async (req: Request) => {
       });
     }
 
+    const parsedInstruction = parseServerPixInstruction(destPixKeyOrPayload);
+    if (!parsedInstruction.receiver) {
+      return new Response(JSON.stringify({
+        error: "PIX_RECEIVER_INVALID",
+        message: "A instrução Pix não contém um recebedor válido.",
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      parsedInstruction.isOptmaPayInstruction &&
+      parsedInstruction.expiresAt &&
+      parsedInstruction.expiresAt <= Date.now()
+    ) {
+      return new Response(JSON.stringify({
+        error: "PIX_INSTRUCTION_EXPIRED",
+        message: "Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.",
+      }), {
+        status: 410,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const requestedAmount = Number(amount);
+    if (
+      parsedInstruction.amount &&
+      Math.abs(parsedInstruction.amount - requestedAmount) > 0.005
+    ) {
+      return new Response(JSON.stringify({
+        error: "PIX_AMOUNT_MISMATCH",
+        message: "O valor informado não corresponde ao valor fixado na instrução Pix.",
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      parsedInstruction.externalReference &&
+      externalReference &&
+      parsedInstruction.externalReference !== String(externalReference)
+    ) {
+      return new Response(JSON.stringify({
+        error: "PIX_REFERENCE_MISMATCH",
+        message: "A referência do pagamento não corresponde à instrução Pix.",
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const authoritativeExternalReference =
+      parsedInstruction.externalReference || externalReference || null;
+
     // Cliente admin para execução atômica e disparo de jobs
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -73,10 +181,10 @@ serve(async (req: Request) => {
     if (idempotencyKey) {
       const payloadStr = JSON.stringify({
         senderAccountId,
-        destPixKeyOrPayload: String(destPixKeyOrPayload).trim().toLowerCase(),
-        amount: Number(amount),
+        destPixKeyOrPayload: parsedInstruction.receiver.toLowerCase(),
+        amount: requestedAmount,
         description: description || "Transferência Pix Sandbox",
-        externalReference: externalReference || null,
+        externalReference: authoritativeExternalReference,
       });
       const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payloadStr));
       requestHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -85,10 +193,10 @@ serve(async (req: Request) => {
     // 1. Invoca a RPC atômica transfer_pix com actor_user_id do usuário validado e idempotência em SQL
     const { data: rpcResult, error: rpcErr } = await adminClient.rpc("transfer_pix", {
       p_sender_account_id: senderAccountId,
-      p_receiver_pix_key: destPixKeyOrPayload,
-      p_amount: Number(amount),
+      p_receiver_pix_key: parsedInstruction.receiver,
+      p_amount: requestedAmount,
       p_description: description || "Transferência Pix Sandbox",
-      p_external_reference: externalReference || null,
+      p_external_reference: authoritativeExternalReference,
       p_actor_user_id: user.id,
       p_idempotency_key: idempotencyKey || null,
       p_request_hash: requestHash,
@@ -159,7 +267,7 @@ serve(async (req: Request) => {
       transactionInId: rpcResult.transaction_in_id || rpcResult.transactionInId,
       webhookEventId: rpcResult.webhook_event_id || rpcResult.webhookEventId,
       webhooksDispatched: isFromCache ? 0 : webhooksDispatched,
-      externalReference: rpcResult.external_reference || rpcResult.externalReference || externalReference || null,
+      externalReference: rpcResult.external_reference || rpcResult.externalReference || authoritativeExternalReference,
       transactionDate: persistedDate,
       fromCache: isFromCache,
     };
