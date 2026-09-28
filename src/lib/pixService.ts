@@ -204,6 +204,49 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
   };
 }
 
+export interface PixInstructionStatus {
+  status: 'available' | 'paid';
+  externalReference: string;
+  amount?: number;
+  paidAt?: string;
+  receiptAvailable: boolean;
+  receipt?: {
+    senderName: string;
+    senderPixKey?: string | null;
+    receiverName: string;
+    receiverPixKey?: string | null;
+    transactionOutId: string;
+    transactionInId?: string | null;
+  };
+}
+
+export async function getPixInstructionStatus(
+  externalReference: string
+): Promise<PixInstructionStatus> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Sessão expirada. Entre novamente para consultar este código Pix.');
+  }
+
+  const response = await fetch(
+    `/api/sandbox/v1/pix/instruction-status?externalReference=${encodeURIComponent(externalReference)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        Accept: 'application/json',
+      },
+    }
+  );
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error?.message || 'Não foi possível consultar o estado deste código Pix.');
+  }
+
+  return data as PixInstructionStatus;
+}
+
 export interface PixTransferInput {
   senderAccountId: string;
   destPixKeyOrPayload: string;
