@@ -7,6 +7,8 @@ export interface ParsedPixData {
   description?: string;
   orderId?: string;
   merchantName?: string;
+  issuedAt?: number;
+  expiresAt?: number;
   isOptmaPayCode: boolean;
   isEmv: boolean;
 }
@@ -22,6 +24,8 @@ export function generateOptmaPayPixPayload(params: {
   amount?: number;
   orderId?: string;
   description?: string;
+  issuedAtMs?: number;
+  expiresAtMs?: number;
 }): string {
   const queryParams = new URLSearchParams();
   queryParams.set('to', params.receiverPixKey.trim());
@@ -31,7 +35,16 @@ export function generateOptmaPayPixPayload(params: {
   if (params.orderId) queryParams.set('ref', params.orderId.trim());
   if (params.description) queryParams.set('desc', params.description.trim());
   queryParams.set('env', 'sandbox');
-  queryParams.set('ts', Date.now().toString());
+
+  // Código estático não expira. Cobranças dinâmicas declaram emissão e expiração
+  // separadamente, sempre em epoch milliseconds.
+  if (params.expiresAtMs && Number.isFinite(params.expiresAtMs)) {
+    const issuedAtMs = params.issuedAtMs && Number.isFinite(params.issuedAtMs)
+      ? params.issuedAtMs
+      : Date.now();
+    queryParams.set('ts', String(Math.trunc(issuedAtMs)));
+    queryParams.set('exp', String(Math.trunc(params.expiresAtMs)));
+  }
 
   return `OPTMAPAY://PIX/v1?${queryParams.toString()}`;
 }
@@ -57,8 +70,37 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
       const amountStr = params.get('amount');
       const ref = decodeURIComponent(params.get('ref') || '');
       const desc = decodeURIComponent(params.get('desc') || '');
+      const tsStr = params.get('ts');
+      const expStr = params.get('exp');
 
       const amount = amountStr ? parseFloat(amountStr) : undefined;
+
+      let issuedAt: number | undefined;
+      let expiresAt: number | undefined;
+
+      if (tsStr) {
+        const rawTs = Number(tsStr);
+        if (Number.isFinite(rawTs) && rawTs > 0) {
+          if (rawTs < 100_000_000_000) {
+            // Compatibilidade com o contrato antigo do OptmaMenu:
+            // ts era enviado em epoch seconds representando a expiração.
+            expiresAt = rawTs * 1000;
+          } else {
+            issuedAt = rawTs;
+          }
+        }
+      }
+
+      if (expStr) {
+        const rawExp = Number(expStr);
+        if (Number.isFinite(rawExp) && rawExp > 0) {
+          expiresAt = rawExp < 100_000_000_000 ? rawExp * 1000 : rawExp;
+        }
+      } else if (issuedAt && !expiresAt) {
+        // Compatibilidade com cobranças OptmaPay antigas, cujo ts era a emissão
+        // e cuja validade histórica era de 10 minutos.
+        expiresAt = issuedAt + 10 * 60 * 1000;
+      }
 
       return {
         cleanKey: to || trimmed,
@@ -67,6 +109,8 @@ export function parsePixPayload(rawInput: string): ParsedPixData {
         description: desc || (name ? `Pagamento para ${name}` : 'Transferência OptmaPay Sandbox'),
         orderId: ref || undefined,
         merchantName: name || undefined,
+        issuedAt,
+        expiresAt,
         isOptmaPayCode: true,
         isEmv: false,
       };
@@ -202,6 +246,10 @@ export async function executePixTransfer(input: PixTransferInput): Promise<PixTr
 
   const parsed = parsePixPayload(destPixKeyOrPayload);
   const targetKey = parsed.cleanKey.trim();
+
+  if (parsed.isOptmaPayCode && parsed.expiresAt && parsed.expiresAt <= Date.now()) {
+    throw new Error('Esta instrução Pix expirou. Solicite ou gere um novo código antes de pagar.');
+  }
 
   if (!targetKey) {
     throw new Error('Chave Pix de destino não informada.');
