@@ -314,6 +314,29 @@ export const DevPanel: React.FC = () => {
         </p>
       </div>
 
+      <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-100">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">
+              Conta vinculada às credenciais desta tela
+            </p>
+            <p className="mt-1 font-black">{activeAccount.name}</p>
+            <code className="mt-1 block break-all text-xs">{activeAccount.id}</code>
+          </div>
+          <button
+            type="button"
+            onClick={() => copyText('active_account_id', activeAccount.id)}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-teal-300 bg-white px-3 py-2 text-xs font-black text-teal-800 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-100"
+          >
+            {copiedKey === 'active_account_id' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            {copiedKey === 'active_account_id' ? 'Copiado' : 'Copiar Account ID'}
+          </button>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed opacity-80">
+          As API keys geradas abaixo ficam vinculadas exclusivamente a esta conta. Ao integrar com o OptmaMenu, use exatamente este Account ID junto com uma chave criada enquanto esta conta estiver ativa.
+        </p>
+      </div>
+
       {/* Grid: Webhook Config + API Keys */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Webhooks Config */}
