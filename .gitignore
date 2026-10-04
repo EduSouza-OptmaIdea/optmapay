@@ -42,3 +42,9 @@ Thumbs.db
 #others
 desktop.ini
 supabase/.temp/
+
+# Local repository sync helpers (developer machine only)
+scripts/sync-repo.js
+scripts/sync-repo.cmd
+scripts/setup-scheduler.js
+sync-repo.log
