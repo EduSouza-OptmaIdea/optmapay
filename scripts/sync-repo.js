@@ -63,18 +63,30 @@ export async function syncRepo() {
       const remoteHead = runGit('rev-parse origin/main');
 
       if (localHead === remoteHead) {
-        log('✅ Repositório local já está 100% atualizado com origin/main.');
+        log('✅ Repositório local já está 100% sincronizado com origin/main.');
         return { success: true, updated: false };
       }
 
-      log(`Novos commits detectados! Atualizando de ${localHead.slice(0, 7)} para ${remoteHead.slice(0, 7)}...`);
-      const mergeOutput = runGit('merge origin/main --ff-only');
-      log(`Resultado: ${mergeOutput}`);
+      const mergeBase = runGit('merge-base HEAD origin/main');
 
-      const recentCommits = runGit(`log --oneline -n 5 ${localHead}..${remoteHead}`);
-      log(`Commits integrados com sucesso:\n${recentCommits}`);
+      if (mergeBase === remoteHead) {
+        log(`ℹ️ Repositório local contém commits à frente de origin/main (${localHead.slice(0, 7)}). Nada a puxar do upstream.`);
+        return { success: true, updated: false, ahead: true };
+      }
 
-      return { success: true, updated: true, newHead: remoteHead };
+      if (mergeBase === localHead) {
+        log(`Novos commits detectados no upstream! Atualizando de ${localHead.slice(0, 7)} para ${remoteHead.slice(0, 7)}...`);
+        const mergeOutput = runGit('merge origin/main --ff-only');
+        log(`Resultado: ${mergeOutput}`);
+
+        const recentCommits = runGit(`log --oneline -n 5 ${localHead}..${remoteHead}`);
+        log(`Commits integrados com sucesso:\n${recentCommits}`);
+
+        return { success: true, updated: true, newHead: remoteHead };
+      }
+
+      log(`⚠️ A branch local e origin/main divergiram (ambos possuem commits diferentes). Requer resolução manual.`, true);
+      return { success: false, reason: 'diverged' };
     } else {
       // Se estiver em outra branch, atualiza a ref local de main sem afetar a branch em desenvolvimento
       log(`Você está na branch '${currentBranch}'. Atualizando referência local da 'main' em background...`);
