@@ -47,6 +47,27 @@ interface TransactionWithRunningBalance extends SandboxTransaction {
   isFullyRefunded: boolean;
 }
 
+interface CardReceivableSummary {
+  id: string;
+  transaction_in_id: string;
+  gross_amount: number;
+  fee_amount: number;
+  net_amount: number;
+  payment_type: 'debito' | 'credito';
+  settlement_plan: string;
+  status: string;
+  expected_settlement_at: string | null;
+  settled_at: string | null;
+  created_at: string;
+}
+
+function isCreditCardInvoicePurchase(tx: SandboxTransaction) {
+  if (tx.type !== 'card_payment' || tx.direction !== 'out') return false;
+  const description = String(tx.description || '').toUpperCase();
+  const reference = String(tx.external_reference || '').toLowerCase();
+  return description.includes('CREDITO') || reference.endsWith(':credit_card');
+}
+
 export interface SettledDailyGroup {
   dateKey: string;
   formattedDate: string;
@@ -105,6 +126,7 @@ export const Dashboard: React.FC = () => {
 
   const [showBalance, setShowBalance] = useState(true);
   const [transactions, setTransactions] = useState<SandboxTransaction[]>([]);
+  const [cardReceivables, setCardReceivables] = useState<CardReceivableSummary[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [depositAmount, setDepositAmount] = useState('500');
@@ -199,13 +221,23 @@ export const Dashboard: React.FC = () => {
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false });
 
+    let receivablesQuery = supabase
+      .from('card_receivables')
+      .select('id,transaction_in_id,gross_amount,fee_amount,net_amount,payment_type,settlement_plan,status,expected_settlement_at,settled_at,created_at')
+      .eq('merchant_account_id', activeAccount.id)
+      .gte('created_at', startDate.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(200);
+
     if (periodFilter === 'custom' && customEndDate) {
       const parsedEnd = new Date(`${customEndDate}T23:59:59`);
       query = query.lte('created_at', parsedEnd.toISOString());
+      receivablesQuery = receivablesQuery.lte('created_at', parsedEnd.toISOString());
     }
 
-    const { data } = await query;
+    const [{ data }, { data: receivablesData }] = await Promise.all([query, receivablesQuery]);
     const rawList = (data || []) as SandboxTransaction[];
+    setCardReceivables((receivablesData || []) as CardReceivableSummary[]);
 
     // Sanitização Automática: Se for Débito, nunca pode ter "Vencimento" na descrição
     const sanitizedList = rawList.map((tx) => {
@@ -258,6 +290,14 @@ export const Dashboard: React.FC = () => {
 
   const totalProjectedBalance = (activeAccount?.balance || 0) + futureReceivablesTotal;
 
+  const receivableByTransactionId = useMemo(() => {
+    const map = new Map<string, CardReceivableSummary>();
+    cardReceivables.forEach((receivable) => {
+      if (receivable.transaction_in_id) map.set(receivable.transaction_in_id, receivable);
+    });
+    return map;
+  }, [cardReceivables]);
+
   // Separação Estrutural de Grupos:
   // 1. Extrato de Saldo Disponível Realizado (apenas transações liquidadas, agrupadas por data do evento bancário)
   // 2. Cronograma de Lançamentos Futuros (agrupados por DATA PREVISTA DE LIQUIDAÇÃO / BAIXA)
@@ -266,7 +306,11 @@ export const Dashboard: React.FC = () => {
       return { settledDailyGroups: [], futureSettlementGroups: [] };
     }
 
-    const filteredList = transactions.filter((tx) => !tx.related_transaction_id);
+    // Compra no cartão de CRÉDITO pertence à fatura do cartão e não movimenta
+    // o saldo disponível da conta corrente no momento da compra.
+    const filteredList = transactions.filter(
+      (tx) => !tx.related_transaction_id && !isCreditCardInvoicePurchase(tx)
+    );
 
     const refundMap = new Map<string, number>();
     transactions.forEach((tx) => {
@@ -959,6 +1003,13 @@ export const Dashboard: React.FC = () => {
                                 <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
                                   {group.subText}
                                 </p>
+                                {receivableByTransactionId.has(tx.id) && (
+                                  <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                    Bruto R$ {Number(receivableByTransactionId.get(tx.id)?.gross_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    {' • '}Taxa -R$ {Number(receivableByTransactionId.get(tx.id)?.fee_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    {' • '}Líquido R$ {Number(receivableByTransactionId.get(tx.id)?.net_amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </p>
+                                )}
                               </div>
                             </div>
 
