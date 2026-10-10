@@ -28,6 +28,7 @@ import {
   Smartphone,
   Zap,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
@@ -176,7 +177,7 @@ export const Dashboard: React.FC = () => {
     }
   }, [user?.id, user?.email]);
 
-  // Busca transações com base no período selecionado (até 60 dias)
+  // Busca transações com base no período selecionado (até 90 dias)
   const fetchTransactions = async () => {
     if (!activeAccount) return;
     setLoadingTx(true);
@@ -184,7 +185,7 @@ export const Dashboard: React.FC = () => {
 
     const now = new Date();
     const maxRetDate = new Date();
-    maxRetDate.setDate(maxRetDate.getDate() - 60);
+    maxRetDate.setDate(maxRetDate.getDate() - 90);
 
     let startDate = new Date();
 
@@ -199,7 +200,7 @@ export const Dashboard: React.FC = () => {
         const parsed = new Date(`${customStartDate}T00:00:00`);
         if (parsed < maxRetDate) {
           setDateWarning(
-            `A data inicial selecionada ultrapassa o limite de 60 dias da política de retenção. Exibindo lançamentos a partir de ${maxRetDate.toLocaleDateString('pt-BR')}.`
+            `A data inicial selecionada ultrapassa o limite de 90 dias da política de retenção. Exibindo lançamentos a partir de ${maxRetDate.toLocaleDateString('pt-BR')}.`
           );
           startDate = maxRetDate;
         } else {
@@ -441,6 +442,54 @@ export const Dashboard: React.FC = () => {
       futureSettlementGroups: futureGroups,
     };
   }, [transactions, activeAccount?.balance]);
+
+  const handleExportStatement = () => {
+    if (!activeAccount) return;
+
+    const rows = settledDailyGroups.flatMap((group) =>
+      group.items.map((tx) => ({
+        dataHora: new Date(tx.created_at).toLocaleString('pt-BR'),
+        tipo: getFriendlyTypeName(tx.type, tx.direction, tx.description),
+        direcao: tx.direction === 'in' ? 'Entrada' : 'Saída',
+        descricao: tx.description || '',
+        contraparte: tx.counterparty_name || '',
+        valor: Number(tx.amount),
+        saldoAnterior: tx.balanceBefore,
+        saldoDepois: tx.balanceAfter,
+        referencia: tx.external_reference || '',
+        status: tx.status,
+      })),
+    );
+
+    if (rows.length === 0) {
+      alert('Não há lançamentos realizados para exportar neste período.');
+      return;
+    }
+
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? '').replace(/"/g, '""');
+      return `"${text}"`;
+    };
+    const money = (value: number) => Number(value || 0).toFixed(2).replace('.', ',');
+    const lines = [
+      ['Data/hora','Tipo','Direção','Descrição','Contraparte','Valor','Saldo anterior','Saldo após','Referência','Status'],
+      ...rows.map((row) => [
+        row.dataHora,row.tipo,row.direcao,row.descricao,row.contraparte,
+        money(row.valor),money(row.saldoAnterior),money(row.saldoDepois),row.referencia,row.status,
+      ]),
+    ];
+    const csv = '\uFEFF' + lines.map((line) => line.map(escapeCsv).join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    anchor.href = url;
+    anchor.download = `optmapay-extrato-${activeAccount.account_number || activeAccount.id}-${today}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const handleConfirmAnticipation = async (calcResult: AnticipationCalculationResult) => {
     if (!selectedTxForAnticipation || !activeAccount) return;
@@ -825,6 +874,14 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
+              onClick={handleExportStatement}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 transition hover:border-[#19A999] hover:text-[#19A999] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              title="Exportar extrato em CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar
+            </button>
+            <button
               onClick={fetchTransactions}
               className="p-1.5 text-slate-400 hover:text-[#19A999] transition ml-1"
               title="Recarregar Extrato"
@@ -878,7 +935,7 @@ export const Dashboard: React.FC = () => {
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs animate-fadeIn">
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Data Inicial (Máximo 60 dias atrás)
+                Data Inicial (Máximo 90 dias atrás)
               </label>
               <input
                 type="date"
@@ -901,7 +958,7 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Aviso de Retenção de 60 Dias */}
+        {/* Aviso de Retenção de 90 Dias */}
         {dateWarning && (
           <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -912,7 +969,7 @@ export const Dashboard: React.FC = () => {
         <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 flex items-center gap-2.5">
           <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
           <span>
-            <strong>Extrato Oficial Sandbox:</strong> Conciliação completa com <strong>Saldo Anterior</strong> e <strong>Saldo do Dia</strong> para cada período de até 60 dias. Clique em qualquer Pix recebido com saldo remanescente para efetuar devoluções.
+            <strong>Extrato Oficial Sandbox:</strong> Conciliação completa com <strong>Saldo Anterior</strong> e <strong>Saldo do Dia</strong> para cada período de até 90 dias. Clique em qualquer Pix recebido com saldo remanescente para efetuar devoluções.
           </span>
         </div>
 
