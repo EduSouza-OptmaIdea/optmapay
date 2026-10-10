@@ -11,10 +11,11 @@ export interface ExecuteAnticipationInput {
 }
 
 /**
- * Executa a antecipação pro rata de uma transação ou venda com PIN validado:
- * 1. Credita o valor líquido calculado no saldo da conta.
- * 2. Atualiza a transação original de 'pending' para 'completed'.
- * 3. Registra a taxa de antecipação e dispara webhook de conciliação.
+ * Executa antecipação exclusivamente no PostgreSQL autoritativo.
+ *
+ * A simulação continua no cliente para UX, mas saldo, taxa efetiva,
+ * recebível, idempotência e webhook são decididos/gravados pelo servidor.
+ * Nunca atualize accounts, transactions ou card_receivables diretamente aqui.
  */
 export async function executeAnticipationSettlement(input: ExecuteAnticipationInput): Promise<{
   success: boolean;
@@ -22,69 +23,37 @@ export async function executeAnticipationSettlement(input: ExecuteAnticipationIn
   creditedAmount: number;
   feeAmount: number;
 }> {
-  const { transactionId, orderId, accountId, userId, calculation, description } = input;
+  const { transactionId, accountId } = input;
 
   if (!accountId) {
     throw new Error('Conta bancária não identificada.');
   }
 
-  // 1. Busca saldo atual da conta
-  const { data: account, error: accErr } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('id', accountId)
-    .single();
-
-  if (accErr || !account) {
-    throw new Error('Não foi possível localizar a conta para creditar o valor.');
+  if (!transactionId) {
+    throw new Error('Recebível não identificado para antecipação.');
   }
 
-  const newBalance = Number(account.balance) + calculation.netAnticipatedAmount;
+  const { data, error } = await supabase.rpc('anticipate_card_receivable', {
+    p_transaction_id: transactionId,
+    p_account_id: accountId,
+  });
 
-  // 2. Atualiza saldo da conta
-  const { error: updErr } = await supabase
-    .from('accounts')
-    .update({
-      balance: Math.round(newBalance * 100) / 100,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', accountId);
-
-  if (updErr) {
-    throw new Error(`Falha ao creditar saldo da antecipação: ${updErr.message}`);
+  if (error) {
+    const message = String(error.message || '');
+    if (message.includes('SETTLEMENT_ALREADY_DUE')) {
+      throw new Error('Este recebível já está disponível para liquidação normal e não precisa mais ser antecipado.');
+    }
+    throw new Error(message || 'Falha ao processar antecipação no servidor.');
   }
 
-  // 3. Atualiza a transação pendente se houver transactionId
-  if (transactionId) {
-    const updatedDesc = `${description || 'Recebimento de Cartão'} (Antecipado Pro Rata - Líquido R$ ${calculation.netAnticipatedAmount.toFixed(2)} / Taxa R$ ${calculation.anticipationFeeAmount.toFixed(2)})`;
-    await supabase
-      .from('transactions')
-      .update({
-        status: 'completed',
-        amount: calculation.netAnticipatedAmount, // Ajusta para o líquido efetivamente recebido
-        description: updatedDesc,
-      })
-      .eq('id', transactionId);
-  } else {
-    // Insere transação de antecipação avulsa
-    await supabase.from('transactions').insert({
-      user_id: userId || account.user_id || null,
-      account_id: accountId,
-      type: 'card_payment',
-      direction: 'in',
-      amount: calculation.netAnticipatedAmount,
-      description: `Antecipação Pro Rata ${orderId ? '#' + orderId : ''} (Desc. R$ ${calculation.anticipationFeeAmount.toFixed(2)})`,
-      external_reference: orderId || `ANT-${Date.now()}`,
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    });
+  if (!data?.success) {
+    throw new Error(data?.message || 'Falha ao antecipar o recebível.');
   }
 
   return {
     success: true,
-    message: `Antecipação realizada com sucesso! R$ ${calculation.netAnticipatedAmount.toFixed(2)} creditados em conta.`,
-    creditedAmount: calculation.netAnticipatedAmount,
-    feeAmount: calculation.anticipationFeeAmount,
+    message: data.message || 'Antecipação realizada com sucesso.',
+    creditedAmount: Number(data.amount_credited || 0),
+    feeAmount: Number(data.anticipation_fee_amount || 0),
   };
 }
