@@ -289,6 +289,9 @@ export const Dashboard: React.FC = () => {
     return transactions.filter((tx) => tx.status === 'pending' && tx.direction === 'in').length;
   }, [transactions]);
 
+  const overdraftLimit = Math.max(0, Number(activeAccount?.config?.overdraft_limit || 0));
+  const totalAvailableWithLimit = (activeAccount?.balance || 0) + overdraftLimit;
+  const overdraftUsed = Math.max(0, -(activeAccount?.balance || 0));
   const totalProjectedBalance = (activeAccount?.balance || 0) + futureReceivablesTotal;
 
   const receivableByTransactionId = useMemo(() => {
@@ -572,9 +575,9 @@ export const Dashboard: React.FC = () => {
       return;
     }
 
-    if (activeAccount.balance < refundAmountNum) {
+    if ((activeAccount.balance + overdraftLimit) < refundAmountNum) {
       setRefundErrorMessage(
-        `Saldo insuficiente para realizar a devolução (Disponível: R$ ${activeAccount.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
+        `Saldo e limite insuficientes para realizar a devolução (Disponível total: R$ ${totalAvailableWithLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`
       );
       return;
     }
@@ -690,7 +693,7 @@ export const Dashboard: React.FC = () => {
                 <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Saldo Disponível</span>
               </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">Livre</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${activeAccount.balance < 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>{activeAccount.balance < 0 ? 'Usando limite' : 'Livre'}</span>
             </div>
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-white">
               {showBalance ? (
@@ -699,9 +702,14 @@ export const Dashboard: React.FC = () => {
                 '••••••••'
               )}
             </div>
-            <p className="text-[10px] text-teal-200/70 leading-tight">
-              Livre imediatamente para Pix, saques e pagamentos.
-            </p>
+            {overdraftLimit > 0 ? (
+              <div className="space-y-0.5 text-[10px] text-teal-100/80 leading-tight">
+                <p>Limite de conta: R$ {overdraftLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · disponível com limite: R$ {totalAvailableWithLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                {overdraftUsed > 0 && <p className="font-bold text-amber-300">Saldo devedor: R$ {overdraftUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · encargos e IOF simulados enquanto houver uso.</p>}
+              </div>
+            ) : (
+              <p className="text-[10px] text-teal-200/70 leading-tight">Livre imediatamente para Pix, saques e pagamentos.</p>
+            )}
           </div>
 
           {/* Card 2: Lançamentos Futuros */}
