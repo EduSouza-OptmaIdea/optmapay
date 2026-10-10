@@ -292,6 +292,7 @@ export const Dashboard: React.FC = () => {
   const overdraftLimit = Math.max(0, Number(activeAccount?.config?.overdraft_limit || 0));
   const totalAvailableWithLimit = (activeAccount?.balance || 0) + overdraftLimit;
   const overdraftUsed = Math.max(0, -(activeAccount?.balance || 0));
+  const overdraftExcess = Math.max(0, -totalAvailableWithLimit);
   const totalProjectedBalance = (activeAccount?.balance || 0) + futureReceivablesTotal;
 
   const receivableByTransactionId = useMemo(() => {
@@ -694,7 +695,7 @@ export const Dashboard: React.FC = () => {
                 <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Saldo Disponível</span>
               </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${activeAccount.balance < 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>{activeAccount.balance < 0 ? 'Usando limite' : 'Livre'}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${activeAccount.balance < 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>{overdraftExcess > 0 ? 'Além do limite' : activeAccount.balance < 0 ? 'Usando limite' : 'Livre'}</span>
             </div>
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-white">
               {showBalance ? (
@@ -705,8 +706,9 @@ export const Dashboard: React.FC = () => {
             </div>
             {overdraftLimit > 0 ? (
               <div className="space-y-0.5 text-[10px] text-teal-100/80 leading-tight">
-                <p>Limite de conta: R$ {overdraftLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · disponível com limite: R$ {totalAvailableWithLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                {overdraftUsed > 0 && <p className="font-bold text-amber-300">Saldo devedor: R$ {overdraftUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · encargos e IOF simulados enquanto houver uso.</p>}
+                <p>Limite de conta: R$ {overdraftLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · {overdraftExcess > 0 ? `excesso negativo: R$ ${overdraftExcess.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : `disponível com limite: R$ ${totalAvailableWithLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>
+                {overdraftExcess > 0 ? <p role="alert" className="font-bold text-rose-300">Você está negativo R$ {overdraftExcess.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} além do seu limite.</p> : overdraftUsed > 0 ? <p role="status" className="font-bold text-amber-300">Você está usando R$ {overdraftUsed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} do seu limite.</p> : <p className="font-semibold text-emerald-300">Limite de crédito não utilizado.</p>}
+                {overdraftUsed > 0 && <p>Encargos e IOF simulados enquanto houver uso.</p>}
               </div>
             ) : (
               <p className="text-[10px] text-teal-200/70 leading-tight">Livre imediatamente para Pix, saques e pagamentos.</p>
