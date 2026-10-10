@@ -623,6 +623,7 @@ export const Dashboard: React.FC = () => {
     if (type === 'boleto_payment') return 'Pagamento de Boleto';
     if (type === 'card_payment') return 'Cartão Virtual';
     if (type === 'transfer') return 'Transferência entre Contas';
+    if (type.toLowerCase() === 'withdraw' && /tarifa|taxa|manuten[cç][aã]o|servi[cç]o/i.test(description || '')) return 'Taxa de serviços';
     return type.toUpperCase();
   };
 
