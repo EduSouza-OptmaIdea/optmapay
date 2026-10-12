@@ -38,6 +38,7 @@ export const Sidebar: React.FC = () => {
     ...(isSuperAdmin
       ? [
           { to: '/master-admin', label: 'Console Super Admin', icon: Crown },
+          { to: '/master-admin/usuarios', label: 'Usuários & Atividades', icon: User },
           { to: '/config-banco', label: 'Parâmetros do Banco', icon: Landmark },
         ]
       : []),
