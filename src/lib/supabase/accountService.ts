@@ -65,7 +65,7 @@ export async function createBankAccount(userId: string | undefined, input: Creat
     type: input.type,
     cpf_cnpj: input.cpf_cnpj,
     phone: input.phone || '(11) 98888-7766',
-    balance: input.initialBalance !== undefined ? input.initialBalance : input.type === 'merchant' ? 10000.00 : 2500.00,
+    balance: input.type === 'customer' ? 2000.00 : (input.initialBalance !== undefined ? input.initialBalance : 10000.00),
     pix_key: defaultPixKey,
     agency,
     account_number: accountNumber,
