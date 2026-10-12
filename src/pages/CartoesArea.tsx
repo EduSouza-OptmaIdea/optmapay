@@ -69,7 +69,7 @@ export const CartoesArea: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCardTipo, setNewCardTipo] = useState<'debito' | 'credito'>('credito');
   const [newCardHolder, setNewCardHolder] = useState('');
-  const [newCardLimit, setNewCardLimit] = useState('5000.00');
+  const [newCardLimit, setNewCardLimit] = useState('3000.00');
   const [newCardPin, setNewCardPin] = useState('1234');
   const [newCardDueDay, setNewCardDueDay] = useState(10);
   const [creatingCard, setCreatingCard] = useState(false);
@@ -215,7 +215,7 @@ export const CartoesArea: React.FC = () => {
     try {
       const generated = generateOptmaCardNumber(newCardTipo);
       const holder = newCardHolder.trim().toUpperCase() || activeAccount.name.toUpperCase();
-      const limit = newCardTipo === 'credito' ? (parseFloat(newCardLimit) || 5000.0) : 0.0;
+      const limit = newCardTipo === 'credito' ? 3000.0 : 0.0;
       const cleanPin = newCardPin.replace(/\D/g, '').slice(0, 4) || generated.pin;
 
       const { error } = await supabase.from('cartoes').insert({
@@ -242,7 +242,7 @@ export const CartoesArea: React.FC = () => {
       await fetchCards();
       setShowCreateModal(false);
       setNewCardHolder('');
-      setNewCardLimit('5000.00');
+      setNewCardLimit('3000.00');
       setNewCardPin('1234');
     } catch (err: any) {
       alert(`Erro ao criar cartão: ${err.message}`);
@@ -1006,12 +1006,13 @@ export const CartoesArea: React.FC = () => {
                       Limite de Crédito (R$):
                     </label>
                     <input
-                      type="number"
-                      step="100"
-                      value={newCardLimit}
-                      onChange={(e) => setNewCardLimit(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold"
+                      type="text"
+                      value="3000,00"
+                      readOnly
+                      aria-readonly="true"
+                      className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
                     />
+                    <p className="mt-1 text-[10px] text-slate-400">Limite fixo do cartão de crédito nesta rodada: R$ 3.000,00.</p>
                   </div>
                 ) : (
                   <div>
