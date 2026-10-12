@@ -80,6 +80,11 @@ async function main() {
     GRANT EXECUTE ON FUNCTION auth.role() TO PUBLIC, anon, authenticated, service_role;
   `);
 
+  // As migrations são executadas por uma identidade de backend no Supabase real.
+  // Replica esse contexto no PostgreSQL puro do CI para que backfills protegidos
+  // por auth.role() reconheçam corretamente a execução como service_role.
+  await client.query("SELECT set_config('request.jwt.claim.role', 'service_role', false)");
+
   // 4. Cria publication supabase_realtime exigida por migrations posteriores
   try {
     await client.query('CREATE PUBLICATION supabase_realtime');
