@@ -13,12 +13,12 @@ export const Onboarding: React.FC = () => {
   const { user, isUnauthorized, refreshAccounts, setActiveAccountId } = useAuth();
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>('merchant');
-  const [name, setName] = useState('Minha Empresa Sandbox LTDA');
-  const [cpfCnpj, setCpfCnpj] = useState('45.892.102/0001-90');
+  const [accountType, setAccountType] = useState<AccountType>('customer');
+  const [name, setName] = useState('Cliente Teste Comprador');
+  const [cpfCnpj, setCpfCnpj] = useState('824.636.200-65');
   const [phone, setPhone] = useState('(11) 98877-6655');
-  const [initialBalanceFormatted, setInitialBalanceFormatted] = useState('10.000,00');
-  const [pixKey, setPixKey] = useState(user?.email || 'vendas@optmaidea.com.br');
+  const [initialBalanceFormatted, setInitialBalanceFormatted] = useState('2.000,00');
+  const [pixKey, setPixKey] = useState(user?.email || 'cliente@optmapay.fake');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -67,7 +67,7 @@ export const Onboarding: React.FC = () => {
     setLoading(true);
     setErrorMsg(null);
 
-    const val = parseFormattedBalance(initialBalanceFormatted);
+    const val = accountType === 'customer' ? 2000 : parseFormattedBalance(initialBalanceFormatted);
 
     try {
       const created = await createBankAccount(user.id, {
@@ -289,9 +289,14 @@ export const Onboarding: React.FC = () => {
                     type="text"
                     value={initialBalanceFormatted}
                     onChange={handleBalanceChange}
-                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none"
+                    readOnly={accountType === 'customer'}
+                    aria-readonly={accountType === 'customer'}
+                    className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none ${accountType === 'customer' ? 'bg-slate-100 dark:bg-slate-900 cursor-not-allowed border-slate-200 dark:border-slate-700' : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}
                     required
                   />
+                  {accountType === 'customer' && (
+                    <p className="mt-1 text-[10px] text-slate-400">Contas PF de teste começam com saldo fixo de R$ 2.000,00.</p>
+                  )}
                 </div>
               </div>
 
