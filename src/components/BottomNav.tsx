@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppMode } from '../context/AppModeContext';
+import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
   QrCode,
@@ -10,16 +11,19 @@ import {
   GraduationCap,
   PiggyBank,
   Banknote,
+  Crown,
 } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const { mode } = useAppMode();
+  const { isSuperAdmin } = useAuth();
 
   const devMobileNavItems = [
     { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
     { to: '/pix', label: 'Pix', icon: QrCode },
     { to: '/boletos', label: 'Boletos', icon: FileText },
     { to: '/cartoes', label: 'Cartões', icon: CreditCard },
+    ...(isSuperAdmin ? [{ to: '/master-admin/usuarios', label: 'Admin', icon: Crown }] : []),
     { to: '/meus-dados', label: 'Perfil', icon: User },
   ];
 
