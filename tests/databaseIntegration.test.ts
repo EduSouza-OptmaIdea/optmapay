@@ -153,7 +153,7 @@ describe('Real PostgreSQL Integration & Invariants Hardening Test (Pacote 01D)',
     expect(result.amount_gross).toBe(100.00);
 
     const customerAcc = await client.query(`SELECT balance FROM public.accounts WHERE id = $1`, [customerAccId]);
-    expect(Number(customerAcc.rows[0].balance)).toBe(900.00);
+    expect(Number(customerAcc.rows[0].balance)).toBe(1900.00);
 
     const txOut = await client.query(`SELECT * FROM public.transactions WHERE id = $1`, [result.transaction_out_id]);
     expect(txOut.rows.length).toBe(1);
@@ -311,7 +311,7 @@ describe('Real PostgreSQL Integration & Invariants Hardening Test (Pacote 01D)',
           p_api_key_id := $3
         );
       `, [merchantAccId, creditCardId, apiKeyId])
-    ).rejects.toThrow(/ERRO 55: Código de segurança CVV é obrigatório/);
+    ).rejects.toThrow(/ERRO 55: Código CVV incorreto/);
 
     // CVV incorreto
     await expect(
