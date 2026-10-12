@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
-import { fetchUserAccounts, createBankAccount, fetchAllAccountsAsSuperAdmin } from '../lib/supabase/accountService';
+import { fetchUserAccounts, createBankAccount, fetchAllAccountsAsSuperAdmin, verifySuperAdminAccess } from '../lib/supabase/accountService';
 import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -17,23 +17,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-export const checkIsSuperAdmin = (u: User | null): boolean => {
-  if (!u || !u.email) return false;
-  const email = u.email.toLowerCase().trim();
-
-  // REGRA ESTRITA: APENAS e EXCLUSIVAMENTE a conta edu.souza é o Super Admin da plataforma
-  if (
-    email.startsWith('edu.souza') ||
-    email.includes('edu.souza') ||
-    email.startsWith('edusouza') ||
-    email.includes('edusouza')
-  ) {
-    return true;
-  }
-
-  // Nenhuma outra conta (optmamenu, woodwork, madruga, etc) pode ser super admin
-  return false;
-};
+// Autoridade de Super Admin é validada no servidor pelo RPC is_optmapay_super_admin().
+export const checkIsSuperAdmin = (_u: User | null): boolean => false;
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
@@ -59,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const currentAuthUser = currentUser || userRef.current;
-    const isMaster = checkIsSuperAdmin(currentAuthUser);
+    const isMaster = currentAuthUser ? await verifySuperAdminAccess() : false;
     setIsSuperAdmin(isMaster);
 
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
@@ -141,7 +126,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       } else {
         setUser(currentUser);
-        setIsSuperAdmin(checkIsSuperAdmin(currentUser));
         loadAccounts(currentUser.id, currentUser).finally(() => setLoading(false));
       }
     });
@@ -149,7 +133,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user || null;
       setUser(currentUser);
-      setIsSuperAdmin(checkIsSuperAdmin(currentUser));
       if (currentUser) {
         await loadAccounts(currentUser.id, currentUser);
       } else {
