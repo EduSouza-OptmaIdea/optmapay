@@ -402,7 +402,7 @@ export const SuperAdminUsersActivity: React.FC = () => {
                         </span>
                         {row.status && (
                           <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            {row.status.replaceAll('_', ' ')}
+                            {row.status.replace(/_/g, ' ')}
                           </span>
                         )}
                       </div>
