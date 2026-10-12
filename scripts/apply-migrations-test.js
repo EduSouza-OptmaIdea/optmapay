@@ -50,7 +50,11 @@ async function main() {
     CREATE TABLE IF NOT EXISTS auth.users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email TEXT UNIQUE,
-      created_at TIMESTAMPTZ DEFAULT now()
+      created_at TIMESTAMPTZ DEFAULT now(),
+      email_confirmed_at TIMESTAMPTZ,
+      last_sign_in_at TIMESTAMPTZ,
+      banned_until TIMESTAMPTZ,
+      raw_user_meta_data JSONB DEFAULT '{}'::jsonb
     );
 
     CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
@@ -77,11 +81,11 @@ async function main() {
   `);
 
   // 4. Cria publication supabase_realtime exigida por migrations posteriores
-  await client.query(`
-    DO $ BEGIN
-      CREATE PUBLICATION supabase_realtime;
-    EXCEPTION WHEN duplicate_object THEN NULL; END $;
-  `);
+  try {
+    await client.query('CREATE PUBLICATION supabase_realtime');
+  } catch (err) {
+    if (err?.code !== '42710') throw err; // duplicate_object
+  }
 
   // 4.1. Emula a superfície mínima do pg_cron usada pelas migrations.
   // O serviço Postgres puro do GitHub Actions não traz a extensão pg_cron,
@@ -101,30 +105,25 @@ async function main() {
       p_schedule TEXT,
       p_command TEXT
     ) RETURNS BIGINT
-    LANGUAGE plpgsql
-    AS $
-    DECLARE
-      v_jobid BIGINT;
-    BEGIN
+    LANGUAGE sql
+    AS '
       INSERT INTO cron.job(jobname, schedule, command)
-      VALUES (p_jobname, p_schedule, p_command)
+      VALUES ($1, $2, $3)
       ON CONFLICT (jobname) DO UPDATE
         SET schedule = EXCLUDED.schedule,
             command = EXCLUDED.command
-      RETURNING jobid INTO v_jobid;
-      RETURN v_jobid;
-    END;
-    $;
+      RETURNING jobid
+    ';
 
     CREATE OR REPLACE FUNCTION cron.unschedule(p_jobid BIGINT)
     RETURNS BOOLEAN
-    LANGUAGE plpgsql
-    AS $
-    BEGIN
-      DELETE FROM cron.job WHERE jobid = p_jobid;
-      RETURN FOUND;
-    END;
-    $;
+    LANGUAGE sql
+    AS '
+      WITH deleted AS (
+        DELETE FROM cron.job WHERE jobid = $1 RETURNING 1
+      )
+      SELECT EXISTS(SELECT 1 FROM deleted)
+    ';
   `);
 
   // 5. Configura permissões básicas no schema public
