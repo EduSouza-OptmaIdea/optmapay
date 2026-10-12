@@ -31,11 +31,11 @@ export const Signup: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [copiedPassword, setCopiedPassword] = useState(false);
 
-  const [accountType, setAccountType] = useState<AccountType>('merchant');
+  const [accountType, setAccountType] = useState<AccountType>('customer');
   const [name, setName] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [phone, setPhone] = useState('(11) 98877-6655');
-  const [balanceFormatted, setBalanceFormatted] = useState('1.000,00');
+  const [balanceFormatted, setBalanceFormatted] = useState('2.000,00');
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -190,7 +190,7 @@ export const Signup: React.FC = () => {
     setLoading(true);
     setMessage(null);
 
-    const initialBal = parseFormattedBalance(balanceFormatted);
+    const initialBal = accountType === 'customer' ? 2000 : parseFormattedBalance(balanceFormatted);
     const pixKey = email.trim();
 
     try {
@@ -418,10 +418,10 @@ export const Signup: React.FC = () => {
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required
-                        minLength={6}
+                        minLength={8}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="Mínimo 8 caracteres"
                         className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#F1613A] outline-none"
                       />
                       <button
@@ -463,7 +463,7 @@ export const Signup: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
-                        onClick={() => setAccountType('merchant')}
+                        onClick={() => { setAccountType('merchant'); setBalanceFormatted('10.000,00'); }}
                         className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 ${
                           accountType === 'merchant'
                             ? 'bg-teal-50 dark:bg-teal-950/80 border-[#19A999] text-[#19A999] font-bold ring-2 ring-[#19A999]/20'
@@ -479,7 +479,7 @@ export const Signup: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => setAccountType('customer')}
+                        onClick={() => { setAccountType('customer'); setBalanceFormatted('2.000,00'); }}
                         className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 ${
                           accountType === 'customer'
                             ? 'bg-blue-50 dark:bg-blue-950/80 border-blue-500 text-blue-600 dark:text-blue-400 font-bold ring-2 ring-blue-500/20'
@@ -562,7 +562,10 @@ export const Signup: React.FC = () => {
                           required
                           value={balanceFormatted}
                           onChange={handleBalanceChange}
-                          className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none"
+                          readOnly={accountType === 'customer'}
+                          aria-readonly={accountType === 'customer'}
+                          title={accountType === 'customer' ? 'Contas PF de teste começam com saldo fixo de R$ 2.000,00.' : undefined}
+                          className={`w-full pl-9 pr-3.5 py-2.5 rounded-xl border text-xs font-mono font-extrabold text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-[#19A999] outline-none ${accountType === 'customer' ? 'bg-slate-100 dark:bg-slate-900 cursor-not-allowed border-slate-200 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}
                         />
                       </div>
                     </div>
