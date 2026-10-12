@@ -139,6 +139,35 @@ async function main() {
   // 6. Aplica todas as migrations desde zero
   for (const file of files) {
     console.log(`Aplicando ${file}...`);
+
+    // Uma migration histórica de tarifas contém backfill direcionado a uma
+    // conta sandbox que já existia no ambiente real. Em um banco vazio de CI,
+    // cria somente esse fixture mínimo para validar a migration desde o zero.
+    if (file === '20261010194357_pj_account_fees_overdraft_and_90d_foundation.sql') {
+      await client.query(`
+        INSERT INTO public.accounts (
+          id, user_id, name, type, cpf_cnpj, phone, balance, pix_key,
+          agency, account_number, config, created_at, updated_at
+        )
+        VALUES (
+          'afce3a88-8309-4feb-8fa7-8b07d9f22150'::uuid,
+          NULL,
+          'CI Legacy Merchant Fixture',
+          'merchant',
+          '00000000000000',
+          '(00) 00000-0000',
+          10000.00,
+          'ci-legacy-merchant@optmapay.fake',
+          '0001',
+          'CI-00001',
+          '{}'::jsonb,
+          '2026-08-29T00:00:00Z'::timestamptz,
+          '2026-08-29T00:00:00Z'::timestamptz
+        )
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+
     const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
     try {
       await client.query(sql);
