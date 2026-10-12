@@ -30,6 +30,7 @@ import { EmprestimosEduArea } from './pages/EmprestimosEduArea';
 import { CenariosEduArea } from './pages/CenariosEduArea';
 import { BankParametersArea } from './pages/BankParametersArea';
 import { SuperAdminConsole } from './pages/SuperAdminConsole';
+import { SuperAdminUsersActivity } from './pages/SuperAdminUsersActivity';
 import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
@@ -75,6 +76,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/meus-dados" element={<MyProfile />} />
             <Route path="/config-banco" element={isSuperAdmin ? <BankParametersArea /> : <Navigate to="/dashboard" replace />} />
             <Route path="/master-admin" element={isSuperAdmin ? <SuperAdminConsole /> : <Navigate to="/dashboard" replace />} />
+            <Route path="/master-admin/usuarios" element={isSuperAdmin ? <SuperAdminUsersActivity /> : <Navigate to="/dashboard" replace />} />
             <Route path="/settings" element={<SettingsReset />} />
             <Route path="*" element={<Navigate to={mode === 'edu' ? '/edu-dashboard' : '/dashboard'} replace />} />
           </Routes>
