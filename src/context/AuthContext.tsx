@@ -94,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const meta = authUser.user_metadata || {};
         if (meta.account_name && meta.cpf_cnpj) {
           try {
-            const initialBal = typeof meta.initial_balance === 'number' ? meta.initial_balance : 1000.00;
+            const initialBal = meta.account_type === 'customer' ? 2000.00 : (typeof meta.initial_balance === 'number' ? meta.initial_balance : 10000.00);
             const created = await createBankAccount(authUser.id, {
               name: meta.account_name,
               type: meta.account_type || 'merchant',
