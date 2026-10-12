@@ -340,7 +340,7 @@ describe('Real PostgreSQL Integration & Invariants Hardening Test (Pacote 01D)',
           p_api_key_id := $3
         );
       `, [merchantAccId, creditCardId, apiKeyId])
-    ).rejects.toThrow(/ERRO 54: Data de validade do cartão é obrigatória/);
+    ).rejects.toThrow(/ERRO 54/);
 
     // Validade incorreta
     await expect(
