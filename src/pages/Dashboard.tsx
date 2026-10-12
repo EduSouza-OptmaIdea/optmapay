@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxTransaction } from '../types/sandbox';
 import { sendWelcomeEmail } from '../lib/email/app-email';
-import { createBankAccount } from '../lib/supabase/accountService';
+import { createBankAccount, depositFundsRPC } from '../lib/supabase/accountService';
 import {
   Eye,
   EyeOff,
@@ -517,30 +517,16 @@ export const Dashboard: React.FC = () => {
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeAccount) return;
-    const val = parseFloat(depositAmount);
-    if (isNaN(val) || val <= 0) return;
 
-    const newBalance = activeAccount.balance + val;
-    await supabase
-      .from('accounts')
-      .update({ balance: newBalance, updated_at: new Date().toISOString() })
-      .eq('id', activeAccount.id);
-
-    await supabase.from('transactions').insert({
-      user_id: activeAccount.user_id || null,
-      account_id: activeAccount.id,
-      type: 'deposit',
-      direction: 'in',
-      amount: val,
-      description: depositDesc,
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    });
-
-    setIsDepositOpen(false);
-    await refreshAccounts();
-    await fetchTransactions();
+    try {
+      await depositFundsRPC(activeAccount.id, 500, depositDesc);
+      setDepositAmount('500');
+      setIsDepositOpen(false);
+      await refreshAccounts();
+      await fetchTransactions();
+    } catch (err: any) {
+      alert(err?.message || 'Não foi possível realizar o aporte fictício.');
+    }
   };
 
   // Abre modal de devolução preenchendo o saldo restante correto
@@ -1411,13 +1397,13 @@ export const Dashboard: React.FC = () => {
                   Valor do Aporte (R$)
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono font-bold focus:ring-2 focus:ring-teal-500 outline-none"
-                  required
+                  type="text"
+                  value="500,00"
+                  readOnly
+                  aria-readonly="true"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
                 />
+                <p className="mt-1 text-[10px] text-slate-400">Cada aporte de teste é fixo em R$ 500,00.</p>
               </div>
 
               <div>
