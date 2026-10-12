@@ -152,20 +152,7 @@ export async function depositFundsRPC(accountId: string, amount: number, descrip
   });
 
   if (error) {
-    const { data: acc } = await client.from('accounts').select('balance').eq('id', accountId).single();
-    const newBal = (acc?.balance || 0) + amount;
-    await client.from('accounts').update({ balance: newBal }).eq('id', accountId);
-    await client.from('transactions').insert({
-      account_id: accountId,
-      type: 'deposit',
-      direction: 'in',
-      amount,
-      description: description || 'Aporte Fictício Sandbox',
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    });
-    return { success: true, new_balance: newBal };
+    throw new Error(error.message || 'Falha ao realizar aporte fictício no Sandbox.');
   }
 
   return data;
