@@ -168,15 +168,109 @@ export interface SuperAdminGlobalMetrics {
   pendingTransactionsCount: number;
 }
 
+export interface SuperAdminUserMetrics {
+  totalUsers: number;
+  confirmedUsers: number;
+  pendingConfirmation: number;
+  signedInLast24h: number;
+  customerAccounts: number;
+  merchantAccounts: number;
+}
+
+export interface SuperAdminUserRow {
+  user_id: string;
+  email: string;
+  display_name: string;
+  account_type: string;
+  created_at: string;
+  email_confirmed_at: string | null;
+  last_sign_in_at: string | null;
+  status: 'active' | 'pending_confirmation' | 'blocked' | string;
+  account_count: number;
+  account_names: string;
+  total_balance: number;
+  transaction_count: number;
+  card_count: number;
+  boleto_count: number;
+  last_activity_at: string;
+}
+
+export interface SuperAdminActivityRow {
+  event_id: string;
+  user_id: string | null;
+  user_email: string | null;
+  account_id: string | null;
+  account_name: string | null;
+  event_type: string;
+  category: string;
+  summary: string;
+  amount: number | null;
+  status: string | null;
+  occurred_at: string;
+}
+
+export async function verifySuperAdminAccess(): Promise<boolean> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('is_optmapay_super_admin');
+  if (error) {
+    console.warn('[verifySuperAdminAccess] Falha ao validar autoridade:', error.message);
+    return false;
+  }
+  return data === true;
+}
+
+export async function superAdminListUsers(
+  search: string = '',
+  limit: number = 200,
+  offset: number = 0
+): Promise<SuperAdminUserRow[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('super_admin_list_users', {
+    p_search: search || null,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) throw new Error(error.message || 'Falha ao listar usuários do OptmaPay.');
+  return (data || []) as SuperAdminUserRow[];
+}
+
+export async function superAdminFetchUserMetrics(): Promise<SuperAdminUserMetrics> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('super_admin_user_metrics');
+  if (error) throw new Error(error.message || 'Falha ao carregar métricas de usuários.');
+  return {
+    totalUsers: Number(data?.totalUsers || 0),
+    confirmedUsers: Number(data?.confirmedUsers || 0),
+    pendingConfirmation: Number(data?.pendingConfirmation || 0),
+    signedInLast24h: Number(data?.signedInLast24h || 0),
+    customerAccounts: Number(data?.customerAccounts || 0),
+    merchantAccounts: Number(data?.merchantAccounts || 0),
+  };
+}
+
+export async function superAdminFetchActivity(
+  userId?: string | null,
+  search: string = '',
+  limit: number = 200,
+  offset: number = 0
+): Promise<SuperAdminActivityRow[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client.rpc('super_admin_activity_feed', {
+    p_user_id: userId || null,
+    p_search: search || null,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) throw new Error(error.message || 'Falha ao carregar atividades dos usuários.');
+  return (data || []) as SuperAdminActivityRow[];
+}
+
 /**
  * Busca todas as contas do sistema registradas no banco (Visão Super Admin)
  */
 export async function fetchAllAccountsAsSuperAdmin(): Promise<SandboxAccount[]> {
   const client = getSupabaseClient();
-  const { data, error } = await client
-    .from('accounts')
-    .select('*')
-    .order('created_at', { ascending: true });
+  const { data, error } = await client.rpc('super_admin_list_accounts');
 
   if (error || !data) {
     console.warn('[fetchAllAccountsAsSuperAdmin] Falha ao listar contas gerais:', error?.message);
@@ -222,40 +316,20 @@ export async function superAdminAdjustAccountBalance(
  */
 export async function superAdminFetchGlobalMetrics(): Promise<SuperAdminGlobalMetrics> {
   const client = getSupabaseClient();
-  const { data: accounts } = await client.from('accounts').select('id, balance');
-  const { data: transactions } = await client.from('transactions').select('amount, status, type, direction, description');
+  const { data, error } = await client.rpc('super_admin_global_metrics');
 
-  const accs = accounts || [];
-  const txs = transactions || [];
-
-  const totalBalanceCustodied = accs.reduce((sum, a) => sum + Number(a.balance || 0), 0);
-  const totalVolumeTPV = txs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-  let totalPendingSettlements = 0;
-  let pendingCount = 0;
-  let mdrRevenue = 0;
-
-  for (const t of txs) {
-    if (t.status === 'pending') {
-      totalPendingSettlements += Number(t.amount || 0);
-      pendingCount++;
-    }
-    if (t.description?.includes('Taxa') || t.type === 'card_fee') {
-      const match = t.description?.match(/Taxa[^:]*:\s*[-R$\s]*([\d,.]+)/i);
-      if (match) {
-        mdrRevenue += parseFloat(match[1].replace(',', '.')) || 0;
-      }
-    }
+  if (error) {
+    throw new Error(error.message || 'Falha ao carregar métricas globais do banco.');
   }
 
   return {
-    totalAccounts: accs.length,
-    totalBalanceCustodied: Math.round(totalBalanceCustodied * 100) / 100,
-    totalTransactionsCount: txs.length,
-    totalVolumeTPV: Math.round(totalVolumeTPV * 100) / 100,
-    totalMdrRevenueCollected: Math.round(mdrRevenue * 100) / 100,
-    totalPendingSettlements: Math.round(totalPendingSettlements * 100) / 100,
-    pendingTransactionsCount: pendingCount,
+    totalAccounts: Number(data?.totalAccounts || 0),
+    totalBalanceCustodied: Number(data?.totalBalanceCustodied || 0),
+    totalTransactionsCount: Number(data?.totalTransactionsCount || 0),
+    totalVolumeTPV: Number(data?.totalVolumeTPV || 0),
+    totalMdrRevenueCollected: Number(data?.totalMdrRevenueCollected || 0),
+    totalPendingSettlements: Number(data?.totalPendingSettlements || 0),
+    pendingTransactionsCount: Number(data?.pendingTransactionsCount || 0),
   };
 }
 
@@ -288,7 +362,7 @@ export async function superAdminCreateTenantAccount(
     type: input.type,
     cpf_cnpj: input.cpf_cnpj,
     phone: '(11) 98888-7766',
-    balance: input.initialBalance !== undefined ? input.initialBalance : input.type === 'merchant' ? 10000.00 : 2500.00,
+    balance: input.type === 'customer' ? 2000.00 : (input.initialBalance !== undefined ? input.initialBalance : 10000.00),
     pix_key: defaultPixKey,
     agency,
     account_number: accountNumber,
