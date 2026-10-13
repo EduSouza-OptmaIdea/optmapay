@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
-import { verifySuperAdminAccess } from '../lib/supabase/accountService';
+import { getPlatformIdentity } from '../services/platformStaffService';
 import {
   Mail,
   Lock,
@@ -20,7 +20,7 @@ import {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading, isSuperAdmin } = useAuth();
+  const { user, loading: authLoading, isPlatformStaff } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -31,9 +31,9 @@ export const Login: React.FC = () => {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate(isSuperAdmin ? '/admin' : '/dashboard', { replace: true });
+      navigate(isPlatformStaff ? '/admin' : '/dashboard', { replace: true });
     }
-  }, [authLoading, user, isSuperAdmin, navigate]);
+  }, [authLoading, user, isPlatformStaff, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +51,7 @@ export const Login: React.FC = () => {
 
         if (error) throw error;
         if (data.user) {
-          navigate(await verifySuperAdminAccess() ? '/admin' : '/dashboard', { replace: true });
+          navigate((await getPlatformIdentity()).is_staff ? '/admin' : '/dashboard', { replace: true });
         }
       } else if (mode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
