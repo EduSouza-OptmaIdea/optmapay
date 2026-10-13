@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { useAuth, checkIsSuperAdmin } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
+import { verifySuperAdminAccess } from '../lib/supabase/accountService';
 import {
   ShieldCheck,
   Sparkles,
@@ -64,13 +65,6 @@ export const PublicHome: React.FC = () => {
 
     const emailTrimmed = restrictedEmail.trim().toLowerCase();
 
-    // Verificação estrita antes de tentar logar
-    if (!emailTrimmed.includes('edu.souza') && !emailTrimmed.includes('edusouza')) {
-      setRestrictedError('Acesso restrito ao administrador central da plataforma.');
-      setRestrictedLoading(false);
-      return;
-    }
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: emailTrimmed,
@@ -79,7 +73,7 @@ export const PublicHome: React.FC = () => {
 
       if (error) throw error;
 
-      if (data.user && checkIsSuperAdmin(data.user)) {
+      if (data.user && await verifySuperAdminAccess()) {
         setShowRestrictedModal(false);
         navigate('/master-admin');
       } else {
@@ -161,7 +155,7 @@ export const PublicHome: React.FC = () => {
               Sandbox
             </span>
             <span className="text-slate-200 text-[11px] sm:text-xs">
-              Ambiente Fictício para Testes de APIs, Webhooks e Liquidação de Vendas Online.
+              Laboratório de educação financeira e testes. Nenhum dinheiro real.
             </span>
           </div>
           <a
@@ -211,6 +205,12 @@ export const PublicHome: React.FC = () => {
             {/* Ações Públicas: Acessar Conta & Criar Conta */}
             <div className="flex items-center gap-2">
               <button
+                onClick={handleRestrictedAccessClick}
+                className="py-2 px-3.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition border border-slate-200 dark:border-slate-700"
+              >
+                Administração
+              </button>
+              <button
                 onClick={() => navigate('/login')}
                 className="py-2 px-3.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition border border-slate-200 dark:border-slate-700"
               >
@@ -238,11 +238,11 @@ export const PublicHome: React.FC = () => {
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-              O Banco Digital de Testes para seu Ecossistema de Vendas
+              Aprenda finanças praticando, sem usar dinheiro real
             </h1>
 
             <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
-              Teste transferências <strong>Pix com QR Code dinâmico</strong>, emissão e quitação de boletos, cartões virtuais e webhooks em tempo real sem arriscar dinheiro real.
+              Explore contas simuladas, <strong>Pix fictício, cartões, depósitos e orçamento</strong> em um ambiente de aprendizagem. Desenvolvedores também podem testar integrações e webhooks, sem movimentar dinheiro real.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -333,7 +333,7 @@ export const PublicHome: React.FC = () => {
               Módulos do Sistema
             </span>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              Tudo o que você precisa para testar checkout
+              Experimente pagamentos e aprenda a cuidar do dinheiro
             </h2>
           </div>
 
@@ -568,7 +568,7 @@ export const PublicHome: React.FC = () => {
                 Acesso Restrito
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Acesso exclusivo para o administrador central da plataforma.
+                Área de administração da plataforma. A autorização é verificada pelo servidor.
               </p>
             </div>
 
@@ -591,7 +591,7 @@ export const PublicHome: React.FC = () => {
                     required
                     value={restrictedEmail}
                     onChange={(e) => setRestrictedEmail(e.target.value)}
-                    placeholder="edu.souza@..."
+                    placeholder="email@exemplo.com"
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-[#F1613A] outline-none"
                   />
                 </div>
