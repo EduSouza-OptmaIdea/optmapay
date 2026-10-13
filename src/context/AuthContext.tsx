@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
-import { fetchUserAccounts, createBankAccount, fetchAllAccountsAsSuperAdmin, verifySuperAdminAccess } from '../lib/supabase/accountService';
+import { fetchUserAccounts, createBankAccount, verifySuperAdminAccess } from '../lib/supabase/accountService';
 import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -60,18 +60,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
-    // SÓ busca contas de terceiros se o usuário for estritamente o Super Admin
-    let allFetched: SandboxAccount[] = [];
-    if (isMaster) {
-      allFetched = await fetchAllAccountsAsSuperAdmin();
-    }
-    setAllAccounts(allFetched);
+    setAllAccounts([]);
 
     if (fetched && fetched.length > 0) {
       setAccounts(fetched);
 
       const savedActiveId = localStorage.getItem('optmapay_active_account_id');
-      const pool = isMaster && allFetched.length > 0 ? allFetched : fetched;
+      const pool = fetched;
       const matched = pool.find((a) => a.id === savedActiveId);
 
       setActiveAccount((prev) => {
