@@ -47,6 +47,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isMaster = currentAuthUser ? await verifySuperAdminAccess() : false;
     setIsSuperAdmin(isMaster);
 
+    // Operadores da plataforma não têm sessão de correntista nem assumem contas.
+    if (isMaster) {
+      setAccounts([]);
+      setAllAccounts([]);
+      setActiveAccount(null);
+      setIsUnauthorized(false);
+      localStorage.removeItem('optmapay_active_account_id');
+      return;
+    }
+
     const { accounts: fetched, isUnauthorized: unauth } = await fetchUserAccounts(targetUserId);
     setIsUnauthorized(unauth);
 
@@ -218,7 +228,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const setActiveAccountId = (id: string) => {
-    const pool = allAccounts.length > 0 ? allAccounts : accounts;
+    if (isSuperAdmin) return;
+    const pool = accounts;
     const matched = pool.find((a) => a.id === id) || accounts.find((a) => a.id === id);
     if (matched) {
       setActiveAccount({ ...matched });
