@@ -49,7 +49,7 @@ export const PublicHome: React.FC = () => {
 
   const handleRestrictedAccessClick = () => {
     if (isSuperAdmin) {
-      navigate('/master-admin');
+      navigate('/admin');
     } else {
       setRestrictedError(null);
       setShowRestrictedModal(true);
@@ -75,7 +75,7 @@ export const PublicHome: React.FC = () => {
 
       if (data.user && await verifySuperAdminAccess()) {
         setShowRestrictedModal(false);
-        navigate('/master-admin');
+        navigate('/admin');
       } else {
         await supabase.auth.signOut();
         throw new Error('Esta conta não possui privilégios de administrador central.');
