@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { LockKeyhole, ShieldCheck } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
-import { verifySuperAdminAccess } from '../lib/supabase/accountService';
+import { getPlatformIdentity } from '../services/platformStaffService';
 
 export const AdminLogin: React.FC = () => {
   const [email,setEmail] = useState('');
@@ -18,11 +18,11 @@ export const AdminLogin: React.FC = () => {
     try {
       const response = await supabase.auth.signInWithPassword({email:email.trim(),password});
       if (response.error) throw response.error;
-      if (!await verifySuperAdminAccess()) {
+      if (!(await getPlatformIdentity()).is_staff) {
         await supabase.auth.signOut();
         throw new Error('Esta conta não possui acesso administrativo autorizado.');
       }
-      // AuthContext é atualizado pela sessão autenticada e renderiza /admin.
+      // AuthContext carrega o papel e renderiza /admin após validar no servidor.
     } catch (err: any) {
       setError(err?.message?.includes('Invalid login credentials') ? 'E-mail ou senha inválidos.' : (err?.message || 'Não foi possível autenticar.'));
     } finally {
