@@ -3,12 +3,16 @@ import { supabase } from '../lib/supabase';
 import { SandboxAccount } from '../types/sandbox';
 import { fetchUserAccounts, createBankAccount, verifySuperAdminAccess } from '../lib/supabase/accountService';
 import { User } from '@supabase/supabase-js';
+import { getPlatformIdentity, PlatformRole } from '../services/platformStaffService';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   isUnauthorized: boolean;
   isSuperAdmin: boolean;
+  isPlatformStaff: boolean;
+  platformRole: PlatformRole | null;
+  platformPermissions: string[];
   accounts: SandboxAccount[];
   allAccounts: SandboxAccount[];
   activeAccount: SandboxAccount | null;
@@ -30,6 +34,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [allAccounts, setAllAccounts] = useState<SandboxAccount[]>([]);
   const [activeAccount, setActiveAccount] = useState<SandboxAccount | null>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [isPlatformStaff, setIsPlatformStaff] = useState(false);
+  const [platformRole, setPlatformRole] = useState<PlatformRole | null>(null);
+  const [platformPermissions, setPlatformPermissions] = useState<string[]>([]);
   const userRef = useRef<User | null>(null);
   userRef.current = user;
 
@@ -45,10 +52,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const currentAuthUser = currentUser || userRef.current;
     const isMaster = currentAuthUser ? await verifySuperAdminAccess() : false;
+    const identity = await getPlatformIdentity();
+    const isStaff = isMaster || identity.is_staff;
     setIsSuperAdmin(isMaster);
+    setIsPlatformStaff(isStaff);
+    setPlatformRole(isMaster ? 'owner' : identity.role);
+    setPlatformPermissions(isMaster ? ['*'] : identity.permissions);
 
-    // Operadores da plataforma não têm sessão de correntista nem assumem contas.
-    if (isMaster) {
+    // Operadores da plataforma nunca assumem conta bancária.
+    if (isStaff) {
       setAccounts([]);
       setAllAccounts([]);
       setActiveAccount(null);
@@ -223,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const setActiveAccountId = (id: string) => {
-    if (isSuperAdmin) return;
+    if (isPlatformStaff) return;
     const pool = accounts;
     const matched = pool.find((a) => a.id === id) || accounts.find((a) => a.id === id);
     if (matched) {
@@ -255,6 +267,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isUnauthorized,
         isSuperAdmin,
+        isPlatformStaff,
+        platformRole,
+        platformPermissions,
         accounts,
         allAccounts,
         activeAccount,
