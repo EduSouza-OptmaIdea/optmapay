@@ -26,16 +26,16 @@ const PendingModule = ({ title, description }: { title: string; description: str
   </section>
 );
 
-const AdminOverview = () => {
+const AdminOverview = ({ isOwner }: { isOwner: boolean }) => {
   const [metrics, setMetrics] = useState<SuperAdminUserMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    superAdminFetchUserMetrics().then(data => { if (active) setMetrics(data); }).catch(e => {
+    if (isOwner) superAdminFetchUserMetrics().then(data => { if (active) setMetrics(data); }).catch(e => {
       if (active) setError(e?.message || 'Não foi possível carregar os indicadores.');
     });
     return () => { active = false; };
-  }, []);
+  }, [isOwner]);
   return <div className="space-y-6">
     <div>
       <h2 className="text-2xl font-extrabold">Visão geral da plataforma</h2>
@@ -47,7 +47,7 @@ const AdminOverview = () => {
       <div className="p-5 rounded-2xl border bg-white dark:bg-slate-800 dark:border-slate-700"><Wallet className="text-teal-500 mb-3"/><p className="text-sm font-bold">Operações fictícias</p><p className="text-xs text-slate-500 mt-2">Informações operacionais sem assumir contas de terceiros.</p></div>
       <div className="p-5 rounded-2xl border bg-white dark:bg-slate-800 dark:border-slate-700"><CreditCard className="text-teal-500 mb-3"/><p className="text-sm font-bold">Políticas globais</p><p className="text-xs text-slate-500 mt-2">Depósitos, tarifas, saldos iniciais e cartões terão configurações autorizadas e auditadas.</p></div>
     </div>
-    <div className="rounded-2xl border dark:border-slate-700 p-5"><Activity size={20} className="text-teal-500"/><h3 className="font-bold mt-2">Status administrativo</h3><p className="text-sm text-slate-500 dark:text-slate-300 mt-2">{metrics ? 'Consulta de métricas administrativas disponível.' : 'Carregando indicadores autorizados...'}</p></div>
+    <div className="rounded-2xl border dark:border-slate-700 p-5"><Activity size={20} className="text-teal-500"/><h3 className="font-bold mt-2">Status administrativo</h3><p className="text-sm text-slate-500 dark:text-slate-300 mt-2">{isOwner ? (metrics ? 'Consulta de métricas administrativas disponível.' : 'Carregando indicadores autorizados...') : 'Acesso delegado, restrito às permissões concedidas pelo Owner.'}</p></div>
   </div>;
 };
 
@@ -61,7 +61,7 @@ export const AdminArea: React.FC = () => {
   const denied = <p role="alert">Sem permissão administrativa para este módulo.</p>;
   return <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">
     <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-5 py-4 flex flex-wrap justify-between items-center gap-4">
-      <div className="flex items-center gap-4"><Logo heightClass="h-8"/><div className="border-l pl-4 dark:border-slate-700"><h1 className="font-extrabold">Administração OptmaPay</h1><p className="text-xs text-slate-500">Controle da plataforma • Sandbox</p></div></div>
+      <div className="flex items-center gap-4"><Logo heightClass="h-8"/><div className="border-l pl-4 dark:border-slate-700"><h1 className="font-extrabold">Administração OptmaPay</h1><p className="text-xs text-slate-500">Controle da plataforma • Sandbox • {platformRole === 'owner' ? 'Owner' : platformRole === 'admin' ? 'Admin' : 'User interno'}</p></div></div>
       <button onClick={async()=>{await signOut();navigate('/');}} className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl border dark:border-slate-700 px-4 py-2"><LogOut size={16}/> Sair</button>
     </header>
     <div className="max-w-7xl mx-auto md:flex">
@@ -69,7 +69,7 @@ export const AdminArea: React.FC = () => {
         {navigation.filter(item=>!item.permission || (item.permission === 'owner' ? platformRole === 'owner' : can(item.permission))).map(item=><Link key={item.to} to={item.to} className="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-3 text-sm font-semibold hover:bg-white dark:hover:bg-slate-800"><item.icon size={18}/>{item.label}</Link>)}
       </nav>
       <main className="p-5 sm:p-8 flex-1 min-w-0"><Routes>
-        <Route index element={<AdminOverview/>}/>
+        <Route index element={<AdminOverview isOwner={platformRole === 'owner'}/>}/>
         <Route path="correntistas" element={can('customers.read') ? (platformRole === 'owner' ? <SuperAdminUsersActivity/> : <PlatformCustomersPage/>) : denied}/>
         <Route path="configuracoes" element={<PendingModule title="Regras e configurações" description="Parâmetros financeiros configuráveis serão implementados com validação no banco e auditoria."/>}/>
         <Route path="operadores" element={platformRole === 'owner' ? <PlatformStaffPage/> : denied}/>
