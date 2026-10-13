@@ -82,7 +82,7 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
   const idempotency = useRef<{key:string;signature:string;fee:number}|null>(null);
 
   const numericAmount = Number(amount);
-  const validAmount = amount.trim()!=='' && Number.isFinite(numericAmount) && numericAmount>0 && Math.round(numericAmount*100)===numericAmount*100;
+  const validAmount = amount.trim()!=='' && Number.isFinite(numericAmount) && numericAmount>0 && numericAmount===Number(numericAmount.toFixed(2));
 
   useEffect(()=>{
     if(receipt) return;
