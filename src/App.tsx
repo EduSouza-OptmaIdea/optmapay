@@ -28,10 +28,7 @@ import { EduDashboard } from './pages/EduDashboard';
 import { InvestimentosEduArea } from './pages/InvestimentosEduArea';
 import { EmprestimosEduArea } from './pages/EmprestimosEduArea';
 import { CenariosEduArea } from './pages/CenariosEduArea';
-import { BankParametersArea } from './pages/BankParametersArea';
-import { SuperAdminConsole } from './pages/SuperAdminConsole';
 import { AdminArea } from './pages/AdminArea';
-import { SuperAdminUsersActivity } from './pages/SuperAdminUsersActivity';
 import { RefreshCw } from 'lucide-react';
 
 const ProtectedLayout: React.FC = () => {
