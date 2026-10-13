@@ -11,11 +11,11 @@ import { superAdminFetchUserMetrics, SuperAdminUserMetrics } from '../lib/supaba
 
 const navigation = [
   { to: '/admin', label: 'Visão geral', icon: LayoutDashboard },
-  { to: '/admin/correntistas', label: 'Correntistas e atividades', icon: Users },
-  { to: '/admin/configuracoes', label: 'Regras e configurações', icon: Settings },
-  { to: '/admin/operadores', label: 'Equipe e permissões', icon: ShieldCheck },
-  { to: '/admin/mensagens', label: 'Central de mensagens', icon: MessageSquare },
-  { to: '/admin/educacao', label: 'Educação e módulos futuros', icon: BookOpen },
+  { to: '/admin/correntistas', label: 'Correntistas e atividades', icon: Users, permission: 'customers.read' },
+  { to: '/admin/configuracoes', label: 'Regras e configurações', icon: Settings, permission: 'system.configure' },
+  { to: '/admin/operadores', label: 'Equipe e permissões', icon: ShieldCheck, permission: 'owner' },
+  { to: '/admin/mensagens', label: 'Central de mensagens', icon: MessageSquare, permission: 'messages.send' },
+  { to: '/admin/educacao', label: 'Educação e módulos futuros', icon: BookOpen, permission: 'education.manage' },
 ];
 
 const PendingModule = ({ title, description }: { title: string; description: string }) => (
@@ -66,13 +66,13 @@ export const AdminArea: React.FC = () => {
     </header>
     <div className="max-w-7xl mx-auto md:flex">
       <nav aria-label="Administração" className="md:w-64 shrink-0 p-4 flex md:flex-col gap-2 overflow-x-auto border-b md:border-b-0 md:border-r dark:border-slate-700">
-        {navigation.map(item=><Link key={item.to} to={item.to} className="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-3 text-sm font-semibold hover:bg-white dark:hover:bg-slate-800"><item.icon size={18}/>{item.label}</Link>)}
+        {navigation.filter(item=>!item.permission || (item.permission === 'owner' ? platformRole === 'owner' : can(item.permission))).map(item=><Link key={item.to} to={item.to} className="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-3 text-sm font-semibold hover:bg-white dark:hover:bg-slate-800"><item.icon size={18}/>{item.label}</Link>)}
       </nav>
       <main className="p-5 sm:p-8 flex-1 min-w-0"><Routes>
         <Route index element={<AdminOverview/>}/>
-        <Route path="correntistas" element={<SuperAdminUsersActivity/>}/>
+        <Route path="correntistas" element={can('customers.read') ? (platformRole === 'owner' ? <SuperAdminUsersActivity/> : <PlatformCustomersPage/>) : denied}/>
         <Route path="configuracoes" element={<PendingModule title="Regras e configurações" description="Parâmetros financeiros configuráveis serão implementados com validação no banco e auditoria."/>}/>
-        <Route path="operadores" element={<PendingModule title="Equipe e permissões" description="Perfis Owner, Admin e User interno serão independentes das contas de correntista."/>}/>
+        <Route path="operadores" element={platformRole === 'owner' ? <PlatformStaffPage/> : denied}/>
         <Route path="mensagens" element={<PendingModule title="Central de mensagens" description="Comunicações segmentadas e auditadas serão disponibilizadas após implantação do backend."/>}/>
         <Route path="educacao" element={<PendingModule title="Educação, investimentos e OptmaShop" description="Módulos educacionais e simulados separados dos controles administrativos."/>}/>
         <Route path="*" element={<Navigate to="/admin" replace/>}/>
