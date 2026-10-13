@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Activity, ArrowRight, BookOpen, CreditCard, LayoutDashboard, LogOut, MessageSquare, Settings, ShieldCheck, Users, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
+import { AdminLogin } from './AdminLogin';
 import { SuperAdminUsersActivity } from './SuperAdminUsersActivity';
 import { superAdminFetchUserMetrics, SuperAdminUserMetrics } from '../lib/supabase/accountService';
 
@@ -52,7 +53,7 @@ export const AdminArea: React.FC = () => {
   const { user, loading, isSuperAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   if (loading) return <div className="min-h-screen flex items-center justify-center">Validando autoridade administrativa...</div>;
-  if (!user) return <Navigate to="/login?next=admin" replace />;
+  if (!user) return <AdminLogin />;
   if (!isSuperAdmin) return <div className="min-h-screen flex items-center justify-center p-8"><div role="alert"><h1 className="font-bold">Acesso administrativo não autorizado</h1><p>Esta sessão não possui permissão para administrar a plataforma.</p><Link className="text-teal-600 underline" to="/">Voltar à página inicial</Link></div></div>;
   return <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">
     <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-5 py-4 flex flex-wrap justify-between items-center gap-4">
