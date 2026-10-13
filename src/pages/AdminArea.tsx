@@ -71,10 +71,10 @@ export const AdminArea: React.FC = () => {
       <main className="p-5 sm:p-8 flex-1 min-w-0"><Routes>
         <Route index element={<AdminOverview isOwner={platformRole === 'owner'}/>}/>
         <Route path="correntistas" element={can('customers.read') ? (platformRole === 'owner' ? <SuperAdminUsersActivity/> : <PlatformCustomersPage/>) : denied}/>
-        <Route path="configuracoes" element={<PendingModule title="Regras e configurações" description="Parâmetros financeiros configuráveis serão implementados com validação no banco e auditoria."/>}/>
+        <Route path="configuracoes" element={can("system.configure") ? <PendingModule title="Regras e configurações" description="Parâmetros financeiros configuráveis serão implementados com validação no banco e auditoria."/> : denied}/>
         <Route path="operadores" element={platformRole === 'owner' ? <PlatformStaffPage/> : denied}/>
-        <Route path="mensagens" element={<PendingModule title="Central de mensagens" description="Comunicações segmentadas e auditadas serão disponibilizadas após implantação do backend."/>}/>
-        <Route path="educacao" element={<PendingModule title="Educação, investimentos e OptmaShop" description="Módulos educacionais e simulados separados dos controles administrativos."/>}/>
+        <Route path="mensagens" element={can("messages.send") ? <PendingModule title="Central de mensagens" description="Comunicações segmentadas e auditadas serão disponibilizadas após implantação do backend."/> : denied}/>
+        <Route path="educacao" element={can("education.manage") ? <PendingModule title="Educação, investimentos e OptmaShop" description="Módulos educacionais e simulados separados dos controles administrativos."/> : denied}/>
         <Route path="*" element={<Navigate to="/admin" replace/>}/>
       </Routes></main>
     </div>
