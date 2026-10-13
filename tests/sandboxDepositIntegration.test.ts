@@ -28,10 +28,10 @@ describe('Sandbox deposit: atomicity, monthly allowance and replay', () => {
     await db.query('BEGIN');
     try {
       await db.query('update public.platform_system_settings set deposit_free_monthly=5, deposit_excess_fee=1 where id=1');
+      const opening=(await db.query('select balance from public.accounts where id=$1',[accountId])).rows[0].balance;
       await db.query('SET LOCAL ROLE authenticated');
       await db.query("select set_config('request.jwt.claim.sub',$1,true)",[userId]);
       await db.query("select set_config('request.jwt.claim.role','authenticated',true)");
-      const opening=(await db.query('select balance from public.accounts where id=$1',[accountId])).rows[0].balance;
       let finalReceipt: any = null;
       for(let n=0;n<6;n++) {
         const quote=(await db.query('select public.sandbox_deposit_quote($1,10) as data',[accountId])).rows[0].data;
@@ -50,6 +50,7 @@ describe('Sandbox deposit: atomicity, monthly allowance and replay', () => {
       )).rows[0].data;
       expect(repeat.replayed).toBe(true);
       expect(repeat.transaction_id).toBe(finalReceipt.transaction_id);
+      await db.query('SET LOCAL ROLE postgres');
       const closing=(await db.query('select balance from public.accounts where id=$1',[accountId])).rows[0].balance;
       expect(Number(closing)-Number(opening)).toBe(59);
       const summary=await db.query('select type,count(*)::int n from public.transactions where account_id=$1 group by type',[accountId]);
