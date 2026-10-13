@@ -48,12 +48,7 @@ export const PublicHome: React.FC = () => {
   const [restrictedError, setRestrictedError] = useState<string | null>(null);
 
   const handleRestrictedAccessClick = () => {
-    if (isSuperAdmin) {
-      navigate('/admin');
-    } else {
-      setRestrictedError(null);
-      setShowRestrictedModal(true);
-    }
+    navigate('/admin');
   };
 
   const handleRestrictedSubmit = async (e: React.FormEvent) => {
