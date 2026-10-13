@@ -590,7 +590,7 @@ export const Dashboard: React.FC = () => {
     if (type === 'pix') {
       return direction === 'in' ? 'Pix Recebido' : 'Pix Enviado';
     }
-    if (type === 'deposit') return 'Aporte em Conta (Depósito Fictício)';
+    if (type === 'deposit') return 'Depósito fictício em conta';
     if (type === 'boleto_payment') return 'Pagamento de Boleto';
     if (type === 'card_payment') return 'Cartão Virtual';
     if (type === 'transfer') return 'Transferência entre Contas';
