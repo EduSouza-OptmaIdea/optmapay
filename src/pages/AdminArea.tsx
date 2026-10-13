@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
 import { AdminLogin } from './AdminLogin';
 import { SuperAdminUsersActivity } from './SuperAdminUsersActivity';
+import { PlatformStaffPage } from './PlatformStaffPage';
+import { PlatformCustomersPage } from './PlatformCustomersPage';
 import { superAdminFetchUserMetrics, SuperAdminUserMetrics } from '../lib/supabase/accountService';
 
 const navigation = [
@@ -50,11 +52,13 @@ const AdminOverview = () => {
 };
 
 export const AdminArea: React.FC = () => {
-  const { user, loading, isSuperAdmin, signOut } = useAuth();
+  const { user, loading, isPlatformStaff, platformRole, platformPermissions, signOut } = useAuth();
   const navigate = useNavigate();
   if (loading) return <div className="min-h-screen flex items-center justify-center">Validando autoridade administrativa...</div>;
   if (!user) return <AdminLogin />;
-  if (!isSuperAdmin) return <div className="min-h-screen flex items-center justify-center p-8"><div role="alert" className="space-y-4"><h1 className="font-bold">Acesso administrativo não autorizado</h1><p>Esta sessão não possui permissão para administrar a plataforma.</p><button className="rounded-xl bg-teal-600 text-white px-4 py-2" onClick={async()=>{await signOut();navigate('/admin');}}>Sair e entrar com uma conta administrativa</button><div><Link className="text-teal-600 underline" to="/">Voltar à página inicial</Link></div></div></div>;
+  if (!isPlatformStaff) return <div className="min-h-screen flex items-center justify-center p-8"><div role="alert" className="space-y-4"><h1 className="font-bold">Acesso administrativo não autorizado</h1><p>Esta sessão não possui permissão para administrar a plataforma.</p><button className="rounded-xl bg-teal-600 text-white px-4 py-2" onClick={async()=>{await signOut();navigate('/admin');}}>Sair e entrar com uma conta administrativa</button><div><Link className="text-teal-600 underline" to="/">Voltar à página inicial</Link></div></div></div>;
+  const can = (permission: string) => platformRole === 'owner' || platformPermissions.includes(permission);
+  const denied = <p role="alert">Sem permissão administrativa para este módulo.</p>;
   return <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">
     <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-5 py-4 flex flex-wrap justify-between items-center gap-4">
       <div className="flex items-center gap-4"><Logo heightClass="h-8"/><div className="border-l pl-4 dark:border-slate-700"><h1 className="font-extrabold">Administração OptmaPay</h1><p className="text-xs text-slate-500">Controle da plataforma • Sandbox</p></div></div>
