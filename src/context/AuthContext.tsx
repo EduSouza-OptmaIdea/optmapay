@@ -47,6 +47,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAllAccounts([]);
       setActiveAccount(null);
       setIsSuperAdmin(false);
+      setIsPlatformStaff(false);
+      setPlatformRole(null);
+      setPlatformPermissions([]);
       return;
     }
 
@@ -137,6 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabase.auth.signOut().catch(() => {});
         setUser(null);
         setIsSuperAdmin(false);
+        setIsPlatformStaff(false);
+        setPlatformRole(null);
+        setPlatformPermissions([]);
         setAccounts([]);
         setAllAccounts([]);
         setActiveAccount(null);
@@ -151,12 +157,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = session?.user || null;
       setUser(currentUser);
       if (currentUser) {
-        await loadAccounts(currentUser.id, currentUser);
+        setLoading(true);
+        try { await loadAccounts(currentUser.id, currentUser); }
+        finally { setLoading(false); }
       } else {
         setAccounts([]);
         setAllAccounts([]);
         setActiveAccount(null);
         setIsSuperAdmin(false);
+        setIsPlatformStaff(false);
+        setPlatformRole(null);
+        setPlatformPermissions([]);
+        setLoading(false);
       }
     });
 
@@ -254,6 +266,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setUser(null);
     setIsSuperAdmin(false);
+    setIsPlatformStaff(false);
+    setPlatformRole(null);
+    setPlatformPermissions([]);
     setAccounts([]);
     setAllAccounts([]);
     setActiveAccount(null);
