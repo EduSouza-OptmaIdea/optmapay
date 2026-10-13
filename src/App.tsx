@@ -52,6 +52,8 @@ const ProtectedLayout: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
+  if (isSuperAdmin) return <Navigate to="/admin" replace />;
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">
       <GoldenBanner />
@@ -75,9 +77,9 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/dev" element={<DevPanel />} />
             <Route path="/dev-panel" element={<DevPanel />} />
             <Route path="/meus-dados" element={<MyProfile />} />
-            <Route path="/config-banco" element={isSuperAdmin ? <BankParametersArea /> : <Navigate to="/dashboard" replace />} />
-            <Route path="/master-admin" element={isSuperAdmin ? <SuperAdminConsole /> : <Navigate to="/dashboard" replace />} />
-            <Route path="/master-admin/usuarios" element={isSuperAdmin ? <SuperAdminUsersActivity /> : <Navigate to="/dashboard" replace />} />
+            <Route path="/config-banco" element={<Navigate to="/admin/configuracoes" replace />} />
+            <Route path="/master-admin" element={<Navigate to="/admin" replace />} />
+            <Route path="/master-admin/usuarios" element={<Navigate to="/admin/correntistas" replace />} />
             <Route path="/settings" element={<SettingsReset />} />
             <Route path="*" element={<Navigate to={mode === 'edu' ? '/edu-dashboard' : '/dashboard'} replace />} />
           </Routes>
