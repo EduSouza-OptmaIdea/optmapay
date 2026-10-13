@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
+import { verifySuperAdminAccess } from '../lib/supabase/accountService';
 import {
   Mail,
   Lock,
@@ -19,7 +20,7 @@ import {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isSuperAdmin } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -30,9 +31,9 @@ export const Login: React.FC = () => {
 
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/dashboard');
+      navigate(isSuperAdmin ? '/admin' : '/dashboard', { replace: true });
     }
-  }, [authLoading, user, navigate]);
+  }, [authLoading, user, isSuperAdmin, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +51,7 @@ export const Login: React.FC = () => {
 
         if (error) throw error;
         if (data.user) {
-          navigate('/dashboard');
+          navigate(await verifySuperAdminAccess() ? '/admin' : '/dashboard', { replace: true });
         }
       } else if (mode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
