@@ -61,7 +61,11 @@ describe('OptmaPay authoritative global sandbox settings', () => {
   });
 
   it('ignores customer-supplied initial balance on account creation', async()=>{
-    await loggedIn(customer);
+    // Test the trigger with a simulated authenticated JWT; the CI harness
+    // intentionally does not grant direct account INSERT to the authenticated role.
+    await db.query('BEGIN');
+    await db.query("SELECT set_config('request.jwt.claim.role','authenticated',true)");
+    await db.query("SELECT set_config('request.jwt.claim.sub',$1,true)",[customer]);
     const result = await db.query(
       "insert into public.accounts(user_id,name,type,cpf_cnpj,balance,pix_key,account_number) values($1,'New Customer','customer','12345678901',999999,$2,$3) returning balance",
       [customer,`new-${customer}@example.invalid`,`NEW-${customer.slice(0,8)}`],
