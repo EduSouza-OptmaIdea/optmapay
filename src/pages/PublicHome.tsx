@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 import { verifySuperAdminAccess } from '../lib/supabase/accountService';
 import {
   ShieldCheck,
@@ -30,7 +29,6 @@ import {
 export const PublicHome: React.FC = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin } = useAuth();
 
   const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [formName, setFormName] = useState('');
