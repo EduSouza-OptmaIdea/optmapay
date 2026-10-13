@@ -3,7 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { SandboxTransaction } from '../types/sandbox';
 import { sendWelcomeEmail } from '../lib/email/app-email';
-import { createBankAccount, depositFundsRPC } from '../lib/supabase/accountService';
+import { createBankAccount } from '../lib/supabase/accountService';
+import { SandboxDepositDialog } from '../components/SandboxDepositDialog';
 import {
   Eye,
   EyeOff,
@@ -130,8 +131,6 @@ export const Dashboard: React.FC = () => {
   const [cardReceivables, setCardReceivables] = useState<CardReceivableSummary[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('500');
-  const [depositDesc, setDepositDesc] = useState('Aporte Fictício Sandbox');
 
   // Filtros de Extrato Bancário
   const [periodFilter, setPeriodFilter] = useState<'7d' | '15d' | '30d' | 'custom'>('30d');
@@ -514,21 +513,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeAccount) return;
-
-    try {
-      await depositFundsRPC(activeAccount.id, 500, depositDesc);
-      setDepositAmount('500');
-      setIsDepositOpen(false);
-      await refreshAccounts();
-      await fetchTransactions();
-    } catch (err: any) {
-      alert(err?.message || 'Não foi possível realizar o aporte fictício.');
-    }
-  };
-
   // Abre modal de devolução preenchendo o saldo restante correto
   const handleOpenRefundModal = (tx: TransactionWithRunningBalance) => {
     if (tx.isFullyRefunded) return;
@@ -736,7 +720,7 @@ export const Dashboard: React.FC = () => {
                 onClick={() => setIsDepositOpen(true)}
                 className="text-[10px] bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold px-2 py-0.5 rounded transition"
               >
-                + Aporte
+                + Depósito
               </button>
             </div>
             <div className="text-xl sm:text-2xl font-extrabold font-mono text-teal-200">
@@ -1381,62 +1365,16 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* Modal Simular Depósito */}
-      {isDepositOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-700">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-              Simular Aporte Fictício
-            </h3>
-            <p className="text-xs text-slate-500">
-              Credita saldo diretamente na conta ativa selecionada e salva a transação no Supabase.
-            </p>
-
-            <form onSubmit={handleDeposit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Valor do Aporte (R$)
-                </label>
-                <input
-                  type="text"
-                  value="500,00"
-                  readOnly
-                  aria-readonly="true"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">Cada aporte de teste é fixo em R$ 500,00.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  Descrição do Lançamento
-                </label>
-                <input
-                  type="text"
-                  value={depositDesc}
-                  onChange={(e) => setDepositDesc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-teal-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDepositOpen(false)}
-                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-500 transition shadow-md shadow-teal-900/20"
-                >
-                  Confirmar Aporte
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {isDepositOpen && activeAccount && (
+        <SandboxDepositDialog
+          accountId={activeAccount.id}
+          accountName={activeAccount.name}
+          onClose={() => setIsDepositOpen(false)}
+          onSuccess={async () => {
+            await refreshAccounts();
+            await fetchTransactions();
+          }}
+        />
       )}
 
       {/* Modal de Simulação de Antecipação de Recebíveis no Extrato */}
