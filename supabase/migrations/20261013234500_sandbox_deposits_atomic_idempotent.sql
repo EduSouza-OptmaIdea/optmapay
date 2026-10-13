@@ -154,7 +154,7 @@ BEGIN
     ) VALUES (
       v_owner,p_account_id,'withdraw','out',v_fee,
       'Tarifa de depósito fictício nº '||(v_count+1)::text,
-      'DEP-FEE-'||v_operation_id::text,'completed',false,'sandbox',v_created_at
+      'DEP-FEE-'||v_operation_id::text,'completed',false,'sandbox',v_created_at + interval '1 millisecond'
     ) RETURNING id INTO v_fee_transaction_id;
   END IF;
 
