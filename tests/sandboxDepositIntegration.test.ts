@@ -59,6 +59,44 @@ describe('Sandbox deposit: atomicity, monthly allowance and replay', () => {
     } finally { await db.query('ROLLBACK'); }
   });
 
+  it('rejects out-of-range amounts, other accounts, stale fees and changed idempotency payload', async () => {
+    await db.query('BEGIN');
+    try {
+      await db.query('SET LOCAL ROLE authenticated');
+      await db.query("select set_config('request.jwt.claim.sub',$1,true)",[userId]);
+      await db.query("select set_config('request.jwt.claim.role','authenticated',true)");
+      await db.query('SAVEPOINT small_amount');
+      await expect(db.query('select public.sandbox_deposit_quote($1,0.99)',[accountId]))
+        .rejects.toThrow(/limite permitido/i);
+      await db.query('ROLLBACK TO SAVEPOINT small_amount');
+      await db.query('SAVEPOINT big_amount');
+      await expect(db.query('select public.sandbox_deposit_quote($1,501)',[accountId]))
+        .rejects.toThrow(/limite permitido/i);
+      await db.query('ROLLBACK TO SAVEPOINT big_amount');
+      await db.query('SAVEPOINT wrong_owner');
+      await expect(db.query('select public.sandbox_deposit_quote($1,10)', ['00000000-0000-0000-0000-000000000002']))
+        .rejects.toThrow(/Conta não autorizada/i);
+      await db.query('ROLLBACK TO SAVEPOINT wrong_owner');
+      const key='ci-deposit-different-'+userId.replace(/-/g,'');
+      await db.query('SAVEPOINT wrong_fee');
+      await expect(db.query(
+        'select public.sandbox_deposit_confirm($1,10,$2,$3,5)',
+        [accountId,'Depósito teste',key],
+      )).rejects.toThrow(/tarifa foi atualizada/i);
+      await db.query('ROLLBACK TO SAVEPOINT wrong_fee');
+      await db.query(
+        'select public.sandbox_deposit_confirm($1,10,$2,$3,0)',
+        [accountId,'Depósito teste',key],
+      );
+      await db.query('SAVEPOINT wrong_replay');
+      await expect(db.query(
+        'select public.sandbox_deposit_confirm($1,11,$2,$3,0)',
+        [accountId,'Depósito teste',key],
+      )).rejects.toThrow(/idempotência/i);
+      await db.query('ROLLBACK TO SAVEPOINT wrong_replay');
+    } finally { await db.query('ROLLBACK'); }
+  });
+
   it('denies the non-idempotent deposit function to authenticated users', async () => {
     await db.query('BEGIN');
     try {
