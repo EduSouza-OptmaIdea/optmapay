@@ -46,6 +46,7 @@ describe('OptmaPay authoritative global sandbox settings', () => {
       'select public.platform_system_settings_save(2300,11000,3200,1,450,6,1.5) as cfg'
     );
     expect(Number(changed.rows[0].cfg.opening_balance_pf)).toBe(2300);
+    await db.query("SET LOCAL ROLE postgres");
     const audit = await db.query("select count(*)::int as n from public.platform_admin_audit where action='settings.updated' and actor_user_id=$1",[owner]);
     expect(audit.rows[0].n).toBe(1);
     await db.query('ROLLBACK');
