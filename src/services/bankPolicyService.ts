@@ -11,6 +11,8 @@ export type BankProfile = 'customer'|'merchant';
 export interface BankTypePolicy {
   account_type: BankProfile;
   deposit_min: number; deposit_max: number; pix_daily_limit: number; pix_night_limit: number;
+  deposit_free_monthly: number; deposit_excess_fee: number;
+  card_credit_limit: number; service_monthly_fee: number;
 }
 export interface BankAccountSummary {
   id: string; name: string; type: BankProfile; user_id: string;
@@ -20,6 +22,8 @@ export interface BankAccountOverride {
   account_id?: string;
   deposit_min?: number|null; deposit_max?: number|null;
   pix_daily_limit?: number|null; pix_night_limit?: number|null;
+  deposit_free_monthly?: number|null; deposit_excess_fee?: number|null;
+  card_credit_limit?: number|null; service_monthly_fee?: number|null;
   reason?: string; valid_until?: string|null; updated_at?: string;
 }
 export interface PixLimitSnapshot extends EffectiveBankPolicy {
@@ -40,10 +44,12 @@ export interface BankMessage {
 export const getTypePolicies = (): Promise<BankTypePolicy[]> =>
   call('platform_type_policies_list');
 export const saveTypePolicy = (policy:BankTypePolicy,start:number,end:number):Promise<BankTypePolicy> =>
-  call('platform_type_policy_save',{
+  call('platform_type_policy_save_v2',{
     p_account_type:policy.account_type,p_deposit_min:policy.deposit_min,p_deposit_max:policy.deposit_max,
     p_pix_daily_limit:policy.pix_daily_limit,p_pix_night_limit:policy.pix_night_limit,
     p_pix_night_start_hour:start,p_pix_night_end_hour:end,
+    p_deposit_free_monthly:policy.deposit_free_monthly,p_deposit_excess_fee:policy.deposit_excess_fee,
+    p_card_credit_limit:policy.card_credit_limit,p_service_monthly_fee:policy.service_monthly_fee,
   });
 export const findAccounts = (query:string):Promise<BankAccountSummary[]> =>
   call('platform_accounts_search',{p_query:query,p_limit:100});
@@ -52,10 +58,14 @@ export const getAccountOverride = (id:string):Promise<BankAccountOverride> =>
 export const saveAccountOverride = (
   id:string,override:BankAccountOverride,reason:string,validUntil:string|null,
 ):Promise<EffectiveBankPolicy> =>
-  call('platform_account_override_save',{
+  call('platform_account_override_save_v2',{
     p_account_id:id,p_deposit_min:override.deposit_min??null,p_deposit_max:override.deposit_max??null,
     p_pix_daily_limit:override.pix_daily_limit??null,p_pix_night_limit:override.pix_night_limit??null,
     p_reason:reason,p_valid_until:validUntil,
+    p_deposit_free_monthly:override.deposit_free_monthly??null,
+    p_deposit_excess_fee:override.deposit_excess_fee??null,
+    p_card_credit_limit:override.card_credit_limit??null,
+    p_service_monthly_fee:override.service_monthly_fee??null,
   });
 export const getPixSnapshot = (id:string):Promise<PixLimitSnapshot> =>
   call('platform_pix_limit_snapshot',{p_account_id:id});
