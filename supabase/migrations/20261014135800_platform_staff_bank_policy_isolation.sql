@@ -1,4 +1,4 @@
--- Legacy Super Admin bank accounts are retained but excluded from customer-policy operations.
+-- Exclude legacy staff-owned bank accounts from delegated customer policy operations.
 BEGIN;
 CREATE OR REPLACE FUNCTION public.platform_accounts_search(p_query text DEFAULT '',p_limit integer DEFAULT 75)
 RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -21,7 +21,6 @@ BEGIN
   ) r),'[]'::jsonb);
 END
 $f$;
-
 CREATE OR REPLACE FUNCTION public.platform_account_override_save(
  p_account_id uuid,p_deposit_min numeric,p_deposit_max numeric,
  p_pix_daily_limit numeric,p_pix_night_limit numeric,p_reason text,p_valid_until timestamptz DEFAULT NULL
@@ -53,50 +52,6 @@ BEGIN
  RETURN v_result;
 END
 $f$;
-
-CREATE OR REPLACE FUNCTION public.platform_limit_request_review(
- p_request_id uuid,p_decision text,p_review_note text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=pg_catalog,public,auth,pg_temp AS $f$
-DECLARE v_req public.platform_limit_requests%ROWTYPE; v_message text; v_title text; v_effective jsonb;
-BEGIN
- IF NOT public.platform_staff_has_permission('limits.manage')
- THEN RAISE EXCEPTION 'Permissão limits.manage necessária' USING ERRCODE='42501'; END IF;
- IF p_decision NOT IN ('approved','rejected') THEN RAISE EXCEPTION 'Decisão inválida'; END IF;
- IF p_review_note IS NULL OR length(trim(p_review_note)) NOT BETWEEN 8 AND 600
- THEN RAISE EXCEPTION 'A decisão exige justificativa entre 8 e 600 caracteres'; END IF;
- SELECT * INTO v_req FROM public.platform_limit_requests WHERE id=p_request_id FOR UPDATE;
- IF NOT FOUND OR v_req.status<>'pending' THEN RAISE EXCEPTION 'Pedido inexistente ou já analisado'; END IF;
- IF p_decision='approved' THEN
-  INSERT INTO public.platform_account_overrides(account_id,pix_daily_limit,pix_night_limit,reason,updated_by)
-  VALUES(v_req.account_id,v_req.requested_daily_limit,v_req.requested_night_limit,
-    'Solicitação Pix aprovada: '||left(v_req.reason,460),auth.uid())
-  ON CONFLICT(account_id) DO UPDATE SET
-    pix_daily_limit=excluded.pix_daily_limit,pix_night_limit=excluded.pix_night_limit,
-    reason=excluded.reason,pix_valid_until=NULL,updated_by=excluded.updated_by,updated_at=now();
-  v_effective:=public.platform_effective_policy_internal(v_req.account_id);
- END IF;
- UPDATE public.platform_limit_requests SET status=p_decision,reviewed_by=auth.uid(),
-    reviewed_at=now(),review_note=trim(p_review_note) WHERE id=p_request_id;
- v_title:=CASE WHEN p_decision='approved' THEN 'Aumento do limite Pix aprovado'
-   ELSE 'Solicitação de limite Pix não aprovada' END;
- v_message:=CASE WHEN p_decision='approved'
-   THEN 'Seu limite Pix diário e noturno foi atualizado. Consulte os valores em Pix → Meus limites.'
-   ELSE 'Seu pedido de aumento de limite Pix não foi aprovado neste momento.' END
-   ||' Motivo: '||trim(p_review_note);
- INSERT INTO public.platform_messages(user_id,account_id,request_id,title,body)
- VALUES(v_req.user_id,v_req.account_id,p_request_id,v_title,v_message);
- INSERT INTO public.platform_email_outbox(recipient_user_id,request_id,event_key,subject,body)
- VALUES(v_req.user_id,p_request_id,'pix.request.reviewed:'||p_request_id,v_title,v_message);
- INSERT INTO public.platform_admin_audit(actor_user_id,target_user_id,action,details) VALUES(
-   auth.uid(),v_req.user_id,'pix.limit.'||p_decision,
-   jsonb_build_object('request_id',p_request_id,'account_id',v_req.account_id,
-      'decision',p_decision,'note',p_review_note,'resulting_policy',v_effective));
- RETURN jsonb_build_object('id',p_request_id,'status',p_decision,'account_id',v_req.account_id,'policy',v_effective);
-END
-$f$;
-
-COMMIT
 CREATE OR REPLACE FUNCTION public.platform_limit_request_create(
  p_account_id uuid,p_requested_daily_limit numeric,p_requested_night_limit numeric,p_reason text
 )
@@ -147,5 +102,4 @@ BEGIN
  RETURN jsonb_build_object('id',v_id,'status','pending','account_id',p_account_id);
 END
 $f$;
-
 COMMIT;
