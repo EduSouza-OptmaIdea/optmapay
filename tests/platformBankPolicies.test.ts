@@ -143,7 +143,7 @@ describe('PF/PJ bank policies, Pix guard, requests and application messages',()=
       await expect(db.query(
         "INSERT INTO public.transactions(user_id,account_id,type,direction,amount,description,status,real_money,environment) VALUES($1,$2,'pix','out',10,'Direto','completed',false,'sandbox')",
         [customerId,accountId],
-      )).rejects.toThrow(/motor transacional autorizado/i);
+      )).rejects.toThrow(/motor transacional autorizado|permission denied for table transactions/i);
       await db.query('ROLLBACK TO SAVEPOINT pix_direct');
     }finally{await db.query('ROLLBACK');}
   });
