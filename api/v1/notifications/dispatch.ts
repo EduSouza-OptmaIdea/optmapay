@@ -55,9 +55,16 @@ export default async function handler(req: VercelRequest,res: VercelResponse) {
     if(request.user_id!==userId) {
       const {data:operator}=await admin.from('platform_staff').select('role,enabled,permissions')
         .eq('user_id',userId).maybeSingle();
+      let ownerEnabled=false;
+      if(operator?.enabled && operator.role==='owner') {
+        const {data:owner}=await admin.from('optmapay_super_admins').select('enabled')
+          .eq('user_id',userId).eq('enabled',true).maybeSingle();
+        ownerEnabled=owner?.enabled===true;
+      }
       const permitted=operator?.enabled && (
-        (operator.role==='owner') ||
-        (Array.isArray(operator.permissions) && (operator.permissions.includes('limits.manage') || operator.permissions.includes('messages.send')))
+        ownerEnabled ||
+        (operator.role!=='owner' && Array.isArray(operator.permissions) &&
+          (operator.permissions.includes('limits.manage') || operator.permissions.includes('messages.send')))
       );
       if(!permitted) return res.status(403).json({error:'Não autorizado'});
     }
