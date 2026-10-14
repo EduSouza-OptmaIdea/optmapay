@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { getMyBankMessages } from '../services/bankPolicyService';
 import { Logo } from './Logo';
 import { ActiveAccountSelector } from './ActiveAccountSelector';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
@@ -19,6 +20,7 @@ import {
   GraduationCap,
   Crown,
   ArrowRight,
+  Bell,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -29,6 +31,15 @@ export const Header: React.FC = () => {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  useEffect(() => {
+    if(!user?.id) {setUnreadMessages(0);return;}
+    let alive=true;
+    const check=async()=>{try{const rows=await getMyBankMessages();if(alive)setUnreadMessages(rows.filter(m=>!m.read_at).length);}catch{/* Inbox may be temporarily unavailable. */}};
+    void check();
+    const timer=setInterval(()=>{if(document.visibilityState==='visible')void check();},30000);
+    return ()=>{alive=false;clearInterval(timer);};
+  },[user?.id]);
 
   const handleThemeChange = (mode: ThemeMode) => {
     setTheme(mode);
@@ -113,6 +124,11 @@ export const Header: React.FC = () => {
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Badge da Conta Ativa do Usuário */}
           {user && <ActiveAccountSelector />}
+
+          {user && <Link to="/mensagens" aria-label={`Central de mensagens, ${unreadMessages} não lidas`} title="Central de mensagens" className="relative p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-teal-600">
+            <Bell className="w-4 h-4" />
+            {unreadMessages>0 && <span className="absolute -top-1 -right-1 rounded-full bg-rose-600 text-white px-1.5 text-[10px] font-bold">{unreadMessages>99?'99+':unreadMessages}</span>}
+          </Link>}
 
           {/* Configuração Supabase Anon Key */}
           <button
