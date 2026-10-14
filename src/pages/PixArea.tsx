@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { MobileQrScannerModal } from '../components/MobileQrScannerModal';
@@ -707,6 +708,7 @@ Ambiente: Sandbox — sem dinheiro real`;
           <p className="text-xs text-slate-500">
             Transfira fundos, emita QR Codes com baixa automática em tempo real e validade de 15 minutos
           </p>
+          <Link to="/pix-limites" className="inline-flex mt-3 text-sm text-teal-600 font-bold hover:underline items-center gap-1"><Lock size={16}/> Meus limites Pix (dia/noite) e solicitações de aumento</Link>
         </div>
 
         {/* Action Tabs */}
