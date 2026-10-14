@@ -18,6 +18,10 @@ export const AccountPoliciesPage:React.FC=()=>{
   const [override,setOverride]=useState<BankAccountOverride>({});
   const [min,setMin]=useState(''); const [max,setMax]=useState('');
   const [daily,setDaily]=useState(''); const [night,setNight]=useState('');
+  const [freeDeposits,setFreeDeposits]=useState('');
+  const [depositFee,setDepositFee]=useState('');
+  const [cardLimit,setCardLimit]=useState('');
+  const [monthlyFee,setMonthlyFee]=useState('');
   const [reason,setReason]=useState('');
   const [expiry,setExpiry]=useState('');
   const [requests,setRequests]=useState<PixLimitRequest[]>([]);
@@ -51,6 +55,10 @@ export const AccountPoliciesPage:React.FC=()=>{
       setMax(ov.deposit_max==null?'':String(ov.deposit_max));
       setDaily(ov.pix_daily_limit==null?'':String(ov.pix_daily_limit));
       setNight(ov.pix_night_limit==null?'':String(ov.pix_night_limit));
+      setFreeDeposits(ov.deposit_free_monthly==null?'':String(ov.deposit_free_monthly));
+      setDepositFee(ov.deposit_excess_fee==null?'':String(ov.deposit_excess_fee));
+      setCardLimit(ov.card_credit_limit==null?'':String(ov.card_credit_limit));
+      setMonthlyFee(ov.service_monthly_fee==null?'':String(ov.service_monthly_fee));
       setReason(ov.reason||'');
       setExpiry(ov.valid_until?new Date(ov.valid_until).toISOString().slice(0,10):'');
     }catch(e:unknown){setError(e instanceof Error?e.message:'Não foi possível carregar condições.');}
@@ -63,9 +71,11 @@ export const AccountPoliciesPage:React.FC=()=>{
       const obj={
         deposit_min:toOptional(min),deposit_max:toOptional(max),
         pix_daily_limit:toOptional(daily),pix_night_limit:toOptional(night),
+        deposit_free_monthly:toOptional(freeDeposits),deposit_excess_fee:toOptional(depositFee),
+        card_credit_limit:toOptional(cardLimit),service_monthly_fee:toOptional(monthlyFee),
       };
       if(Object.entries(obj).some(([k,v])=>v!==null&&(!Number.isFinite(v)||
-        (k.startsWith('deposit')&&Math.round(v*100)%5!==0))))throw new Error('Valores inválidos. Depósitos exigem múltiplos de R$ 0,05.');
+        ((k==='deposit_min'||k==='deposit_max')&&Math.round(v*100)%5!==0))))throw new Error('Valores inválidos. Depósitos exigem múltiplos de R$ 0,05.');
       await saveAccountOverride(selected.id,obj,reason,expiry?new Date(expiry+'T23:59:59-03:00').toISOString():null);
       await selectAccount(selected);
       setSuccess('Exceção individual salva, registrada em auditoria e aplicada pelo motor bancário.');
@@ -155,13 +165,18 @@ export const AccountPoliciesPage:React.FC=()=>{
         {!selected?<p className="text-sm text-slate-500">Selecione uma conta para visualizar e ajustar as exceções.</p>:<form onSubmit={save} className="space-y-4">
           <h3 className="font-bold">Condições de {selected.name}</h3>
           {effective&&<p className="text-xs text-slate-500">Efetivas: depósito {money(effective.deposit_min)}–{money(effective.deposit_max)}; Pix diário {money(effective.pix_daily_limit)}, noturno {money(effective.pix_night_limit)}</p>}
-          <p className="text-xs text-slate-500">Deixe um campo vazio para usar o padrão PF/PJ. Nenhuma exceção é aplicada sem salvamento e justificativa.</p>
+          <p className="text-xs text-slate-500">Deixe um campo vazio para usar o padrão PF/PJ. Nenhuma exceção é aplicada sem salvamento e justificativa. Alterações no limite inicial de cartão valem para cartões emitidos depois; não modificam cartões existentes.</p>
+          {effective && <p className="text-xs text-slate-500">Política atual: {effective.deposit_free_monthly} depósitos grátis/mês, tarifa {money(effective.deposit_excess_fee)}, cartão {money(effective.card_credit_limit)}, serviços {money(effective.service_monthly_fee)}/mês.</p>}
           <div className="grid sm:grid-cols-2 gap-3">
             {([
               ['deposit_min','Depósito mínimo','0.05',min,setMin],
               ['deposit_max','Depósito máximo','0.05',max,setMax],
               ['pix_daily_limit','Pix diário','0.01',daily,setDaily],
               ['pix_night_limit','Pix noturno','0.01',night,setNight],
+              ['deposit_free_monthly','Depósitos gratuitos por mês','1',freeDeposits,setFreeDeposits],
+              ['deposit_excess_fee','Tarifa de depósito excedente','0.01',depositFee,setDepositFee],
+              ['card_credit_limit','Limite inicial de cartão crédito','0.01',cardLimit,setCardLimit],
+              ['service_monthly_fee','Mensalidade fictícia de serviços','0.01',monthlyFee,setMonthlyFee],
             ] as const).map(([key,label,step,value,setValue])=><label key={key} className="text-xs font-semibold">{label} (R$)
               <input type="number" step={step} min="0" value={value} onChange={e=>setValue(e.target.value)}
                 className="block w-full mt-1 p-3 border dark:bg-slate-900 dark:border-slate-700 rounded-lg" placeholder="Padrão PF/PJ"/>
