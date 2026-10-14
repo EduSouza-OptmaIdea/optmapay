@@ -13,30 +13,38 @@ type Config = {
   deposit_free_monthly: number;
   deposit_excess_fee: number;
   business_timezone: string;
+  pix_night_start_hour: number;
+  pix_night_end_hour: number;
   updated_at: string;
 };
 const fields: {key: keyof Config; label: string; step: string; helper: string}[] = [
   {key:'opening_balance_pf',label:'Saldo de abertura PF (fictício)',step:'0.01',helper:'Padrão: R$ 2.000,00'},
   {key:'opening_balance_pj',label:'Saldo de abertura PJ (fictício)',step:'0.01',helper:'Padrão preservado: R$ 10.000,00'},
   {key:'default_credit_limit',label:'Limite inicial do cartão de crédito',step:'0.01',helper:'Padrão: R$ 3.000,00'},
-  {key:'deposit_min',label:'Depósito mínimo',step:'0.01',helper:'Nunca inferior a R$ 1,00'},
-  {key:'deposit_max',label:'Depósito máximo',step:'0.01',helper:'Nunca superior a R$ 500,00'},
   {key:'deposit_free_monthly',label:'Depósitos mensais gratuitos',step:'1',helper:'Padrão: cinco por mês'},
   {key:'deposit_excess_fee',label:'Tarifa do depósito excedente',step:'0.01',helper:'R$ 0,00 até configurar uma tarifa fictícia'},
 ];
+type TypePolicy = {
+  account_type: 'customer' | 'merchant';
+  deposit_min: number; deposit_max: number;
+  pix_daily_limit: number; pix_night_limit: number;
+};
+const bankMoney = (v: number) => Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 export const SystemConfigPage: React.FC = () => {
   const { platformRole, platformPermissions } = useAuth();
   const canEdit = platformRole === 'owner' || platformPermissions.includes('system.configure');
   const [config,setConfig] = useState<Config|null>(null);
+  const [typePolicies,setTypePolicies] = useState<TypePolicy[]>([]);
+  const [savingType,setSavingType] = useState<string | null>(null);
   const [loading,setLoading] = useState(true);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const load = async () => {
     setLoading(true); setError('');
-    const {data,error:e} = await supabase.rpc('platform_system_settings_get');
-    if(e) setError(e.message);
-    else setConfig(data as Config);
+    const [settings, types] = await Promise.all([supabase.rpc('platform_system_settings_get'),supabase.rpc('platform_type_policies_list')]);
+    if(settings.error || types.error) setError(settings.error?.message || types.error?.message || 'Erro ao consultar políticas.');
+    else {setConfig(settings.data as Config);setTypePolicies((types.data || []) as TypePolicy[]);}
     setLoading(false);
   };
   useEffect(()=>{void load();},[]);
@@ -57,6 +65,25 @@ export const SystemConfigPage: React.FC = () => {
     else {setConfig(data as Config);setNotice('Parâmetros registrados no Supabase e auditados.');}
     setBusy(false);
   };
+  const patchType = (kind: TypePolicy['account_type'], key: keyof TypePolicy, value: number) => {
+    setTypePolicies(rows=>rows.map(p=>p.account_type===kind ? {...p,[key]:value} : p));
+  };
+  const saveType = async (kind: TypePolicy['account_type']) => {
+    const policy=typePolicies.find(row=>row.account_type===kind);
+    if(!policy || !canEdit || !config) return;
+    setSavingType(kind);setError('');setNotice('');
+    try {
+      const {error:e}=await supabase.rpc('platform_type_policy_save',{
+        p_account_type:kind,p_deposit_min:policy.deposit_min,p_deposit_max:policy.deposit_max,
+        p_pix_daily_limit:policy.pix_daily_limit,p_pix_night_limit:policy.pix_night_limit,
+        p_pix_night_start_hour:config.pix_night_start_hour,p_pix_night_end_hour:config.pix_night_end_hour,
+      });
+      if(e) throw e;
+      setNotice('Política '+(kind==='customer'?'PF':'PJ')+' salva e auditada no PostgreSQL.');
+      await load();
+    } catch(e:unknown){setError(e instanceof Error?e.message:String(e));}
+    finally{setSavingType(null);}
+  };
   return <div className="space-y-6 max-w-4xl">
     <header>
       <h2 className="font-extrabold text-2xl flex gap-2 items-center"><Settings2 className="text-teal-500"/> Regras e configurações</h2>
@@ -65,6 +92,38 @@ export const SystemConfigPage: React.FC = () => {
     {loading && <p className="inline-flex items-center gap-2 text-sm"><RefreshCw className="animate-spin" size={17}/>Carregando parâmetros do banco...</p>}
     {error && <p role="alert" className="bg-rose-100 text-rose-800 rounded-xl p-3 flex gap-2 text-sm"><AlertCircle size={18}/>{error}</p>}
     {notice && <p role="status" className="bg-emerald-100 text-emerald-800 rounded-xl p-3 flex gap-2 text-sm"><CheckCircle2 size={18}/>{notice}</p>}
+    {config && <section className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-5 space-y-5">
+      <h3 className="text-lg font-extrabold">Limites gerais por perfil — Pessoa Física e Pessoa Jurídica</h3>
+      <p className="text-xs text-slate-500 dark:text-slate-300">As exceções para clientes específicos são cadastradas em Condições individuais. Depósitos exigem múltiplos de R$ 0,05. Todos os valores são fictícios.</p>
+      <div className="grid sm:grid-cols-2 gap-4">
+        {typePolicies.map(policy=><div key={policy.account_type} className="border dark:border-slate-600 rounded-xl p-4 space-y-3">
+          <h4 className="font-bold">{policy.account_type==='customer'?'Pessoa Física (PF)':'Pessoa Jurídica (PJ)'}</h4>
+          {([
+            ['deposit_min','Depósito mínimo (R$)','0.05'],
+            ['deposit_max','Depósito máximo (R$)','0.05'],
+            ['pix_daily_limit','Pix diário (R$)','0.01'],
+            ['pix_night_limit','Pix noturno (R$)','0.01'],
+          ] as const).map(([key,label,step])=><label key={key} className="text-xs font-semibold block">{label}
+            <input type="number" required min={key==='pix_night_limit'?0:0.05} max={key==='deposit_max'?1000000:key.startsWith('pix')?10000000:undefined}
+              step={step} disabled={!canEdit||savingType!==null} value={policy[key]}
+              onChange={e=>patchType(policy.account_type,key,Number(e.target.value))}
+              className="block w-full p-2 mt-1 rounded-lg border dark:border-slate-600 dark:bg-slate-900"/>
+          </label>)}
+          <p className="text-xs text-slate-500">Máximo de depósito: {bankMoney(policy.deposit_max)}</p>
+          {canEdit && <button type="button" disabled={savingType!==null} onClick={()=>void saveType(policy.account_type)} className="rounded-lg bg-teal-600 text-white font-bold text-xs px-4 py-2 disabled:opacity-50">{savingType===policy.account_type?'Salvando...':'Salvar política '+(policy.account_type==='customer'?'PF':'PJ')}</button>}
+        </div>)}
+      </div>
+      <div className="grid grid-cols-2 gap-3 max-w-sm">
+        {([['pix_night_start_hour','Início da noite'],['pix_night_end_hour','Fim da noite']] as const).map(([key,label])=>
+          <label key={key} className="text-xs font-bold">{label}
+            <select disabled={!canEdit} value={config[key]} onChange={e=>setConfig({...config,[key]:Number(e.target.value)})}
+              className="block w-full p-2 border rounded-lg dark:bg-slate-900 dark:border-slate-600 mt-1">
+              {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}:00</option>)}
+            </select>
+          </label>)}
+      </div>
+      <p className="text-xs text-slate-500">Horário de Brasília. A janela noturna é gravada ao salvar uma política PF ou PJ e vale para ambas.</p>
+    </section>}
     {config && <form onSubmit={save} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-5 space-y-6">
       <div className="grid sm:grid-cols-2 gap-5">
         {fields.map(field=><label key={field.key} className="text-sm font-semibold">
@@ -75,7 +134,7 @@ export const SystemConfigPage: React.FC = () => {
           <span className="block text-xs font-normal text-slate-500 mt-1">{field.helper}</span>
         </label>)}
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-300">Fuso operacional: {config.business_timezone}. Novas contas usam o saldo de abertura autorizado pelo banco. Os parâmetros de depósitos e cartões serão consumidos pelos respectivos motores quando suas próximas migrações forem homologadas.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-300">Fuso operacional: {config.business_timezone}. Novas contas usam o saldo de abertura autorizado pelo banco. Os limites de depósito e Pix são configurados separadamente para PF/PJ. O limite de cartão continua pendente de integração ao motor.</p>
       <div className="flex flex-wrap justify-between items-center gap-3">
         <span className="text-xs text-slate-500">{config.updated_at ? 'Atualizado em '+new Date(config.updated_at).toLocaleString('pt-BR') : ''}</span>
         {canEdit && <button type="submit" disabled={busy} className="bg-teal-600 text-white rounded-xl px-5 py-3 font-semibold disabled:opacity-50 flex items-center gap-2"><Save size={16}/>{busy?'Salvando...':'Salvar regras'}</button>}
