@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, RefreshCw, Save, Settings2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -96,6 +97,7 @@ export const SystemConfigPage: React.FC = () => {
     {config && <section className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-5 space-y-5">
       <h3 className="text-lg font-extrabold">Limites gerais por perfil — Pessoa Física e Pessoa Jurídica</h3>
       <p className="text-xs text-slate-500 dark:text-slate-300">As exceções para clientes específicos são cadastradas em Condições individuais. Depósitos exigem múltiplos de R$ 0,05. Todos os valores são fictícios.</p>
+      <p className="text-xs text-teal-600 font-semibold">Franquias de depósito, tarifas e limites de cartão são configurados na <Link to="/admin/tarifas" className="underline">área de Taxas de serviços e cartões</Link>.</p>
       <div className="grid sm:grid-cols-2 gap-4">
         {typePolicies.map(policy=><div key={policy.account_type} className="border dark:border-slate-600 rounded-xl p-4 space-y-3">
           <h4 className="font-bold">{policy.account_type==='customer'?'Pessoa Física (PF)':'Pessoa Jurídica (PJ)'}</h4>
@@ -104,10 +106,6 @@ export const SystemConfigPage: React.FC = () => {
             ['deposit_max','Depósito máximo (R$)','0.05'],
             ['pix_daily_limit','Pix diário (R$)','0.01'],
             ['pix_night_limit','Pix noturno (R$)','0.01'],
-            ['deposit_free_monthly','Depósitos gratuitos/mês','1'],
-            ['deposit_excess_fee','Tarifa de depósito excedente (R$)','0.01'],
-            ['card_credit_limit','Limite inicial de cartão crédito (R$)','0.01'],
-            ['service_monthly_fee','Mensalidade fictícia de serviços (R$)','0.01'],
           ] as const).map(([key,label,step])=><label key={key} className="text-xs font-semibold block">{label}
             <input type="number" required min={key==='deposit_min'||key==='deposit_max'?0.05:0} max={key==='deposit_max'||key==='card_credit_limit'?1000000:key.startsWith('pix')?10000000:key==='deposit_free_monthly'?100:key==='service_monthly_fee'?10000:undefined}
               step={step} disabled={!canEdit||savingType!==null} value={policy[key]}
