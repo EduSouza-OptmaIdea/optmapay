@@ -27,7 +27,7 @@ describe('Sandbox deposit: atomicity, monthly allowance and replay', () => {
   it('charges after five deposits, supports replay without duplicate balance, and writes a fee', async () => {
     await db.query('BEGIN');
     try {
-      await db.query('update public.platform_system_settings set deposit_free_monthly=5, deposit_excess_fee=1 where id=1');
+      await db.query("update public.platform_type_policies set deposit_free_monthly=5, deposit_excess_fee=1 where account_type='customer'");
       const opening=(await db.query('select balance from public.accounts where id=$1',[accountId])).rows[0].balance;
       await db.query('SET LOCAL ROLE authenticated');
       await db.query("select set_config('request.jwt.claim.sub',$1,true)",[userId]);
