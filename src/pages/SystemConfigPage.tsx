@@ -20,14 +20,13 @@ type Config = {
 const fields: {key: keyof Config; label: string; step: string; helper: string}[] = [
   {key:'opening_balance_pf',label:'Saldo de abertura PF (fictício)',step:'0.01',helper:'Padrão: R$ 2.000,00'},
   {key:'opening_balance_pj',label:'Saldo de abertura PJ (fictício)',step:'0.01',helper:'Padrão preservado: R$ 10.000,00'},
-  {key:'default_credit_limit',label:'Limite inicial do cartão de crédito',step:'0.01',helper:'Padrão: R$ 3.000,00'},
-  {key:'deposit_free_monthly',label:'Depósitos mensais gratuitos',step:'1',helper:'Padrão: cinco por mês'},
-  {key:'deposit_excess_fee',label:'Tarifa do depósito excedente',step:'0.01',helper:'R$ 0,00 até configurar uma tarifa fictícia'},
 ];
 type TypePolicy = {
   account_type: 'customer' | 'merchant';
   deposit_min: number; deposit_max: number;
   pix_daily_limit: number; pix_night_limit: number;
+  deposit_free_monthly: number; deposit_excess_fee: number;
+  card_credit_limit: number; service_monthly_fee: number;
 };
 const bankMoney = (v: number) => Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 export const SystemConfigPage: React.FC = () => {
@@ -73,10 +72,12 @@ export const SystemConfigPage: React.FC = () => {
     if(!policy || !canEdit || !config) return;
     setSavingType(kind);setError('');setNotice('');
     try {
-      const {error:e}=await supabase.rpc('platform_type_policy_save',{
+      const {error:e}=await supabase.rpc('platform_type_policy_save_v2',{
         p_account_type:kind,p_deposit_min:policy.deposit_min,p_deposit_max:policy.deposit_max,
         p_pix_daily_limit:policy.pix_daily_limit,p_pix_night_limit:policy.pix_night_limit,
         p_pix_night_start_hour:config.pix_night_start_hour,p_pix_night_end_hour:config.pix_night_end_hour,
+        p_deposit_free_monthly:policy.deposit_free_monthly,p_deposit_excess_fee:policy.deposit_excess_fee,
+        p_card_credit_limit:policy.card_credit_limit,p_service_monthly_fee:policy.service_monthly_fee,
       });
       if(e) throw e;
       setNotice('Política '+(kind==='customer'?'PF':'PJ')+' salva e auditada no PostgreSQL.');
@@ -103,13 +104,17 @@ export const SystemConfigPage: React.FC = () => {
             ['deposit_max','Depósito máximo (R$)','0.05'],
             ['pix_daily_limit','Pix diário (R$)','0.01'],
             ['pix_night_limit','Pix noturno (R$)','0.01'],
+            ['deposit_free_monthly','Depósitos gratuitos/mês','1'],
+            ['deposit_excess_fee','Tarifa de depósito excedente (R$)','0.01'],
+            ['card_credit_limit','Limite inicial de cartão crédito (R$)','0.01'],
+            ['service_monthly_fee','Mensalidade fictícia de serviços (R$)','0.01'],
           ] as const).map(([key,label,step])=><label key={key} className="text-xs font-semibold block">{label}
-            <input type="number" required min={key==='pix_night_limit'?0:0.05} max={key==='deposit_max'?1000000:key.startsWith('pix')?10000000:undefined}
+            <input type="number" required min={key==='deposit_min'||key==='deposit_max'?0.05:0} max={key==='deposit_max'||key==='card_credit_limit'?1000000:key.startsWith('pix')?10000000:key==='deposit_free_monthly'?100:key==='service_monthly_fee'?10000:undefined}
               step={step} disabled={!canEdit||savingType!==null} value={policy[key]}
               onChange={e=>patchType(policy.account_type,key,Number(e.target.value))}
               className="block w-full p-2 mt-1 rounded-lg border dark:border-slate-600 dark:bg-slate-900"/>
           </label>)}
-          <p className="text-xs text-slate-500">Máximo de depósito: {bankMoney(policy.deposit_max)}</p>
+          <p className="text-xs text-slate-500">Máximo de depósito: {bankMoney(policy.deposit_max)} • Mensalidade: {bankMoney(policy.service_monthly_fee)}. Cartões existentes não têm o limite alterado automaticamente.</p>
           {canEdit && <button type="button" disabled={savingType!==null} onClick={()=>void saveType(policy.account_type)} className="rounded-lg bg-teal-600 text-white font-bold text-xs px-4 py-2 disabled:opacity-50">{savingType===policy.account_type?'Salvando...':'Salvar política '+(policy.account_type==='customer'?'PF':'PJ')}</button>}
         </div>)}
       </div>
@@ -134,7 +139,7 @@ export const SystemConfigPage: React.FC = () => {
           <span className="block text-xs font-normal text-slate-500 mt-1">{field.helper}</span>
         </label>)}
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-300">Fuso operacional: {config.business_timezone}. Novas contas usam o saldo de abertura autorizado pelo banco. Os limites de depósito e Pix são configurados separadamente para PF/PJ. O limite de cartão continua pendente de integração ao motor.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-300">Fuso operacional: {config.business_timezone}. Novas contas usam o saldo de abertura autorizado pelo banco. Limites, franquias e tarifas de depósito, Pix, emissão de cartão de crédito e mensalidade fictícia são definidos por perfil PF/PJ. O motor de mensalidades PJ usa a nova política a partir de novembro de 2026; não altera cobranças passadas.</p>
       <div className="flex flex-wrap justify-between items-center gap-3">
         <span className="text-xs text-slate-500">{config.updated_at ? 'Atualizado em '+new Date(config.updated_at).toLocaleString('pt-BR') : ''}</span>
         {canEdit && <button type="submit" disabled={busy} className="bg-teal-600 text-white rounded-xl px-5 py-3 font-semibold disabled:opacity-50 flex items-center gap-2"><Save size={16}/>{busy?'Salvando...':'Salvar regras'}</button>}
