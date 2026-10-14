@@ -43,6 +43,6 @@ O superadministrador pediu, adicionalmente à separação de depósitos e Pix po
 
 ## Pendências fora desta entrega
 - Interface para **aplicar alteração de limite também a cartões já emitidos**, mediante ação administrativa expressa e verificação do saldo utilizado.
-- Rotina operacional agendada e supervisão da execução da cobrança mensal do dia 1; a função backend está pronta para quando o agendador chamar, mas o disparo periódico deve ser validado.
+- **Agendador existente confirmado:** job `optmapay-daily-account-charges`, ativo, expressão cron `10 3 * * *` (03h10 UTC, equivalente a 00h10 em Brasília). Executa diariamente `run_optmapay_daily_account_charges` com data de São Paulo. O processamento PJ da nova mensalidade R$ 29,90 acontecerá a partir de 01/11/2026, caso a conta seja elegível e haja saldo/limite suficiente; verificar o resultado real do primeiro ciclo.
 - E-mails de homologação entregues em caixa de entrada/Spam e política de retentativas agendadas.
 - Condições diferenciadas de juros, bloqueio/suspensão de correntistas e regras pedagógicas correspondentes, em pacotes futuros.
