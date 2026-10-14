@@ -107,7 +107,7 @@ export const SystemConfigPage: React.FC = () => {
             ['pix_daily_limit','Pix diário (R$)','0.01'],
             ['pix_night_limit','Pix noturno (R$)','0.01'],
           ] as const).map(([key,label,step])=><label key={key} className="text-xs font-semibold block">{label}
-            <input type="number" required min={key==='deposit_min'||key==='deposit_max'?0.05:0} max={key==='deposit_max'||key==='card_credit_limit'?1000000:key.startsWith('pix')?10000000:key==='deposit_free_monthly'?100:key==='service_monthly_fee'?10000:undefined}
+            <input type="number" required min={key==='deposit_min'||key==='deposit_max'?0.05:0} max={key==='deposit_max'?1000000:key.startsWith('pix')?10000000:undefined}
               step={step} disabled={!canEdit||savingType!==null} value={policy[key]}
               onChange={e=>patchType(policy.account_type,key,Number(e.target.value))}
               className="block w-full p-2 mt-1 rounded-lg border dark:border-slate-600 dark:bg-slate-900"/>
