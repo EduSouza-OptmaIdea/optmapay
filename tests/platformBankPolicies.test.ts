@@ -116,6 +116,39 @@ describe('PF/PJ bank policies, Pix guard, requests and application messages',()=
     }finally{await db.query('ROLLBACK');}
   });
 
+  it('approved Pix increase does not extend a separate expiring deposit exception',async()=>{
+    await db.query('BEGIN');
+    try{
+      const expiry=new Date(Date.now()+5*86400000).toISOString();
+      await authenticate(ownerId);
+      await db.query(
+        'SELECT public.platform_account_override_save($1,NULL,1000,NULL,NULL,$2,$3)',
+        [accountId,'Depósito extraordinário temporário para curso educacional',expiry],
+      );
+      await db.query('SET LOCAL ROLE postgres');
+      await authenticate(customerId);
+      const request=(await db.query(
+        'SELECT public.platform_limit_request_create($1,4000,1500,$2) AS r',
+        [accountId,'Quero elevar limites Pix mantendo a promoção temporária de depósitos'],
+      )).rows[0].r;
+      await db.query('SET LOCAL ROLE postgres');
+      await authenticate(ownerId);
+      await db.query(
+        "SELECT public.platform_limit_request_review($1,'approved',$2)",
+        [request.id,'Aumento validado após verificação manual dos motivos'],
+      );
+      await db.query('SET LOCAL ROLE postgres');
+      const record=(await db.query(
+        'SELECT valid_until,pix_valid_until,deposit_max,pix_daily_limit FROM public.platform_account_overrides WHERE account_id=$1',
+        [accountId],
+      )).rows[0];
+      expect(record.valid_until).not.toBeNull();
+      expect(record.pix_valid_until).toBeNull();
+      expect(Number(record.deposit_max)).toBe(1000);
+      expect(Number(record.pix_daily_limit)).toBe(4000);
+    }finally{await db.query('ROLLBACK');}
+  });
+
   it('server guard rejects Pix above total cap and an after-hours transfer above night cap',async()=>{
     await db.query('BEGIN');
     try{
