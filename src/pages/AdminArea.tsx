@@ -7,6 +7,7 @@ import { AdminLogin } from './AdminLogin';
 import { SuperAdminUsersActivity } from './SuperAdminUsersActivity';
 import { PlatformStaffPage } from './PlatformStaffPage';
 import { SystemConfigPage } from './SystemConfigPage';
+import { FeesAndServicesPage } from './FeesAndServicesPage';
 import { AccountPoliciesPage } from './AccountPoliciesPage';
 import { BankMessagesPage } from './BankMessagesPage';
 import { PlatformCustomersPage } from './PlatformCustomersPage';
@@ -16,6 +17,7 @@ const navigation = [
   { to: '/admin', label: 'Visão geral', icon: LayoutDashboard },
   { to: '/admin/correntistas', label: 'Correntistas e atividades', icon: Users, permission: 'customers.read' },
   { to: '/admin/configuracoes', label: 'Regras e configurações', icon: Settings, permission: 'system.configure' },
+  { to: '/admin/tarifas', label: 'Taxas de serviços e cartões', icon: CreditCard, permission: 'system.configure' },
   { to: '/admin/condicoes', label: 'Condições individuais e Pix', icon: ShieldCheck, permission: 'limits.manage' },
   { to: '/admin/operadores', label: 'Equipe e permissões', icon: ShieldCheck, permission: 'owner' },
   { to: '/admin/mensagens', label: 'Central de mensagens', icon: MessageSquare, permission: 'messages.send' },
@@ -76,6 +78,7 @@ export const AdminArea: React.FC = () => {
         <Route index element={<AdminOverview isOwner={platformRole === 'owner'}/>}/>
         <Route path="correntistas" element={can('customers.read') ? (platformRole === 'owner' ? <SuperAdminUsersActivity/> : <PlatformCustomersPage/>) : denied}/>
         <Route path="configuracoes" element={can("system.configure") ? <SystemConfigPage/> : denied}/>
+        <Route path="tarifas" element={can("system.configure") ? <FeesAndServicesPage/> : denied}/>
         <Route path="operadores" element={platformRole === 'owner' ? <PlatformStaffPage/> : denied}/>
         <Route path="condicoes" element={can("limits.manage") ? <AccountPoliciesPage/> : denied}/>
         <Route path="mensagens" element={can("messages.send") ? <BankMessagesPage/> : denied}/>
