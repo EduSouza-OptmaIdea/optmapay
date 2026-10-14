@@ -14,7 +14,8 @@ async function sendTransactionalEmail(to: string, subject: string, body: string)
     <p style="white-space:pre-wrap">${escapeHtml(body)}</p>
     <p style="background:#ecfdf5;padding:12px">Ambiente educacional. Nenhum dinheiro real é movimentado.</p>
     <p>Consulte também a Central de Mensagens da aplicação.</p></div>`;
-  const brevo = process.env.BREVO_API_KEY || (process.env.SMTP_PASS?.startsWith('xkeysib-') ? process.env.SMTP_PASS : '');
+  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+  const brevo = process.env.BREVO_API_KEY || (smtpPassword.startsWith('xkeysib-') ? smtpPassword : '');
   if (brevo) {
     const response = await fetch('https://api.brevo.com/v3/smtp/email',{
       method:'POST',headers:{'Content-Type':'application/json','api-key':brevo},
@@ -25,12 +26,12 @@ async function sendTransactionalEmail(to: string, subject: string, body: string)
     if(!response.ok) throw new Error('Falha no provedor de e-mail ('+response.status+').');
     return;
   }
-  if(!process.env.SMTP_PASS) throw new Error('SMTP/Brevo ainda não configurado neste deployment.');
+  if(!smtpPassword) throw new Error('SMTP/Brevo ainda não configurado neste deployment.');
   const transporter=nodemailer.createTransport({
     host:process.env.SMTP_HOST || 'smtp-relay.brevo.com',
     port:Number(process.env.SMTP_PORT || '587'),
     secure:process.env.SMTP_PORT==='465',
-    auth:{user:process.env.SMTP_USER || sender,pass:process.env.SMTP_PASS},
+    auth:{user:process.env.SMTP_USER || sender,pass:smtpPassword},
     connectionTimeout:12000,
   });
   await transporter.sendMail({from:`"${label}" <${sender}>`,to,subject,html});
