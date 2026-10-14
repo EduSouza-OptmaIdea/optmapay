@@ -6,8 +6,11 @@ import {
   previewSandboxDeposit,
   confirmSandboxDeposit,
   newDepositIdempotencyKey,
+  fetchEffectiveBankPolicy,
+  EffectiveBankPolicy,
 } from '../services/sandboxDepositService';
 
+const makeReceiptLabel = (receipt: SandboxDepositReceipt): string => receipt.receipt_label || 'Comprovante fictício OptmaPay '+receipt.operation_id.slice(0,13);
 const money = (amount: number) => Number(amount).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
 const escapeHtml = (text: unknown): string => String(text ?? '').replace(/[&<>"']/g, c => ({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',
@@ -26,7 +29,7 @@ function receiptHtml(receipt: SandboxDepositReceipt, accountName: string): strin
     ['Lançamento',receipt.transaction_id],
     ...(receipt.fee_transaction_id ? [['Lançamento da tarifa',receipt.fee_transaction_id]] : []),
   ];
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante fictício OptmaPay</title>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(makeReceiptLabel(receipt))}</title>
     <style>body{font-family:Arial,sans-serif;color:#182d34;background:#f7f9fa;margin:0;padding:36px}
     main{background:white;max-width:550px;margin:0 auto;padding:36px;border:1px solid #ddd;border-radius:16px}
     h1{font-size:25px}h2{font-size:16px;color:#047857}.flag{padding:12px;background:#effcf6;color:#065f46;font-weight:bold;border-radius:8px}
@@ -35,7 +38,7 @@ function receiptHtml(receipt: SandboxDepositReceipt, accountName: string): strin
     small{display:block;color:#64748b;line-height:1.6;margin-top:20px}
     .print{display:block;margin:18px auto;background:#0f766e;color:white;padding:12px;border:0;border-radius:8px;cursor:pointer}
     @media print{body{padding:0;background:white}.print{display:none}main{border:0;max-width:100%}}</style></head>
-    <body><main><h1>OptmaPay Sandbox</h1><h2>Comprovante de depósito simulado</h2>
+    <body><main><h1>${escapeHtml(makeReceiptLabel(receipt))}</h1><h2>Comprovante de depósito simulado</h2>
     <p class="flag">SIMULAÇÃO EDUCACIONAL — NENHUM DINHEIRO REAL</p>
     <dl>${rows.map(([key,val])=>`<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(val)}</dd></div>`).join('')}</dl>
     <small>Ambiente Sandbox • Operação fictícia sem valor de pagamento ou transferência real.
@@ -73,6 +76,7 @@ interface Props {
 
 export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onClose,onSuccess}) => {
   const [amount,setAmount] = useState('500');
+  const [policy,setPolicy] = useState<EffectiveBankPolicy | null>(null);
   const [description,setDescription] = useState('Depósito fictício OptmaPay');
   const [quote,setQuote] = useState<SandboxDepositQuote|null>(null);
   const [quoteLoading,setQuoteLoading] = useState(false);
@@ -82,13 +86,19 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
   const idempotency = useRef<{key:string;signature:string;fee:number}|null>(null);
 
   const numericAmount = Number(amount);
-  const validAmount = amount.trim()!=='' && Number.isFinite(numericAmount) && numericAmount>0 && numericAmount===Number(numericAmount.toFixed(2));
+  const validAmount = amount.trim()!=='' && Number.isFinite(numericAmount) && numericAmount>0 && numericAmount===Number(numericAmount.toFixed(2)) && Math.round(numericAmount*100)%5===0;
+
+  useEffect(()=>{
+    let active=true;
+    fetchEffectiveBankPolicy(accountId).then(p=>{if(active)setPolicy(p);}).catch(e=>{if(active)setError(e instanceof Error?e.message:'Erro ao consultar política de depósitos.');});
+    return ()=>{active=false;};
+  },[accountId]);
 
   useEffect(()=>{
     if(receipt) return;
     setQuote(null);
     setError('');
-    if(!validAmount) return;
+    if(!validAmount || !policy || numericAmount < Number(policy.deposit_min) || numericAmount > Number(policy.deposit_max)) return;
     let cancelled=false;
     const handle = setTimeout(async()=>{
       setQuoteLoading(true);
@@ -100,7 +110,7 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
       }finally{if(!cancelled)setQuoteLoading(false);}
     },240);
     return ()=>{cancelled=true;clearTimeout(handle);};
-  },[accountId,amount,receipt]);
+  },[accountId,amount,receipt,policy]);
 
   const confirm = async (event:React.FormEvent) => {
     event.preventDefault();
@@ -131,6 +141,7 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
       {error && <p role="alert" className="rounded-xl p-3 bg-rose-100 text-rose-800 text-sm flex items-start gap-2"><AlertCircle size={18} className="shrink-0"/>{error}</p>}
       {receipt ? <div className="space-y-4">
         <p role="status" className="rounded-xl bg-emerald-100 text-emerald-800 p-3 font-bold flex items-center gap-2"><CheckCircle2 size={21}/>Depósito registrado com sucesso!</p>
+        <p className="font-semibold text-sm break-all">{makeReceiptLabel(receipt)}</p>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between"><dt>Depósito</dt><dd className="font-bold">{money(receipt.amount)}</dd></div>
           <div className="flex justify-between"><dt>Tarifa</dt><dd className="font-bold">{money(receipt.fee_amount)}</dd></div>
@@ -145,10 +156,12 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
         <button type="button" onClick={onClose} className="w-full p-3 text-sm font-bold">Concluir</button>
       </div> : <form onSubmit={confirm} className="space-y-4">
         <label className="block text-xs font-bold">Valor do depósito (R$)
-          <input required type="number" step="0.01" min="1" max="500" value={amount}
+          <input required type="number" step="0.05" min={policy?.deposit_min ?? 1} max={policy?.deposit_max ?? 500} value={amount}
             onChange={e=>{setAmount(e.target.value);idempotency.current=null;}}
             className="block mt-1 w-full p-3 rounded-xl border dark:border-slate-600 dark:bg-slate-900 font-mono text-base"/>
         </label>
+        <p className="text-xs text-slate-500">Valores em múltiplos de R$ 0,05. Limites desta conta: {policy ? `${money(policy.deposit_min)} a ${money(policy.deposit_max)}` : "Consultando limites PF/PJ..."}</p>
+        {!validAmount && <p role="alert" className="text-xs text-rose-600">Informe valor positivo, com centavos em múltiplos de R$ 0,05.</p>}
         <label className="block text-xs font-bold">Descrição
           <input type="text" maxLength={160} value={description}
             onChange={e=>{setDescription(e.target.value);idempotency.current=null;}}
@@ -166,7 +179,7 @@ export const SandboxDepositDialog: React.FC<Props> = ({accountId,accountName,onC
         <p className="text-xs text-slate-500 dark:text-slate-300">A confirmação salva o depósito, eventual tarifa e o novo saldo em uma única operação. Repetir a mesma solicitação não duplica o crédito.</p>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="flex-1 rounded-xl p-3 text-sm font-bold bg-slate-100 dark:bg-slate-700">Cancelar</button>
-          <button type="submit" disabled={submitting || quoteLoading || !quote || quote.amount!==numericAmount || !validAmount} className="flex-1 rounded-xl p-3 text-sm font-bold bg-teal-600 text-white disabled:opacity-40">{submitting?'Confirmando...':'Confirmar depósito'}</button>
+          <button type="submit" disabled={submitting || quoteLoading || !quote || !policy || quote.amount!==numericAmount || !validAmount} className="flex-1 rounded-xl p-3 text-sm font-bold bg-teal-600 text-white disabled:opacity-40">{submitting?'Confirmando...':'Confirmar depósito'}</button>
         </div>
       </form>}
     </section>
