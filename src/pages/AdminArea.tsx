@@ -7,6 +7,8 @@ import { AdminLogin } from './AdminLogin';
 import { SuperAdminUsersActivity } from './SuperAdminUsersActivity';
 import { PlatformStaffPage } from './PlatformStaffPage';
 import { SystemConfigPage } from './SystemConfigPage';
+import { AccountPoliciesPage } from './AccountPoliciesPage';
+import { BankMessagesPage } from './BankMessagesPage';
 import { PlatformCustomersPage } from './PlatformCustomersPage';
 import { superAdminFetchUserMetrics, SuperAdminUserMetrics } from '../lib/supabase/accountService';
 
@@ -14,6 +16,7 @@ const navigation = [
   { to: '/admin', label: 'Visão geral', icon: LayoutDashboard },
   { to: '/admin/correntistas', label: 'Correntistas e atividades', icon: Users, permission: 'customers.read' },
   { to: '/admin/configuracoes', label: 'Regras e configurações', icon: Settings, permission: 'system.configure' },
+  { to: '/admin/condicoes', label: 'Condições individuais e Pix', icon: ShieldCheck, permission: 'limits.manage' },
   { to: '/admin/operadores', label: 'Equipe e permissões', icon: ShieldCheck, permission: 'owner' },
   { to: '/admin/mensagens', label: 'Central de mensagens', icon: MessageSquare, permission: 'messages.send' },
   { to: '/admin/educacao', label: 'Educação e módulos futuros', icon: BookOpen, permission: 'education.manage' },
@@ -74,7 +77,8 @@ export const AdminArea: React.FC = () => {
         <Route path="correntistas" element={can('customers.read') ? (platformRole === 'owner' ? <SuperAdminUsersActivity/> : <PlatformCustomersPage/>) : denied}/>
         <Route path="configuracoes" element={can("system.configure") ? <SystemConfigPage/> : denied}/>
         <Route path="operadores" element={platformRole === 'owner' ? <PlatformStaffPage/> : denied}/>
-        <Route path="mensagens" element={can("messages.send") ? <PendingModule title="Central de mensagens" description="Comunicações segmentadas e auditadas serão disponibilizadas após implantação do backend."/> : denied}/>
+        <Route path="condicoes" element={can("limits.manage") ? <AccountPoliciesPage/> : denied}/>
+        <Route path="mensagens" element={can("messages.send") ? <BankMessagesPage/> : denied}/>
         <Route path="educacao" element={can("education.manage") ? <PendingModule title="Educação, investimentos e OptmaShop" description="Módulos educacionais e simulados separados dos controles administrativos."/> : denied}/>
         <Route path="*" element={<Navigate to="/admin" replace/>}/>
       </Routes></main>
