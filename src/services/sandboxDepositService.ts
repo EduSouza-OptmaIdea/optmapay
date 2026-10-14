@@ -82,6 +82,10 @@ export interface EffectiveBankPolicy {
   account_type: 'customer' | 'merchant';
   deposit_min: number;
   deposit_max: number;
+  deposit_free_monthly: number;
+  deposit_excess_fee: number;
+  card_credit_limit: number;
+  service_monthly_fee: number;
   pix_daily_limit: number;
   pix_night_limit: number;
   pix_night_start_hour: number;
