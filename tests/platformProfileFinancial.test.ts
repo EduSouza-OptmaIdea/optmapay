@@ -61,6 +61,8 @@ describe('Separated PF/PJ financial policies and simulation charges',()=>{
    )).rows[0].p;
    expect(Number(changed.card_credit_limit)).toBe(6000);
    await db.query('SET LOCAL ROLE postgres');
+   await db.query("SELECT set_config('request.jwt.claim.role','postgres',true)");
+   await db.query("SELECT set_config('request.jwt.claim.sub','',true)");
    const pfCard=(await db.query(
     "INSERT INTO public.cartoes(user_id,account_id,tipo,cardholder_name,masked_number,validade,cvv,credit_limit) VALUES($1,$2,'credito','Cliente PF','5899 **** 0001','11/30','123',999999) RETURNING credit_limit",
     [pfUser,pfAccount],
@@ -111,6 +113,9 @@ describe('Separated PF/PJ financial policies and simulation charges',()=>{
  it('charges PJ R$29.90 once in November and keeps the default PF fee free',async()=>{
   await db.query('BEGIN');
   try{
+   await db.query('SET LOCAL ROLE postgres');
+   await db.query("SELECT set_config('request.jwt.claim.role','postgres',true)");
+   await db.query("SELECT set_config('request.jwt.claim.sub','',true)");
    const startPF=Number((await db.query('SELECT balance FROM public.accounts WHERE id=$1',[pfAccount])).rows[0].balance);
    const startPJ=Number((await db.query('SELECT balance FROM public.accounts WHERE id=$1',[pjAccount])).rows[0].balance);
    await db.query("SELECT public.run_optmapay_daily_account_charges('2026-11-01'::date)");
