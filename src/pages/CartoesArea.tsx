@@ -1028,7 +1028,7 @@ export const CartoesArea: React.FC = () => {
                       aria-readonly="true"
                       className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
                     />
-                    <p className="mt-1 text-[10px] text-slate-400">Limite inicial autorizado para {activeAccount?.type==='merchant'?'PJ':'PF'}: R$ {Number(newCardLimit).toLocaleString('pt-BR',{minimumFractionDigits:2})}. Definido pelo banco ao emitir o cartão.</p>
+                    <p className="mt-1 text-[10px] text-slate-400">{creditLimitLoading ? 'Consultando limites oficiais...' : <>Limite inicial autorizado para {activeAccount?.type==='merchant'?'PJ':'PF'}:</>} R$ {Number(newCardLimit).toLocaleString('pt-BR',{minimumFractionDigits:2})}. Definido pelo banco ao emitir o cartão.</p>
                   </div>
                 ) : (
                   <div>
