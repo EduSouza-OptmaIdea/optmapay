@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getMyBankMessages } from '../services/bankPolicyService';
+import { supabase } from '../lib/supabase';
 import { Logo } from './Logo';
 import { ActiveAccountSelector } from './ActiveAccountSelector';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
@@ -38,7 +39,9 @@ export const Header: React.FC = () => {
     const check=async()=>{try{const rows=await getMyBankMessages();if(alive)setUnreadMessages(rows.filter(m=>!m.read_at).length);}catch{/* Inbox may be temporarily unavailable. */}};
     void check();
     const timer=setInterval(()=>{if(document.visibilityState==='visible')void check();},30000);
-    return ()=>{alive=false;clearInterval(timer);};
+    const channel=supabase.channel('bank-bell-'+user.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'platform_messages',filter:'user_id=eq.'+user.id},()=>{void check();}).subscribe();
+    return ()=>{alive=false;clearInterval(timer);void supabase.removeChannel(channel);};
   },[user?.id]);
 
   const handleThemeChange = (mode: ThemeMode) => {
