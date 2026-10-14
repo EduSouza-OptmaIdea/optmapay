@@ -109,6 +109,6 @@ begin
 
   return jsonb_build_object('success',true,'run_date',p_run_date,'results',v_results);
 end;
-$function$
+$function$;
 
 COMMIT;
