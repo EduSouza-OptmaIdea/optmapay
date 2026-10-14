@@ -43,7 +43,7 @@ export interface BankMessage {
 }
 export const getTypePolicies = (): Promise<BankTypePolicy[]> =>
   call('platform_type_policies_list');
-export const saveTypePolicy = (policy:BankTypePolicy,start:number,end:number):Promise<BankTypePolicy> =>
+export const saveTypePolicy = (policy:BankTypePolicy,start:number|null,end:number|null):Promise<BankTypePolicy> =>
   call('platform_type_policy_save_v2',{
     p_account_type:policy.account_type,p_deposit_min:policy.deposit_min,p_deposit_max:policy.deposit_max,
     p_pix_daily_limit:policy.pix_daily_limit,p_pix_night_limit:policy.pix_night_limit,
