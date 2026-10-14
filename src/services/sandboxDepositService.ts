@@ -19,6 +19,7 @@ export interface SandboxDepositQuote {
 
 export interface SandboxDepositReceipt {
   success: true;
+  receipt_label: string;
   operation_id: string;
   account_id: string;
   transaction_id: string;
@@ -74,4 +75,24 @@ export async function confirmSandboxDeposit(
   if(error) throw new Error(error.message || 'Depósito não concluído.');
   if(!data || data.success !== true || data.real_money !== false) throw new Error('Comprovante de depósito inválido.');
   return data as SandboxDepositReceipt;
+}
+
+export interface EffectiveBankPolicy {
+  account_id: string;
+  account_type: 'customer' | 'merchant';
+  deposit_min: number;
+  deposit_max: number;
+  pix_daily_limit: number;
+  pix_night_limit: number;
+  pix_night_start_hour: number;
+  pix_night_end_hour: number;
+  timezone: string;
+  has_override: boolean;
+  valid_until: string | null;
+}
+
+export async function fetchEffectiveBankPolicy(accountId: string): Promise<EffectiveBankPolicy> {
+  const {data,error} = await getSupabaseClient().rpc('platform_effective_policy',{p_account_id:accountId});
+  if(error || !data) throw new Error(error?.message || 'Não foi possível consultar limites de sua conta.');
+  return data as EffectiveBankPolicy;
 }
