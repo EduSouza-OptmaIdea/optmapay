@@ -31,6 +31,7 @@ import {
 import { CardRatesModal } from '../components/CardRatesModal';
 import { CardEcommerceSimulator } from '../components/CardEcommerceSimulator';
 import { CardInvoiceManager } from '../components/CardInvoiceManager';
+import { fetchEffectiveBankPolicy } from '../services/sandboxDepositService';
 import { AnticipationSimulationModal } from '../components/AnticipationSimulationModal';
 import { getSettlementCountdown, SettlementPlan } from '../lib/businessDays';
 import { executeAnticipationSettlement } from '../lib/anticipationService';
@@ -70,6 +71,7 @@ export const CartoesArea: React.FC = () => {
   const [newCardTipo, setNewCardTipo] = useState<'debito' | 'credito'>('credito');
   const [newCardHolder, setNewCardHolder] = useState('');
   const [newCardLimit, setNewCardLimit] = useState('3000.00');
+  const [creditLimitLoading, setCreditLimitLoading] = useState(false);
   const [newCardPin, setNewCardPin] = useState('1234');
   const [newCardDueDay, setNewCardDueDay] = useState(10);
   const [creatingCard, setCreatingCard] = useState(false);
@@ -86,6 +88,20 @@ export const CartoesArea: React.FC = () => {
 
   // Transaction filter
   const [statementFilter, setStatementFilter] = useState<'all' | 'in' | 'out'>('all');
+
+  // Limite do novo cartão sempre vem da política autorizada PF/PJ ou exceção por conta.
+  useEffect(()=>{
+    const id=activeAccount?.id;
+    if(!id) return;
+    let alive=true;
+    setCreditLimitLoading(true);
+    fetchEffectiveBankPolicy(id).then(policy=>{
+      if(alive) setNewCardLimit(Number(policy.card_credit_limit).toFixed(2));
+    }).catch(e=>{
+      if(alive) setCopyToast('Não foi possível consultar o limite de crédito: '+(e instanceof Error?e.message:'erro de conexão'));
+    }).finally(()=>{if(alive)setCreditLimitLoading(false);});
+    return ()=>{alive=false;};
+  },[activeAccount?.id]);
 
   // Sync plan from activeAccount config
   useEffect(() => {
@@ -215,7 +231,7 @@ export const CartoesArea: React.FC = () => {
     try {
       const generated = generateOptmaCardNumber(newCardTipo);
       const holder = newCardHolder.trim().toUpperCase() || activeAccount.name.toUpperCase();
-      const limit = newCardTipo === 'credito' ? 3000.0 : 0.0;
+      const limit = newCardTipo === 'credito' ? Number(newCardLimit) : 0.0;
       const cleanPin = newCardPin.replace(/\D/g, '').slice(0, 4) || generated.pin;
 
       const { error } = await supabase.from('cartoes').insert({
@@ -242,7 +258,7 @@ export const CartoesArea: React.FC = () => {
       await fetchCards();
       setShowCreateModal(false);
       setNewCardHolder('');
-      setNewCardLimit('3000.00');
+
       setNewCardPin('1234');
     } catch (err: any) {
       alert(`Erro ao criar cartão: ${err.message}`);
@@ -1007,12 +1023,12 @@ export const CartoesArea: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value="3000,00"
+                      value={Number(newCardLimit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
                       readOnly
                       aria-readonly="true"
                       className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
                     />
-                    <p className="mt-1 text-[10px] text-slate-400">Limite fixo do cartão de crédito nesta rodada: R$ 3.000,00.</p>
+                    <p className="mt-1 text-[10px] text-slate-400">Limite inicial autorizado para {activeAccount?.type==='merchant'?'PJ':'PF'}: R$ {Number(newCardLimit).toLocaleString('pt-BR',{minimumFractionDigits:2})}. Definido pelo banco ao emitir o cartão.</p>
                   </div>
                 ) : (
                   <div>
