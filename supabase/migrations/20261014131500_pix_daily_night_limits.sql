@@ -46,13 +46,13 @@ END;
 $f$;
 
 CREATE OR REPLACE FUNCTION public.platform_enforce_pix_outbound_limit()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
 SET search_path=pg_catalog,public,auth,pg_temp AS $f$
 DECLARE v_policy jsonb; v_zone text; v_start int; v_end int; v_today date; v_total numeric; v_night_total numeric; v_at_night boolean;
 BEGIN
  IF NEW.type<>'pix' OR NEW.direction<>'out' OR NEW.status<>'completed'
     OR NEW.related_transaction_id IS NOT NULL THEN RETURN NEW; END IF;
- IF current_setting('role',true) IN ('authenticated','anon') OR current_user IN ('authenticated','anon') THEN
+ IF current_user IN ('authenticated','anon') THEN
    RAISE EXCEPTION 'Transferências Pix exigem motor transacional autorizado' USING ERRCODE='42501';
  END IF;
  IF NEW.amount IS NULL OR NEW.amount<=0 OR NEW.amount<>round(NEW.amount,2)
