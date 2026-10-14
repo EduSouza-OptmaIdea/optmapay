@@ -31,13 +31,15 @@ begin
   for v_acc in
     select *
     from public.accounts
-    where (type='merchant' OR coalesce((config->>'banking_fees_enabled')::boolean,false)=true)
+    where (type='merchant' OR coalesce((config->>'banking_fees_enabled')::boolean,false)=true
+        OR EXISTS(SELECT 1 FROM public.platform_account_overrides o WHERE o.account_id=public.accounts.id
+          AND o.service_monthly_fee>0 AND (o.valid_until IS NULL OR o.valid_until>now())))
       AND NOT EXISTS(SELECT 1 FROM public.platform_staff staff WHERE staff.user_id=public.accounts.user_id AND staff.enabled)
     order by id
     for update
   loop
     v_effective_policy:=public.platform_effective_financial_policy_internal(v_acc.id);
-    v_maintenance:=CASE WHEN v_acc.type='merchant' THEN (v_effective_policy->>'service_monthly_fee')::numeric ELSE 0 END;
+    v_maintenance:=(v_effective_policy->>'service_monthly_fee')::numeric;
     v_monthly_rate:=coalesce((v_acc.config->>'overdraft_interest_monthly_pct')::numeric,13.45);
     v_daily_iof:=coalesce((v_acc.config->>'overdraft_iof_daily_pct')::numeric,0.0082);
     v_additional_iof:=coalesce((v_acc.config->>'overdraft_iof_additional_pct')::numeric,0.95);
@@ -46,8 +48,8 @@ begin
        AND p_run_date>=DATE '2026-11-01'
        AND p_run_date>=date_trunc('month',v_acc.created_at at time zone 'America/Sao_Paulo')::date then
       v_item:=public.apply_optmapay_account_charge(
-        v_acc.id,'pj_monthly_maintenance',p_run_date,v_maintenance,
-        'Mensalidade fictícia de serviços da conta PJ',v_maintenance,null,
+        v_acc.id,CASE WHEN v_acc.type='merchant' THEN 'pj_monthly_maintenance' ELSE 'pf_monthly_service' END,p_run_date,v_maintenance,
+        'Mensalidade fictícia de serviços da conta '||CASE WHEN v_acc.type='merchant' THEN 'PJ' ELSE 'PF' END,v_maintenance,null,
         jsonb_build_object('sandbox_simulation',true,'category','account_maintenance','profile',v_acc.type,'policy_effective',true)
       );
       v_results:=v_results||jsonb_build_array(v_item);
