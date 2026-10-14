@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Bell, CheckCircle2, RefreshCw } from 'lucide-react';
 import { getMyBankMessages, markBankMessageRead, BankMessage } from '../services/bankPolicyService';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export const BankMessagesPage: React.FC = () => {
+  const {user}=useAuth();
   const [items,setItems]=useState<BankMessage[]>([]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
@@ -15,8 +18,10 @@ export const BankMessagesPage: React.FC = () => {
   useEffect(()=>{
     void load();
     const timer=setInterval(()=>{if(document.visibilityState==='visible')void load();},25000);
-    return ()=>clearInterval(timer);
-  },[load]);
+    const channel=user?.id ? supabase.channel('bank-inbox-'+user.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'platform_messages',filter:'user_id=eq.'+user.id},()=>{void load();}).subscribe():null;
+    return ()=>{clearInterval(timer);if(channel)void supabase.removeChannel(channel);};
+  },[load,user?.id]);
   const open=async(item:BankMessage)=>{
     if(item.read_at)return;
     try{
