@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
-import { getSupabaseAdmin } from '../../../_lib/supabaseAdmin';
+import { getSupabaseAdmin } from '../../_lib/supabaseAdmin';
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c] || c));
