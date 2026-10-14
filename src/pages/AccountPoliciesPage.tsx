@@ -67,8 +67,8 @@ export const AccountPoliciesPage:React.FC=()=>{
       if(Object.entries(obj).some(([k,v])=>v!==null&&(!Number.isFinite(v)||
         (k.startsWith('deposit')&&Math.round(v*100)%5!==0))))throw new Error('Valores inválidos. Depósitos exigem múltiplos de R$ 0,05.');
       await saveAccountOverride(selected.id,obj,reason,expiry?new Date(expiry+'T23:59:59-03:00').toISOString():null);
-      setSuccess('Exceção individual salva, registrada em auditoria e aplicada pelo motor bancário.');
       await selectAccount(selected);
+      setSuccess('Exceção individual salva, registrada em auditoria e aplicada pelo motor bancário.');
     }catch(e:unknown){setError(e instanceof Error?e.message:'Não foi possível salvar condições.');}
     finally{setBusy(false);}
   };
@@ -113,6 +113,10 @@ export const AccountPoliciesPage:React.FC=()=>{
         <div className="flex gap-4 flex-wrap text-sm"><span>Pix diário: <strong>{money(req.requested_daily_limit)}</strong></span><span>Noturno: <strong>{money(req.requested_night_limit)}</strong></span></div>
         <p className="text-sm whitespace-pre-line">Motivo do cliente: {req.reason}</p>
         <p className="text-xs text-slate-500">{new Date(req.created_at).toLocaleString('pt-BR')}</p>
+        <button type="button" className="text-xs text-teal-600 underline"
+          onClick={async()=>{await dispatchQueuedBankEmails(req.id);setSuccess('Reprocessamento da fila de e-mails solicitado. As mensagens da aplicação permanecem disponíveis.');}}>
+          Reprocessar e-mails pendentes deste pedido
+        </button>
         {req.review_note&&<p className="text-sm">Justificativa da decisão: {req.review_note}</p>}
         {req.status==='pending'&&<div className="space-y-2">
           {reviewId===req.id?<div className="space-y-2">
