@@ -19,12 +19,31 @@ description: Regras obrigatórias de idioma, nomenclatura, UX acessível, ambien
 - Comentários explicativos, ADRs, guias de negócio e anotações sobre funções: **português brasileiro**. Identificadores técnicos, contratos de API e nomes de módulos em inglês, quando apropriado.
 - Sem traduções literais frágeis no componente: novas telas devem resolver `translationKey` em dicionário versionado. Revisão por pessoa antes de publicar novo idioma.
 
-## 3. Padrão camelCase e contratos legados
-- Variáveis, funções, métodos, estados, propriedades JSON, campos DTO, modelos TypeScript e nomes de componentes *lógicos*: **camelCase**; React Components: **PascalCase**; constantes fixas: **UPPER_SNAKE_CASE**; arquivos de componentes: PascalCase; demais arquivos: camelCase ou kebab-case de acordo com tooling.
-- Novas tabelas e colunas de domínio financeiro/educacional devem ter nomes funcionais em inglês e `camelCase`, quando aprovadas na ADR de banco. Em PostgreSQL, `"camelCase"` exige aspas em SQL e também nos nomes de relacionamentos e RLS.
-- **Não renomear diretamente o schema legado** de `public` (ex.: `accounts`, `transactions`, `platform_limit_requests`, `credit_card_invoice_items`) sem inventário, adapters, novas RPCs, views de compatibilidade, cobertura de RLS e testes de contrato com OptmaMenu.
-- Em fronteiras com legados usar transformadores explícitos de `snake_case` para `camelCase`, por exemplo `created_at` → `createdAt`, `account_id` → `accountId`. Nunca renomear chaves obrigatórias das APIs existentes sem versionamento. Nomes de tabelas legadas permanecem até migração aprovada.
-- Migração estruturada: inventário de dependências → compatibilidade expand → migração de consumidores → CI contract tests → depreciação controlada (não imediata).
+## 3. Padrão de nomenclatura: snake_case no Supabase/PostgreSQL
+
+**Decisão do proprietário em 15/10/2026:** o padrão principal de banco de dados é **snake_case**, não camelCase. A arquitetura do OptmaPay já adota amplamente esta convenção. Padronizar as partes novas **sem migrar nem renomear desnecessariamente o schema atual**.
+
+### Banco de dados, RPCs e contratos de persistência
+- Novas **tabelas**, **colunas**, **views**, **índices**, **constraints**, **policies**, **triggers**, **funções e procedimentos SQL**, **parâmetros de RPC**, nomes de eventos internos e campos persistidos: usar **inglês técnico em `snake_case`**. Exemplos: `family_accounts`, `guardian_user_id`, `created_at`, `monthly_spending_limit`, `create_learning_account(p_guardian_id uuid)`.
+- Respeitar os nomes de produtos e estruturas existentes, inclusive exceções históricas em português, sem mudanças cosméticas perigosas. `accounts`, `transactions`, `cartoes`, `platform_limit_requests` e `credit_card_invoice_items` continuam com seus contratos atuais.
+- PostgreSQL não exige aspas para identificadores `snake_case` minúsculos; evitar a necessidade de citar `"camelCase"` em SQL.
+- API pública e webhooks: **preservar exatamente a versão e formato já contratados**. Para novas rotas de serviços, preferir JSON com propriedades `snake_case` **quando o contrato for de dados bancários, SDK ou interoperabilidade**, e documentar explicitamente qualquer contrato existente em outro padrão. Não quebrar integrações OptmaMenu.
+- Supabase/RLS: toda mudança nova deve ter revisão de migrations, policies, grants e chamadas `supabase.rpc()` de todos os consumidores.
+
+### Código React, TypeScript e componentes
+- **Variáveis, funções, hooks, estados e propriedades locais de código JS/TS:** `camelCase` conforme convenções do ecossistema, por exemplo `activeAccount`, `loadAccounts()`, `useAuth()`.
+- **Componentes React, tipos e interfaces TypeScript:** `PascalCase`, por exemplo `BankingExperiencePreview` e `AccountPolicy`. **Constantes globais imutáveis:** `UPPER_SNAKE_CASE` quando apropriado.
+- Os campos que espelham respostas do Supabase, RPCs e contratos externos **mantêm `snake_case`** na camada de transporte; um adapter tipado pode converter para modelo de UI `camelCase` se isso melhorar legibilidade, **sem alterar os nomes do banco**.
+- Comentários e explicações de funções **em pt-BR**, textos apresentados ao usuário **em pt-BR**; identificadores internos preferencialmente inglês.
+- Não usar renomeação automática de tabelas/colunas como “refatoração de estilo”. Para substituir um contrato realmente necessário, abrir RFC específica com inventário de dependências, camada de compatibilidade, versionamento e regressão completa.
+
+### Checklist de revisão
+- [ ] Novo identificador SQL está em `snake_case` e em inglês técnico?
+- [ ] Nomes de colunas e parâmetros das RPCs são preservados nas chamadas existentes?
+- [ ] Qualquer objeto JS/TS proveniente do Supabase mantém chaves contratadas ou usa adapter explícito?
+- [ ] Componentes React seguem `PascalCase` e variáveis/hooks locais seguem `camelCase`?
+- [ ] Texto visível e comentários explicativos estão em português brasileiro?
+- [ ] Nenhuma migração destrutiva ou alteração desnecessária do contrato OptmaMenu foi proposta?
 
 ## 4. UX de internet banking e mobile
 - **Mobile-first** (360–430 px) com variações para tablets 768 px e desktop 1280 px; testes em 320, 375, 390, 768 e 1440 px.
