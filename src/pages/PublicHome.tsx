@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { verifySuperAdminAccess } from '../lib/supabase/accountService';
@@ -186,6 +187,7 @@ export const PublicHome: React.FC = () => {
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageSwitcher compact />
             {/* Theme Toggle */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark')}
