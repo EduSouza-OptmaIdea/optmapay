@@ -631,6 +631,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <Link to="/nova-experiencia" className="flex items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-900 transition hover:border-teal-500 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100"><span>✨ Conhecer a nova experiência de homebanking (prévia)</span><ArrowUpRight size={18} className="shrink-0"/></Link>
       {/* Account Overview Header: 3 Caixas de Saldos (Disponível vs Futuro vs Projetado) */}
       <div className="bg-gradient-to-br from-teal-800 via-teal-900 to-slate-950 text-white p-6 rounded-3xl shadow-xl shadow-teal-950/20 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
