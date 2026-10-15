@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Activity, ArrowRight, BookOpen, CreditCard, LayoutDashboard, LogOut, MessageSquare, Settings, ShieldCheck, Users, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Logo } from '../components/Logo';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { AdminLogin } from './AdminLogin';
 import { SuperAdminUsersActivity } from './SuperAdminUsersActivity';
 import { PlatformStaffPage } from './PlatformStaffPage';
@@ -68,7 +69,7 @@ export const AdminArea: React.FC = () => {
   return <div className="min-h-screen bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">
     <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-5 py-4 flex flex-wrap justify-between items-center gap-4">
       <div className="flex items-center gap-4"><Logo heightClass="h-8"/><div className="border-l pl-4 dark:border-slate-700"><h1 className="font-extrabold">Administração OptmaPay</h1><p className="text-xs text-slate-500">Controle da plataforma • Sandbox • {platformRole === 'owner' ? 'Owner' : platformRole === 'admin' ? 'Admin' : 'User interno'}</p></div></div>
-      <button onClick={async()=>{await signOut();navigate('/');}} className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl border dark:border-slate-700 px-4 py-2"><LogOut size={16}/> Sair</button>
+      <div className="flex items-center gap-2"><LanguageSwitcher compact /><button onClick={async()=>{await signOut();navigate('/');}} className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl border dark:border-slate-700 px-4 py-2"><LogOut size={16}/> Sair</button></div>
     </header>
     <div className="max-w-7xl mx-auto md:flex">
       <nav aria-label="Administração" className="md:w-64 shrink-0 p-4 flex md:flex-col gap-2 overflow-x-auto border-b md:border-b-0 md:border-r dark:border-slate-700">
