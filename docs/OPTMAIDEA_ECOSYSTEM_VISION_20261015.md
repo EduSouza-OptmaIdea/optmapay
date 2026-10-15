@@ -2,6 +2,8 @@
 
 **Data-base:** 15/10/2026 · **Status:** proposta estratégica para discussão, não autorização para executar todos os módulos · **Repositório anfitrião da documentação:** `EduSouza-OptmaIdea/optmapay`, branch `agent/optmapay-ux-i18n-learning-20261015`.
 
+> **Padronização técnica corrigida — 15/10/2026:** `snake_case` é o padrão para novos objetos do Supabase/PostgreSQL (tabelas, colunas, funções SQL, RPCs). O código React/TypeScript preserva `camelCase` para variáveis e `PascalCase` para componentes. Não haverá renomeação em massa nem quebra de compatibilidade com o OptmaMenu.
+
 ## 1. Identidade e razão de existir
 
 A OptmaIdea nasceu da expressão **ideia ótima** e do símbolo da **lâmpada**: descobrir uma necessidade, traduzi-la em solução, criar algo reconhecível e útil. A marca é um guarda-chuva de soluções independentes, não necessariamente um único aplicativo. O OptmaMenu começou como oportunidade prática para a Gelinhares e se tornou o produto principal. O OptmaPay surgiu para testar pagamentos e aplicativos, e pode evoluir como produto próprio; Trilh.IA e LogMyTravel mantêm identidades distintas.
