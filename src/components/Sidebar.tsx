@@ -27,7 +27,8 @@ export const Sidebar: React.FC = () => {
   const { isSuperAdmin } = useAuth();
 
   const devNavItems = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/dashboard', label: 'Visão da conta', icon: LayoutDashboard },
+    { to: '/nova-experiencia', label: 'Nova experiência (prévia)', icon: Smartphone },
     { to: '/pix', label: 'Área Pix', icon: QrCode },
     { to: '/boletos', label: 'Boletos', icon: FileText },
     { to: '/cartoes', label: 'Cartões Virtuais', icon: CreditCard },
@@ -47,6 +48,7 @@ export const Sidebar: React.FC = () => {
 
   const eduNavItems = [
     { to: '/edu-dashboard', label: 'Início Educacional', icon: GraduationCap },
+    { to: '/nova-experiencia', label: 'Nova experiência (prévia)', icon: Smartphone },
     { to: '/contas-a-pagar', label: 'Contas a Pagar', icon: FileText },
     { to: '/investimentos', label: 'Poupança & Cofrinhos', icon: PiggyBank },
     { to: '/emprestimos', label: 'Empréstimos Conscientes', icon: Banknote },
