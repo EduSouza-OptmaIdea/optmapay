@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getMyBankMessages } from '../services/bankPolicyService';
 import { supabase } from '../lib/supabase';
 import { Logo } from './Logo';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { ActiveAccountSelector } from './ActiveAccountSelector';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
 import { useAuth } from '../context/AuthContext';
@@ -125,6 +126,8 @@ export const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <LanguageSwitcher compact />
+
           {/* Badge da Conta Ativa do Usuário */}
           {user && <ActiveAccountSelector />}
 
