@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, Banknote,
+  ArrowDownLeft, ArrowRight, Banknote,
   BookOpenCheck, CreditCard, Eye, EyeOff, FileText, GraduationCap,
   Lightbulb, PiggyBank, QrCode, ShieldCheck, Smartphone, Sparkles,
   TrendingUp, Wallet,
