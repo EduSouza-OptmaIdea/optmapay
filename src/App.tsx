@@ -12,6 +12,7 @@ import { TermsOfUse } from './pages/TermsOfUse';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Dashboard } from './pages/Dashboard';
 import { PixArea } from './pages/PixArea';
+import { ReceiptsPage } from './pages/ReceiptsPage';
 import { PixLimitsPage } from './pages/PixLimitsPage';
 import { BankMessagesPage } from './pages/BankMessagesPage';
 import { BoletosArea } from './pages/BoletosArea';
@@ -69,6 +70,7 @@ const ProtectedLayout: React.FC = () => {
             <Route path="/emprestimos" element={<EmprestimosEduArea />} />
             <Route path="/cenarios" element={<CenariosEduArea />} />
             <Route path="/pix" element={<PixArea />} />
+            <Route path="/comprovantes" element={<ReceiptsPage />} />
             <Route path="/pix-limites" element={<PixLimitsPage />} />
             <Route path="/mensagens" element={<BankMessagesPage />} />
             <Route path="/boletos" element={<BoletosArea />} />
