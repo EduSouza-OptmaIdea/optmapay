@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { MobileQrScannerModal } from '../components/MobileQrScannerModal';
+import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 import { SandboxTransaction } from '../types/sandbox';
 import {
@@ -801,9 +802,32 @@ Ambiente: Sandbox — sem dinheiro real`;
       {/* COMPROVANTE PIX — propositalmente simples e sem exibir saldo */}
       {transferReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-sm overflow-hidden rounded-[28px] border border-amber-100 bg-[#fffdf4] text-slate-900 shadow-2xl">
+          <style>{`
+            /* Imprima apenas o comprovante, com a mesma marca oficial exibida na tela. */
+            @media print {
+              body * { visibility: hidden !important; }
+              #optmapay-pix-receipt,
+              #optmapay-pix-receipt * { visibility: visible !important; }
+              #optmapay-pix-receipt {
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                background: white !important;
+              }
+              #optmapay-pix-receipt-controls,
+              #optmapay-pix-receipt-close { display: none !important; }
+              @page { margin: 12mm; }
+            }
+          `}</style>
+          <div id="optmapay-pix-receipt" className="w-full max-w-sm overflow-hidden rounded-[28px] border border-amber-100 bg-[#fffdf4] text-slate-900 shadow-2xl">
             <div className="relative px-6 pb-4 pt-6">
               <button
+                id="optmapay-pix-receipt-close"
                 onClick={() => setTransferReceipt(null)}
                 className="absolute right-4 top-4 rounded-full p-1 text-slate-400 transition hover:bg-black/5 hover:text-slate-700"
                 aria-label="Fechar comprovante"
@@ -811,11 +835,9 @@ Ambiente: Sandbox — sem dinheiro real`;
                 <X className="h-5 w-5" />
               </button>
 
-              <div className="flex items-center gap-2 text-sm font-black tracking-tight">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-lime-500">
-                  <span className="h-2 w-2 rounded-full bg-slate-900" />
-                </span>
-                <span>OptmaPay</span>
+              <div className="flex items-center gap-2">
+                {/* Marca oficial do repositório public/, não um ícone substituto. */}
+                <Logo variant="light" heightClass="h-7 sm:h-8" />
                 <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
                   Sandbox
                 </span>
@@ -871,7 +893,7 @@ Ambiente: Sandbox — sem dinheiro real`;
               </p>
             </div>
 
-            <div className="flex gap-2 border-t border-slate-300/70 bg-white/55 px-6 py-4">
+            <div id="optmapay-pix-receipt-controls" className="flex gap-2 border-t border-slate-300/70 bg-white/55 px-6 py-4">
               <button
                 type="button"
                 onClick={handleCopyReceiptText}
