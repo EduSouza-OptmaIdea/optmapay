@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   QrCode,
   FileText,
+  FileCheck2,
   CreditCard,
   ArrowLeftRight,
   Code2,
@@ -29,6 +30,7 @@ export const Sidebar: React.FC = () => {
   const devNavItems = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/pix', label: 'Área Pix', icon: QrCode },
+    { to: '/comprovantes', label: 'Comprovantes', icon: FileCheck2 },
     { to: '/boletos', label: 'Boletos', icon: FileText },
     { to: '/cartoes', label: 'Cartões Virtuais', icon: CreditCard },
     { to: '/pos', label: 'Maquininha POS', icon: Smartphone },
@@ -53,6 +55,7 @@ export const Sidebar: React.FC = () => {
     { to: '/cenarios', label: 'Cenários do Cotidiano', icon: Compass },
     { to: '/cartoes', label: 'Cartões Didáticos', icon: CreditCard },
     { to: '/dashboard', label: 'Extrato & Saldo', icon: LayoutDashboard },
+    { to: '/comprovantes', label: 'Comprovantes', icon: FileCheck2 },
     { to: '/meus-dados', label: 'Meus Dados', icon: User },
     { to: '/settings', label: 'Configurações', icon: Settings },
   ];
