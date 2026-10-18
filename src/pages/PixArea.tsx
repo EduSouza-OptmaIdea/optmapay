@@ -710,6 +710,7 @@ Ambiente: Sandbox — sem dinheiro real`;
             Transfira fundos, emita QR Codes com baixa automática em tempo real e validade de 15 minutos
           </p>
           <Link to="/pix-limites" className="inline-flex mt-3 text-sm text-teal-600 font-bold hover:underline items-center gap-1"><Lock size={16}/> Meus limites Pix (dia/noite) e solicitações de aumento</Link>
+          <Link to="/comprovantes" className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-teal-600 hover:underline sm:ml-3"><FileCheck2 size={16}/> Consultar comprovantes Pix</Link>
         </div>
 
         {/* Action Tabs */}
