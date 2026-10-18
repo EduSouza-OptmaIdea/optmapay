@@ -92,7 +92,7 @@ describe('Histórico seguro de comprovantes bancários sandbox', () => {
       )).rows[0].id;
       await asUser(sender);
       const sent = (await db.query(
-        "SELECT public.bank_receipts_list($1,'pix_sent','','',NULL,1,0) AS r",
+        "SELECT public.bank_receipts_list($1,'pix_sent','',NULL,NULL,1,0) AS r",
         [senderAccount],
       )).rows[0].r;
       expect(sent.items).toHaveLength(1);
