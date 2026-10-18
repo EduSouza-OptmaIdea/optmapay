@@ -737,6 +737,8 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      <Link to="/comprovantes" className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-bold text-teal-900 hover:border-teal-500 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100"><span>🧾 Meus comprovantes — recuperar Pix e depósitos</span><ArrowUpRight className="h-4 w-4 shrink-0"/></Link>
+
       {/* Quick Action Shortcuts */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Link
