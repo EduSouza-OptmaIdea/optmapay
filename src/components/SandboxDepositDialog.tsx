@@ -17,6 +17,8 @@ const escapeHtml = (text: unknown): string => String(text ?? '').replace(/[&<>"'
 }[c] || c));
 
 function receiptHtml(receipt: SandboxDepositReceipt, accountName: string): string {
+  // Endereço absoluto da identidade oficial: funciona ao imprimir e ao reabrir o HTML baixado.
+  const officialLogoUrl = new URL('/optmapay-logo-tema-claro.webp', window.location.origin).href;
   const rows = [
     ['Conta',accountName],
     ['Data/hora',new Date(receipt.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})+' (Brasília)'],
@@ -32,13 +34,17 @@ function receiptHtml(receipt: SandboxDepositReceipt, accountName: string): strin
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(makeReceiptLabel(receipt))}</title>
     <style>body{font-family:Arial,sans-serif;color:#182d34;background:#f7f9fa;margin:0;padding:36px}
     main{background:white;max-width:550px;margin:0 auto;padding:36px;border:1px solid #ddd;border-radius:16px}
+    .receipt-brand{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:25px}
+    .receipt-brand img{display:block;width:auto;height:38px;max-width:185px;object-fit:contain}
+    .receipt-brand .environment{font-size:11px;font-weight:800;color:#fff;background:#101828;border-radius:999px;padding:7px 10px}
     h1{font-size:25px}h2{font-size:16px;color:#047857}.flag{padding:12px;background:#effcf6;color:#065f46;font-weight:bold;border-radius:8px}
     dl div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #eee;padding:12px 0}
     dt{font-size:13px;color:#64748b}dd{margin:0;text-align:right;font-weight:bold;overflow-wrap:anywhere;font-size:13px}
     small{display:block;color:#64748b;line-height:1.6;margin-top:20px}
     .print{display:block;margin:18px auto;background:#0f766e;color:white;padding:12px;border:0;border-radius:8px;cursor:pointer}
     @media print{body{padding:0;background:white}.print{display:none}main{border:0;max-width:100%}}</style></head>
-    <body><main><h1>${escapeHtml(makeReceiptLabel(receipt))}</h1><h2>Comprovante de depósito simulado</h2>
+    <body><main><div class="receipt-brand"><img src="${escapeHtml(officialLogoUrl)}" alt="OptmaPay — logotipo oficial"><span class="environment">SANDBOX</span></div>
+    <h1>${escapeHtml(makeReceiptLabel(receipt))}</h1><h2>Comprovante de depósito simulado</h2>
     <p class="flag">SIMULAÇÃO EDUCACIONAL — NENHUM DINHEIRO REAL</p>
     <dl>${rows.map(([key,val])=>`<div><dt>${escapeHtml(key)}</dt><dd>${escapeHtml(val)}</dd></div>`).join('')}</dl>
     <small>Ambiente Sandbox • Operação fictícia sem valor de pagamento ou transferência real.
