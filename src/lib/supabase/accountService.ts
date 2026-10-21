@@ -92,16 +92,10 @@ export async function deleteSandboxAccountRPC(accountId: string): Promise<any> {
     p_account_id: accountId,
   });
 
-  if (error) {
-    // Fallback client-side
-    console.warn('RPC delete_sandbox_account não encontrada. Executando exclusão direta...', error.message);
-    await client.from('transactions').delete().or(`account_id.eq.${accountId},counterparty_account_id.eq.${accountId}`);
-    await client.from('boletos').delete().eq('account_id', accountId);
-    await client.from('cartoes').delete().eq('account_id', accountId);
-    await client.from('webhooks_config').delete().eq('account_id', accountId);
-    const { error: accErr } = await client.from('accounts').delete().eq('id', accountId);
-    if (accErr) throw accErr;
-    return { success: true, fallback: true };
+  // Excluir uma conta é uma operação transacional: não tentar DML avulso no
+  // navegador caso a RPC falhe (RLS, conflito, rede ou erro do banco).
+  if (error || !data || data.success !== true) {
+    throw new Error(error?.message || data?.message || 'Não foi possível excluir a conta sandbox.');
   }
 
   return data;
