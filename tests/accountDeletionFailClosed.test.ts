@@ -29,9 +29,10 @@ describe('Exclusão sandbox via RPC atômica (falha segura)', () => {
     db.rpc.mockResolvedValue({ data: receipt, error: null });
 
     await expect(deleteSandboxAccountRPC(accountId)).resolves.toEqual(receipt);
-    expect(db.rpc).toHaveBeenCalledExactlyOnceWith('delete_sandbox_account', {
+    expect(db.rpc).toHaveBeenCalledWith('delete_sandbox_account', {
       p_account_id: accountId,
     });
+    expect(db.rpc).toHaveBeenCalledTimes(1);
     expect(db.from).not.toHaveBeenCalled();
   });
 
