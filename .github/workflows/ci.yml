@@ -1,5 +1,9 @@
 name: OptmaPay Sandbox Quality Gates
 
+permissions:
+  contents: read
+  pull-requests: read
+
 on:
   push:
     branches: [ main ]
@@ -59,7 +63,7 @@ jobs:
           DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
 
       - name: Run Test Suite (Vitest)
-        run: npm run test:run
+        run: npm run test:run -- --fileParallelism=false
         env:
           DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
           OPTMAPAY_WEBHOOK_MASTER_KEY: ci-test-only-master-key-00000000000000000000000000000000
