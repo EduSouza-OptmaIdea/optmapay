@@ -38,9 +38,11 @@ async function main() {
       CREATE ROLE supabase_admin NOLOGIN BYPASSRLS;
     EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role, postgres, supabase_admin;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role, postgres, supabase_admin;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO service_role, postgres, supabase_admin;
+    -- Simulate future opt-in Data API grants, not legacy blanket auto-exposure.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
   `);
 
   // 3. Cria schema auth, auth.users e primitivas mínimas do Supabase (auth.uid() e auth.role())
@@ -74,7 +76,7 @@ async function main() {
     $$;
 
     GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
-    GRANT ALL ON ALL TABLES IN SCHEMA auth TO service_role;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE auth.users TO service_role;
     GRANT SELECT ON auth.users TO authenticated;
     GRANT EXECUTE ON FUNCTION auth.uid() TO PUBLIC, anon, authenticated, service_role;
     GRANT EXECUTE ON FUNCTION auth.role() TO PUBLIC, anon, authenticated, service_role;
@@ -133,7 +135,7 @@ async function main() {
 
   // 5. Configura permissões básicas no schema public
   await client.query(`
-    GRANT USAGE, CREATE ON SCHEMA public TO anon, authenticated, service_role;
+    GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
   `);
 
   // 6. Aplica todas as migrations desde zero
@@ -178,14 +180,69 @@ async function main() {
     }
   }
 
-  // Garante permissões completas para service_role em todas as tabelas criadas
-  await client.query(`
-    GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
-    GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
+  // Strict ACL gate: a blanket post-build GRANT would mask missing permissions.
+  const { rows: ac } = await client.query(`
+    SELECT c.relname name,c.relrowsecurity rls,
+      has_table_privilege('anon',c.oid,'SELECT') a_s,
+      has_table_privilege('anon',c.oid,'INSERT') a_i,
+      has_table_privilege('anon',c.oid,'UPDATE') a_u,
+      has_table_privilege('anon',c.oid,'DELETE') a_d,
+      has_table_privilege('authenticated',c.oid,'SELECT') u_s,
+      has_table_privilege('authenticated',c.oid,'INSERT') u_i,
+      has_table_privilege('authenticated',c.oid,'UPDATE') u_u,
+      has_table_privilege('authenticated',c.oid,'DELETE') u_d,
+      has_table_privilege('service_role',c.oid,'SELECT') s_s,
+      has_table_privilege('service_role',c.oid,'INSERT') s_i,
+      has_table_privilege('service_role',c.oid,'UPDATE') s_u,
+      has_table_privilege('service_role',c.oid,'DELETE') s_d
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relkind IN ('r','p') ORDER BY c.relname
   `);
+  const browserDml = new Set(['accounts','transactions','boletos','cartoes',
+    'contas_pagar','cofrinhos_poupanca','emprestimos_edu']);
+  const browserRead = new Set([...browserDml,'api_keys','webhooks_config',
+    'webhooks_log','webhook_events','webhook_delivery_jobs','card_receivables',
+    'credit_card_invoices','credit_card_invoice_items',
+    'credit_card_invoice_payments','credit_card_invoice_payment_allocations',
+    'platform_messages','data_retention_logs']);
+  if (ac.length !== 30) throw new Error(`Expected 30 public tables, found ${ac.length}. Update explicit ACLs.`);
+  for (const t of ac) {
+    const fail=reason=>{throw new Error(`ACL ${t.name}: ${reason}`);};
+    if (!t.rls) fail('RLS is off');
+    if ([t.a_s,t.a_i,t.a_u,t.a_d].some(Boolean)) fail('anon unexpectedly has DML');
+    if (t.u_s!==browserRead.has(t.name)) fail('unexpected authenticated SELECT');
+    const expectWrite=browserDml.has(t.name);
+    if (t.u_i!==(expectWrite || t.name==='data_retention_logs') ||
+      t.u_u!==expectWrite || t.u_d!==expectWrite) fail('unexpected authenticated write');
+    if (![t.s_s,t.s_i,t.s_u,t.s_d].every(Boolean)) fail('service role DML missing');
+  }
+  const { rows: seqs } = await client.query(`
+    SELECT c.relname name,has_sequence_privilege('anon',c.oid,'USAGE') a,
+      has_sequence_privilege('authenticated',c.oid,'USAGE') u,
+      has_sequence_privilege('service_role',c.oid,'USAGE') s
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relkind='S'
+  `);
+  if (seqs.length!==1 || seqs[0].name!=='platform_admin_audit_id_seq'
+      || seqs[0].a || seqs[0].u || !seqs[0].s)
+    throw new Error('Sequence grants are not explicitly scoped to service_role');
+  const requiredRpcs=[
+    ['public.transfer_pix(uuid,text,numeric,text,text,uuid,text,text)','authenticated'],
+    ['public.process_card_payment(uuid,uuid,text,text,text,text,numeric,text,integer,text,text,text,uuid,text,text)','authenticated'],
+    ['public.refund_pix(uuid,numeric,text)','authenticated'],
+    ['public.sandbox_deposit_confirm(uuid,numeric,text,text,numeric)','authenticated'],
+    ['public.claim_webhook_delivery_jobs(integer,text)','service_role'],
+  ];
+  for (const [signature,role] of requiredRpcs) {
+    const { rows }=await client.query(
+      "SELECT to_regprocedure($1)::oid AS oid, has_function_privilege($2,to_regprocedure($1),'EXECUTE') AS allowed",
+      [signature,role]);
+    if (!rows[0]?.oid || !rows[0]?.allowed)
+      throw new Error(`Missing explicit EXECUTE: ${role} / ${signature}`);
+  }
+  console.log(`Strict ACL gate passed: ${ac.length} tables, ${seqs.length} sequence, ${requiredRpcs.length} RPCs`);
+  console.log(`All ${files.length} migrations reconstructed with autogrants disabled.`);
 
-  console.log(`Todas as ${files.length} migrations foram aplicadas com sucesso desde o zero!`);
   await client.end();
 }
 
