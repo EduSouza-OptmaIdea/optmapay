@@ -1,5 +1,10 @@
 name: OptmaPay Sandbox Quality Gates
 
+# Least privileges needed for Gitleaks to read pull-request commits.
+permissions:
+  contents: read
+  pull-requests: read
+
 on:
   push:
     branches: [ main ]
