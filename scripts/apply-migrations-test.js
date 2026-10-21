@@ -226,6 +226,16 @@ async function main() {
   if (seqs.length!==1 || seqs[0].name!=='platform_admin_audit_id_seq'
       || seqs[0].a || seqs[0].u || !seqs[0].s)
     throw new Error('Sequence grants are not explicitly scoped to service_role');
+  // One dynamic Pix instruction must never be settled twice by distinct payers.
+  const { rows: paidPixIndex } = await client.query(`
+    SELECT i.indisunique AS is_unique, pg_get_expr(i.indpred, i.indrelid) AS predicate
+      FROM pg_index i
+      WHERE i.indexrelid = to_regclass('public.ux_transactions_pix_paid_external_reference')
+  `);
+  if (paidPixIndex.length!==1 || !paidPixIndex[0].is_unique ||
+      !paidPixIndex[0].predicate.includes('external_reference') ||
+      !paidPixIndex[0].predicate.includes('completed'))
+    throw new Error('Pix single-use uniqueness is missing');
   const requiredRpcs=[
     ['public.transfer_pix(uuid,text,numeric,text,text,uuid,text,text)','authenticated'],
     ['public.process_card_payment(uuid,uuid,text,text,text,text,numeric,text,integer,text,text,text,uuid,text,text)','authenticated'],
