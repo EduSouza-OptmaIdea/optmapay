@@ -114,3 +114,13 @@ and asserts all 30 RLS tables, role ACLs, the audit sequence, and five essential
 **NO-GO today:** migration drift unresolved, receipts history missing from source, complete isolation test pending, service-role and authenticated legacy CRUD reduction pending.
 
 Reference: https://supabase.com/docs/guides/api/securing-your-api
+
+## 2026-10-21 follow-up: two-repository provenance, Pix uniqueness
+
+**Dual GitHub layout:** `OptmaIdea/optmapay` (private canonical, main `e0451515...`), and `EduSouza-OptmaIdea/optmapay` (public deployment mirror, main `61655e208...`). Their `main` histories differ and must not be force-synchronized. Their 51 shared migration files have matching GitHub blob SHAs. The mirror has one additional file, `supabase/migrations/20261018013000_bank_receipts_history.sql`. Vercel production deployment `dpl_CNagzx43upnipChUCxBuM8LrdTht` is READY and its Git origin is the mirror `main` at `61655e208...`.
+
+**Recovered receipts proof:** live `bank_receipts_list` and `bank_receipt_get` function bodies were compared against the mirror SQL; both are identical after whitespace normalization, including `SECURITY DEFINER` and pinned search path. Canonical preserved a read-only archive under `docs/recovered/20261018013000_bank_receipts_history_source.sql`; it is intentionally **not** under `supabase/migrations`, as DB ledger version `20261018013732` differs from source filename and replay would be unsafe.
+
+**Pix single-use gap:** `20260928033000_pix_single_use_and_status.sql` exists in both Git repos, but the live DB has neither `ux_transactions_pix_paid_external_reference` nor `get_pix_instruction_status_safe(text)`. The current server-side `api/sandbox/v1/pix/instruction-status.ts` endpoint does not call that RPC, so the missing RPC is not evidence of an endpoint failure. The live `transfer_pix` function implements request-idempotency per sender account, but no global unique index on completed incoming `external_reference`; read-only audit detected **zero currently duplicated nonempty completed Pix references**. A new staged forward-only migration `20261021100000_restore_pix_single_use_index.sql` explicitly restores the global unique index, with a strict rebuild CI assertion. **Not deployed to production**. Test duplicate settlement attempts from two different sandbox payer accounts and confirm no second debit or webhook before approving its deploy.
+
+**Isolation cost:** Supabase reported USD 0.01344/hour for a new branch. The branch tool asked for a cost confirmation ID; the user must acknowledge this exact rate before `confirm_cost` and branch creation. Existing GitHub Actions PostgreSQL tests incur no new Supabase branch charge.
