@@ -106,6 +106,60 @@ async function verify(){
   check(service.data.length===2,'service_role reads both synthetic accounts');
   const escalate=await http('GET','/accounts?select=id',makeJwt(U_A,'postgres'));
   check([401,403].includes(escalate.status),'JWT cannot assume ungranted postgres role');
+  // P0.4: simulated ledger writing. All data is synthetic in local PostgreSQL.
+  const ledgerId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01';
+  const honest=await http('POST','/transactions?select=id,account_id,user_id',tokenA,{
+    id:ledgerId,user_id:U_A,account_id:A_A,
+    type:'withdraw',direction:'out',amount:0.01,
+    description:'CI P0.4 safe own-account ledger entry',
+    status:'completed',real_money:false,environment:'sandbox',
+  });
+  check(honest.status===201&&Array.isArray(honest.data)&&honest.data.length===1
+    &&honest.data[0].account_id===A_A,
+    'authenticated owner may INSERT a valid, synthetic same-account ledger entry');
+
+  const ownPatch=await http('PATCH','/transactions?id=eq.'+ledgerId+'&select=id,description',tokenA,{
+    description:'CI P0.4 owner update accepted',
+  });
+  check(ownPatch.status===200&&Array.isArray(ownPatch.data)&&ownPatch.data.length===1,
+    'authenticated owner may UPDATE own synthetic ledger description');
+
+  // PRE-FIX REPRO: original OR policy accepts auth.uid=user_id even for account B.
+  const crossInsert=await http('POST','/transactions?select=id',tokenA,{
+    user_id:U_A,account_id:A_B,
+    type:'withdraw',direction:'out',amount:0.01,
+    description:'CI P0.4 forbidden cross-account entry',
+    status:'completed',real_money:false,environment:'sandbox',
+  });
+  check([401,403].includes(crossInsert.status),
+    'A cannot INSERT a transaction for B account even when user_id claims A');
+
+  const spoofedInsert=await http('POST','/transactions?select=id',tokenA,{
+    user_id:U_B,account_id:A_A,
+    type:'withdraw',direction:'out',amount:0.01,
+    description:'CI P0.4 forged user ID',
+    status:'completed',real_money:false,environment:'sandbox',
+  });
+  check([401,403].includes(spoofedInsert.status),
+    'A cannot INSERT a transaction on own account with user_id of B');
+
+  // PRE-FIX REPRO: the old UPDATE policy validates user_id but not account_id.
+  const crossUpdate=await http('PATCH','/transactions?id=eq.'+ledgerId+'&select=id,account_id',tokenA,{
+    account_id:A_B,
+  });
+  check([401,403].includes(crossUpdate.status) ||
+        (crossUpdate.status===200 && Array.isArray(crossUpdate.data) && crossUpdate.data.length===0),
+    'A cannot reassign its own transaction to account B');
+
+  const trustedWrite=await http('POST','/transactions?select=id',tokenService,{
+    user_id:U_A,account_id:A_B,
+    type:'withdraw',direction:'in',amount:0.01,
+    description:'CI server-side privileged bookkeeping',
+    status:'completed',real_money:false,environment:'sandbox',
+  });
+  check(trustedWrite.status===201,
+    'trusted service_role still able to create cross-account ledger entry for internal workflow');
+
   const db=new pg.Client({connectionString:DATABASE_TEST_URL});
   await db.connect();
   try{
