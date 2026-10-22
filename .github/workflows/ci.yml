@@ -9,7 +9,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021, agent/p04-transaction-owner-rls-20261022, agent/p05-migration-provenance-20261022, agent/p06-release-security-bundle-20261022, agent/rc-security-consolidated-20261022]
+    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021, agent/p04-transaction-owner-rls-20261022, agent/p05-migration-provenance-20261022, agent/p06-release-security-bundle-20261022, agent/rc-security-consolidated-20261022, agent/p07-family-pilot-sandbox-safety-20261022]
 
 jobs:
   quality-gates:
@@ -106,6 +106,12 @@ jobs:
         env:
           DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
           CI_POSTGREST_DB_PASSWORD: ci-local-no-production-credential
+          CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
+
+      - name: Verify owner personal sandbox accounts and delegated staff denial over signed JWT
+        run: node scripts/test-owner-dual-mode-db.js
+        env:
+          DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
           CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
 
       - name: Stop disposable PostgREST

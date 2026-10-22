@@ -33,9 +33,10 @@ import { EmprestimosEduArea } from './pages/EmprestimosEduArea';
 import { CenariosEduArea } from './pages/CenariosEduArea';
 import { AdminArea } from './pages/AdminArea';
 import { RefreshCw } from 'lucide-react';
+import { canOpenSandboxWorkspace } from './lib/sandboxModeAccess';
 
 const ProtectedLayout: React.FC = () => {
-  const { user, loading, isPlatformStaff } = useAuth();
+  const { user, loading, isPlatformStaff, isSuperAdmin } = useAuth();
   const { mode } = useAppMode();
 
   if (loading) {
@@ -52,7 +53,7 @@ const ProtectedLayout: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (isPlatformStaff) return <Navigate to="/admin" replace />;
+  if (!canOpenSandboxWorkspace({ authenticated: Boolean(user), isPlatformStaff, isSuperAdmin })) return <Navigate to="/admin" replace />;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F6F2] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100">

@@ -65,7 +65,7 @@ export const Header: React.FC = () => {
               <span>Super Admin</span>
             </span>
             <span className="text-[11px] truncate">
-              Modo de Simulação ativo: Visualizando a conta cliente <strong>{activeAccount.name}</strong> ({activeAccount.type === 'merchant' ? 'PJ Lojista' : 'PF Cliente'}). Esta conta de cliente <strong>NÃO</strong> possui poderes administrativos.
+              Modo proprietário: conta fictícia de teste <strong>{activeAccount.name}</strong> ({activeAccount.type === 'merchant' ? 'PJ' : 'PF'}). O painel Learn e Dev acessa apenas contas vinculadas ao seu usuário; não assume dados de clientes.
             </span>
           </div>
           <Link
@@ -84,7 +84,7 @@ export const Header: React.FC = () => {
             <Logo heightClass="h-8 sm:h-9" />
           </Link>
 
-          {/* Alternador Dual: Dev Sandbox vs Edu Sandbox */}
+          {/* Um único aplicativo: duas áreas, Learn e Dev. Owner pode usar ambas. */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
             <button
               type="button"
@@ -118,8 +118,8 @@ export const Header: React.FC = () => {
               title="Modo Educacional: Poupança, Contas a Pagar, Empréstimos e Educação Financeira"
             >
               <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Educação</span>
-              <span className="sm:hidden">Edu</span>
+              <span className="hidden sm:inline">Learn Sandbox</span>
+              <span className="sm:hidden">Learn</span>
             </button>
           </div>
         </div>
