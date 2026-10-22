@@ -151,7 +151,9 @@ async function verify(){
         (crossUpdate.status===200 && Array.isArray(crossUpdate.data) && crossUpdate.data.length===0),
     'A cannot reassign its own transaction to account B');
 
+  const trustedLedgerId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
   const trustedWrite=await http('POST','/transactions?select=id',tokenService,{
+    id:trustedLedgerId,
     user_id:U_A,account_id:A_B,
     type:'withdraw',direction:'in',amount:0.01,
     description:'CI server-side privileged bookkeeping',
@@ -160,6 +162,29 @@ async function verify(){
   check(trustedWrite.status===201,
     'trusted service_role still able to create cross-account ledger entry for internal workflow');
 
+  const ownerReadsOwn=await http('GET','/transactions?select=id&id=eq.'+ledgerId,tokenA);
+  rows200(ownerReadsOwn,'owner ledger visibility');
+  check(ownerReadsOwn.data.length===1 && ownerReadsOwn.data[0].id===ledgerId,
+    'legitimate owner reads its own transaction');
+
+  const crossLeakA=await http('GET','/transactions?select=id&id=eq.'+trustedLedgerId,tokenA);
+  rows200(crossLeakA,'cross-account ledger visibility for user A');
+  check(crossLeakA.data.length===0,
+    'A cannot SELECT B account ledger despite privileged row carrying user_id=A');
+
+  const crossLeakB=await http('GET','/transactions?select=id&id=eq.'+trustedLedgerId,tokenB);
+  rows200(crossLeakB,'cross-account ledger visibility for user B');
+  check(crossLeakB.data.length===0,
+    'B cannot SELECT privileged mismatched user_id row');
+
+  const crossDelete=await http('DELETE','/transactions?id=eq.'+trustedLedgerId,tokenA);
+  check([200,204].includes(crossDelete.status),
+    'unauthorized DELETE executes without returning server error (should affect zero rows)');
+
+  const ownerDelete=await http('DELETE','/transactions?id=eq.'+ledgerId,tokenA);
+  check([200,204].includes(ownerDelete.status),
+    'owner may DELETE its own synthetic transaction');
+
   const db=new pg.Client({connectionString:DATABASE_TEST_URL});
   await db.connect();
   try{
@@ -167,6 +192,11 @@ async function verify(){
     check(rows.length===1&&rows[0].name==='CI tenant Beta','other account unchanged');
     const {rows:spoof}=await db.query("SELECT count(*)::int AS n FROM public.accounts WHERE cpf_cnpj='90000000000003'");
     check(spoof[0].n===0,'forged cross-tenant account not created');
+    const {rows:retained}=await db.query('SELECT id,account_id,user_id FROM public.transactions WHERE id=$1',[trustedLedgerId]);
+    check(retained.length===1 && retained[0].account_id===A_B && retained[0].user_id===U_A,
+      'user A cannot DELETE privileged cross-account financial record');
+    const {rows:deletedOwn}=await db.query('SELECT id FROM public.transactions WHERE id=$1',[ledgerId]);
+    check(deletedOwn.length===0,'owner DELETE removed only its own synthetic record');
   }finally{await db.end();}
   console.log('POSTGREST ISOLATION PASS: '+passed+' positive and negative assertions.');
 }
