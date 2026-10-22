@@ -84,7 +84,87 @@
       "git_blob_sha1": "41e22fe4cd2625ad0f6515efb3558c7e04b5a795",
       "semantic_token_count": 275,
       "semantic_fnv1a64": "f3013f98f92d210f"
+    },
+    {
+      "ledger_version": "20260901000002",
+      "sql_statements": 5,
+      "source_path": "supabase/migrations/20260901000002_plans_and_overdue_invoices.sql",
+      "git_blob_sha1": "71182dfb38201cd6b5ee318791318f80cd30bdf7",
+      "semantic_token_count": 197,
+      "semantic_fnv1a64": "eaeefa0bca340d30"
+    },
+    {
+      "ledger_version": "20260905000000",
+      "sql_statements": 18,
+      "source_path": "supabase/migrations/20260905000000_business_days_bills_and_edu.sql",
+      "git_blob_sha1": "307d3550ff373236f808f2d515dd88a0ee6ec3f0",
+      "semantic_token_count": 654,
+      "semantic_fnv1a64": "f65eaa6035f5874a"
+    },
+    {
+      "ledger_version": "20260905000001",
+      "sql_statements": 6,
+      "source_path": "supabase/migrations/20260905000001_fix_debit_settlement_plan.sql",
+      "git_blob_sha1": "e8a71ade91c2a3ac7160fa6b09d2fb6803b59e1f",
+      "semantic_token_count": 220,
+      "semantic_fnv1a64": "67ee880c4c307252"
+    },
+    {
+      "ledger_version": "20260919233000",
+      "sql_statements": 61,
+      "source_path": "supabase/migrations/20260919233000_api_keys_webhooks_idempotency_hardening.sql",
+      "git_blob_sha1": "8e009f2b9f0e4a97b8b982538c1b023ae9905e7a",
+      "semantic_token_count": 1449,
+      "semantic_fnv1a64": "aa797076b5d1e030"
+    },
+    {
+      "ledger_version": "20260919234000",
+      "sql_statements": 6,
+      "source_path": "supabase/migrations/20260919234000_authoritative_payment_events.sql",
+      "git_blob_sha1": "723c398a065865e1790521651bfd2c2a4672f43c",
+      "semantic_token_count": 282,
+      "semantic_fnv1a64": "b2e13e682e7aa8be"
+    },
+    {
+      "ledger_version": "20260919235000",
+      "sql_statements": 10,
+      "source_path": "supabase/migrations/20260919235000_dev_panel_rls_and_rpcs.sql",
+      "git_blob_sha1": "8648ced5e22bf1ce446e00ebab2f97df7c48e402",
+      "semantic_token_count": 214,
+      "semantic_fnv1a64": "6eee1baeade88888"
+    },
+    {
+      "ledger_version": "20260920000000",
+      "sql_statements": 11,
+      "source_path": "supabase/migrations/20260920000000_audit_hardening_pacote_01a.sql",
+      "git_blob_sha1": "112f23f35c60321b111e143f4b014dc9f728bef7",
+      "semantic_token_count": 315,
+      "semantic_fnv1a64": "c942d2017f0aa915"
+    },
+    {
+      "ledger_version": "20260920010000",
+      "sql_statements": 20,
+      "source_path": "supabase/migrations/20260920010000_audit_hardening_pacote_01b.sql",
+      "git_blob_sha1": "92342f945679699400a926645eaaf370bf946c77",
+      "semantic_token_count": 610,
+      "semantic_fnv1a64": "98952c14a80eb64d"
+    },
+    {
+      "ledger_version": "20260920020000",
+      "sql_statements": 20,
+      "source_path": "supabase/migrations/20260920020000_audit_hardening_pacote_01c.sql",
+      "git_blob_sha1": "e4e501a4ec82e83d49efd7ee59e895f675a7707e",
+      "semantic_token_count": 574,
+      "semantic_fnv1a64": "1963b06f2425ce7a"
+    },
+    {
+      "ledger_version": "20260920030000",
+      "sql_statements": 18,
+      "source_path": "supabase/migrations/20260920030000_audit_hardening_pacote_01d.sql",
+      "git_blob_sha1": "ddd56ed9677703b42e931230b15cdd9d529b0703",
+      "semantic_token_count": 530,
+      "semantic_fnv1a64": "91e140b94a833ae7"
     }
   ],
-  "complete": false
+  "complete": true
 }
