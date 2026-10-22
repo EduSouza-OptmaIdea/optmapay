@@ -9,7 +9,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021]
+    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021, agent/p04-transaction-owner-rls-20261022]
 
 jobs:
   quality-gates:
@@ -57,6 +57,12 @@ jobs:
 
       - name: Run Repository Secret Scanner Gate
         run: npm run scan:secrets
+
+      # Offline read-only provenance attestation. No Supabase keys or hosted DB access.
+      - name: Verify migration provenance and known version collision (P0.5)
+        run: |
+          node scripts/check-migration-provenance.js --self-test
+          node scripts/check-migration-provenance.js
 
       - name: Apply Database Migrations (PostgreSQL Smoke Test)
         run: node scripts/apply-migrations-test.js

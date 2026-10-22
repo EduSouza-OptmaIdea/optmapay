@@ -1,0 +1,548 @@
+{
+  "schema_version": 1,
+  "snapshot_utc": "2026-10-22T01:14:00Z",
+  "database_project_ref": "wertmoquxdrucdbobuie",
+  "repo": "EduSouza-OptmaIdea/optmapay",
+  "repo_kind": "deployment_mirror",
+  "source_git_sha": "57377325b7619e738fc4cb878a62a895e0792f93",
+  "source_note": "Read-only ledger metadata & SHA-1 Git blobs. Filename pairing is NOT proof SQL execution. No repair/push allowed. Snapshot capture time is approximate. Re-run a LIVE read-only audit immediately before any production release.",
+  "database_records": [
+    {
+      "ledger_version": "20260829000000",
+      "ledger_name": "initial_schema",
+      "sql_statements": 49,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260829000000_initial_schema.sql",
+      "git_blob_sha1": "44efc6b9aab99f1b7b9896bd8069f3b1041b8fad",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260829000001",
+      "ledger_name": "rpc_functions",
+      "sql_statements": 5,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260829000001_rpc_functions.sql",
+      "git_blob_sha1": "8b9d059c4ff596f8d4c33487477667e85b96bded",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260829000002",
+      "ledger_name": "data_retention_and_warnings",
+      "sql_statements": 6,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260829000002_data_retention_and_warnings.sql",
+      "git_blob_sha1": "2c0edb8190bc745208e030660274ae24251517a8",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260829000003",
+      "ledger_name": "security_hardening",
+      "sql_statements": 88,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260829000003_security_hardening.sql",
+      "git_blob_sha1": "f267fe8fc9799ed7f23bd78ee91791c94755623d",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260830000000",
+      "ledger_name": "fix_transfer_pix_security_definer",
+      "sql_statements": 2,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260830000000_fix_transfer_pix_security_definer.sql",
+      "git_blob_sha1": "3f1231d2835970877de84eca9bcf56dad7c0473d",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260830000001",
+      "ledger_name": "realtime_and_advisors_fix",
+      "sql_statements": 8,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260830000001_realtime_and_advisors_fix.sql",
+      "git_blob_sha1": "a756f49650c3e6b5a506cffe7036d447bf0016c5",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260830000002",
+      "ledger_name": "revoke_anon_and_optimize",
+      "sql_statements": 6,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260830000002_revoke_anon_and_optimize.sql",
+      "git_blob_sha1": "3fd6d8e0b6e05f50b15ad24231e75f82b41dc3cf",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260830000003",
+      "ledger_name": "link_pix_refunds_and_balance",
+      "sql_statements": 5,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260830000003_link_pix_refunds_and_balance.sql",
+      "git_blob_sha1": "f49f8ef1c44a118ece7d2a116bdc736b7a9108fb",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260901000000",
+      "ledger_name": "cards_pos_and_fee_system",
+      "sql_statements": 8,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260901000000_cards_pos_and_fee_system.sql",
+      "git_blob_sha1": "5c09e340a68ca8a0854e23559ce08e149c485e84",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260901000001",
+      "ledger_name": "credit_card_invoices_and_d1_settlement",
+      "sql_statements": 8,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260901000001_credit_card_invoices_and_d1_settlement.sql",
+      "git_blob_sha1": "41e22fe4cd2625ad0f6515efb3558c7e04b5a795",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260901000002",
+      "ledger_name": "plans_and_overdue_invoices",
+      "sql_statements": 5,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260901000002_plans_and_overdue_invoices.sql",
+      "git_blob_sha1": "71182dfb38201cd6b5ee318791318f80cd30bdf7",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260905000000",
+      "ledger_name": "business_days_bills_and_edu",
+      "sql_statements": 18,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260905000000_business_days_bills_and_edu.sql",
+      "git_blob_sha1": "307d3550ff373236f808f2d515dd88a0ee6ec3f0",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260905000001",
+      "ledger_name": "fix_debit_settlement_plan",
+      "sql_statements": 6,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260905000001_fix_debit_settlement_plan.sql",
+      "git_blob_sha1": "e8a71ade91c2a3ac7160fa6b09d2fb6803b59e1f",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260919233000",
+      "ledger_name": "api_keys_webhooks_idempotency_hardening",
+      "sql_statements": 61,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260919233000_api_keys_webhooks_idempotency_hardening.sql",
+      "git_blob_sha1": "8e009f2b9f0e4a97b8b982538c1b023ae9905e7a",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260919234000",
+      "ledger_name": "authoritative_payment_events",
+      "sql_statements": 6,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260919234000_authoritative_payment_events.sql",
+      "git_blob_sha1": "723c398a065865e1790521651bfd2c2a4672f43c",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260919235000",
+      "ledger_name": "dev_panel_rls_and_rpcs",
+      "sql_statements": 10,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260919235000_dev_panel_rls_and_rpcs.sql",
+      "git_blob_sha1": "8648ced5e22bf1ce446e00ebab2f97df7c48e402",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260920000000",
+      "ledger_name": "audit_hardening_pacote_01a",
+      "sql_statements": 11,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260920000000_audit_hardening_pacote_01a.sql",
+      "git_blob_sha1": "112f23f35c60321b111e143f4b014dc9f728bef7",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260920010000",
+      "ledger_name": "audit_hardening_pacote_01b",
+      "sql_statements": 20,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260920010000_audit_hardening_pacote_01b.sql",
+      "git_blob_sha1": "92342f945679699400a926645eaaf370bf946c77",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260920020000",
+      "ledger_name": "audit_hardening_pacote_01c",
+      "sql_statements": 20,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260920020000_audit_hardening_pacote_01c.sql",
+      "git_blob_sha1": "e4e501a4ec82e83d49efd7ee59e895f675a7707e",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20260920030000",
+      "ledger_name": "audit_hardening_pacote_01d",
+      "sql_statements": 18,
+      "single_statement_md5": null,
+      "source_path": "supabase/migrations/20260920030000_audit_hardening_pacote_01d.sql",
+      "git_blob_sha1": "ddd56ed9677703b42e931230b15cdd9d529b0703",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004020711",
+      "ledger_name": "card_ledger_and_settlement_authority",
+      "sql_statements": 1,
+      "single_statement_md5": "c9fca5b3824e75fef89fb8b937c31d94",
+      "source_path": "supabase/migrations/20261004020711_card_ledger_and_settlement_authority.sql",
+      "git_blob_sha1": "58ba7183e051c5a0e5dc04cfc94823e3610458dd",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004024345",
+      "ledger_name": "card_golden_regression_harness",
+      "sql_statements": 1,
+      "single_statement_md5": "8245bc94733996cccc02b623b026d96d",
+      "source_path": "supabase/migrations/20261004024345_card_golden_regression_harness.sql",
+      "git_blob_sha1": "907d3ef9a2ba38853414c7adcc27bcae12b15ce1",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004024451",
+      "ledger_name": "card_response_payload_argument_limit_fix",
+      "sql_statements": 1,
+      "single_statement_md5": "14b609d99ade496a321781b540f1176e",
+      "source_path": "supabase/migrations/20261004024451_card_response_payload_argument_limit_fix.sql",
+      "git_blob_sha1": "7fdd1dfef18ba22ad27d2308be18ec36c43be5fa",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004024651",
+      "ledger_name": "card_golden_regression_harness_v2",
+      "sql_statements": 1,
+      "single_statement_md5": "d20209ed4559a4030c2ea1b805611600",
+      "source_path": "supabase/migrations/20261004024651_card_golden_regression_harness_v2.sql",
+      "git_blob_sha1": "674162973adb7ed3ad6a81429918a3d712057559",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004030915",
+      "ledger_name": "optmamenu_webhook_settlement_subscription_hardening",
+      "sql_statements": 1,
+      "single_statement_md5": "35739f0f99d8ee8ae7c5e4c8fcda0590",
+      "source_path": "supabase/migrations/20261004030915_optmamenu_webhook_settlement_subscription_hardening.sql",
+      "git_blob_sha1": "ade394b836db218c1d5ea0aeec2c1d770ef41ce3",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261004060101",
+      "ledger_name": "card_settlement_local_time_and_scheduler",
+      "sql_statements": 1,
+      "single_statement_md5": "ad659f820c550f5f4999e29d79cb9cba",
+      "source_path": "supabase/migrations/20261004060101_card_settlement_local_time_and_scheduler.sql",
+      "git_blob_sha1": "94722f9f5ca11be9f7abc1921f72f928c1a41c14",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010183841",
+      "ledger_name": "authoritative_card_anticipation",
+      "sql_statements": 1,
+      "single_statement_md5": "1a481155456f2d03397b528e3c6e16de",
+      "source_path": "supabase/migrations/20261010183841_authoritative_card_anticipation.sql",
+      "git_blob_sha1": "3637f6d01871333ea1d79cdf39e2529742603534",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010194357",
+      "ledger_name": "pj_account_fees_overdraft_and_90d_foundation",
+      "sql_statements": 1,
+      "single_statement_md5": "1cff9906d25343968ce3784fb1960c49",
+      "source_path": "supabase/migrations/20261010194357_pj_account_fees_overdraft_and_90d_foundation.sql",
+      "git_blob_sha1": "14f5413a38d28d5fdd62bf1a840c5904aa1dab47",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010195723",
+      "ledger_name": "overdraft_balance_constraint_and_core_debits",
+      "sql_statements": 1,
+      "single_statement_md5": "beac64cd19c40322016f363b62b2a669",
+      "source_path": "supabase/migrations/20261010195723_overdraft_balance_constraint_and_core_debits.sql",
+      "git_blob_sha1": "776e5e239827e4c11139d2f48be51b044baec87a",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010200006",
+      "ledger_name": "pj_iof_additional_rate_correction",
+      "sql_statements": 1,
+      "single_statement_md5": "e560246b8968cb48517d085d8fd5457c",
+      "source_path": "supabase/migrations/20261010200006_pj_iof_additional_rate_correction.sql",
+      "git_blob_sha1": "03ccc5a0a24184a0be33f1b266123601f75a8252",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010200345",
+      "ledger_name": "pj_iof_additional_current_rule_override",
+      "sql_statements": 1,
+      "single_statement_md5": "263a4ecb08b0206bba846428327e20c3",
+      "source_path": "supabase/migrations/20261010200345_pj_iof_additional_current_rule_override.sql",
+      "git_blob_sha1": "d58a90412cdc7a32deeec92afbb0bbf12cb8a789",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261010200723",
+      "ledger_name": "pj_iof_current_compiled_rule",
+      "sql_statements": 1,
+      "single_statement_md5": "78b6835177c3c3cd50c528cb223963ab",
+      "source_path": "supabase/migrations/20261010200723_pj_iof_current_compiled_rule.sql",
+      "git_blob_sha1": "e00f9b8d8b82ae43f9b0efc0fee07350b5d9bfcf",
+      "match_basis": "exact_version_and_name",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261012162435",
+      "ledger_name": "external_test_cohort_isolation_and_limits",
+      "sql_statements": 1,
+      "single_statement_md5": "f618386371b90b1226a5273db1dca6ec",
+      "source_path": "supabase/migrations/20261012162500_external_test_cohort_isolation_and_limits.sql",
+      "git_blob_sha1": "aa4217a937cae5047da5ac11ec1821f88e01a81d",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261012203217",
+      "ledger_name": "super_admin_users_activity_console",
+      "sql_statements": 1,
+      "single_statement_md5": "9bb5667b3b031b2affa8617e229bf9d7",
+      "source_path": "supabase/migrations/20261012175500_super_admin_users_activity_console.sql",
+      "git_blob_sha1": "27e87ebe857c636e683e2df42180825cf53fc79b",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261013104247",
+      "ledger_name": "platform_staff_permissions_audit_20261013",
+      "sql_statements": 1,
+      "single_statement_md5": "c24c777bd5ba1c0a929c92a19b613371",
+      "source_path": "supabase/migrations/20261013110000_platform_staff_permissions_audit.sql",
+      "git_blob_sha1": "3cb2956464dcb10fbeca6fa301cd924ec5eee573",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261013105641",
+      "ledger_name": "platform_system_settings_20261013",
+      "sql_statements": 1,
+      "single_statement_md5": "4ae85ce13d0ca9f0ed43e7ece458e67e",
+      "source_path": "supabase/migrations/20261013120000_platform_system_settings.sql",
+      "git_blob_sha1": "a105ed2b03bede0904dee0ac2a43ed35d14b983b",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261013235117",
+      "ledger_name": "sandbox_deposits_atomic_idempotent_20261013",
+      "sql_statements": 1,
+      "single_statement_md5": "4a93029e4d8070f7b41aa8d8c83a5349",
+      "source_path": "supabase/migrations/20261013234500_sandbox_deposits_atomic_idempotent.sql",
+      "git_blob_sha1": "83a68fc6133c420ae79ac7d24baa8089357a2582",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125152",
+      "ledger_name": "pf_pj_policies_and_overrides_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "4cd8465b08f054fbc5ea439a081ed73f",
+      "source_path": "supabase/migrations/20261014130000_pf_pj_policies_and_overrides.sql",
+      "git_blob_sha1": "9ba40f1069078be9509298f4a78238e7e49df599",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125157",
+      "ledger_name": "deposits_policy_rounding_receipts_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "451db251c25c33031391eaafd2db0e7a",
+      "source_path": "supabase/migrations/20261014130500_deposits_policy_rounding_receipts.sql",
+      "git_blob_sha1": "5a17055a068a38c4042e0fbb3656bd63c7a79e8c",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125204",
+      "ledger_name": "pix_daily_night_limits_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "e54b2834fabfe2f345df7b220d4dd14a",
+      "source_path": "supabase/migrations/20261014131500_pix_daily_night_limits.sql",
+      "git_blob_sha1": "c3ffe1160be10e6eedf7b8f7d489aeddfb183643",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125209",
+      "ledger_name": "pix_limit_requests_messages_email_queue_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "909870901d0102aef2596a79eed985f3",
+      "source_path": "supabase/migrations/20261014133000_pix_limit_requests_messages_email_queue.sql",
+      "git_blob_sha1": "9398358237bc9210be9a1cdae5744a767ee40b68",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125215",
+      "ledger_name": "platform_accounts_search_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "60d6415112cd74477f912c4ca0bd1882",
+      "source_path": "supabase/migrations/20261014134000_platform_accounts_search.sql",
+      "git_blob_sha1": "654c5ecbc9c58e313fcab697f8517534f359c3d4",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014125241",
+      "ledger_name": "messages_realtime_rls_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "8b607d4a5999c064f64c3f92c69d97e7",
+      "source_path": "supabase/migrations/20261014135000_messages_realtime_rls.sql",
+      "git_blob_sha1": "1f988dc05dc08f2b04ab99e60250ec3db432c274",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014130500",
+      "ledger_name": "independent_exception_expiry_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "b8020fc4b083b6e68f8b4003d8c6dfe1",
+      "source_path": "supabase/migrations/20261014135500_independent_exception_expiry.sql",
+      "git_blob_sha1": "b205e24b6b921fd896f836c1b98ced6f1d3201f4",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": "supabase/migrations/20261014130500_deposits_policy_rounding_receipts.sql"
+    },
+    {
+      "ledger_version": "20261014132224",
+      "ledger_name": "platform_staff_bank_policy_isolation_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "410c74b3f6516b4546033a2f29328c46",
+      "source_path": "supabase/migrations/20261014135800_platform_staff_bank_policy_isolation.sql",
+      "git_blob_sha1": "6c2c590a89b92f7287a3b9fd7edfe68ebb6a951e",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014134531",
+      "ledger_name": "pf_pj_financial_policy_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "2aede789fc9dab41d25aeb37011a3862",
+      "source_path": "supabase/migrations/20261014140000_pf_pj_financial_policy.sql",
+      "git_blob_sha1": "83955e82b9d36768bd813af4d6b20c3a8174582e",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014134536",
+      "ledger_name": "deposits_pf_pj_fee_rules_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "3411af1faee190d1bb0f18a3b0ce64a3",
+      "source_path": "supabase/migrations/20261014140500_deposits_pf_pj_fee_rules.sql",
+      "git_blob_sha1": "61079548a4ff7501e5772195b912c9aa741552c3",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014134541",
+      "ledger_name": "pj_service_monthly_policy_engine_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "33ab2356c77e7ddfb25145f4ded563b5",
+      "source_path": "supabase/migrations/20261014141000_pj_service_monthly_policy_engine.sql",
+      "git_blob_sha1": "f22ca1490c329f174f7cdd0c5711d772edb98c49",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014134546",
+      "ledger_name": "pf_pj_card_issue_limits_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "5bffc098f8faffd074519c093dca81a9",
+      "source_path": "supabase/migrations/20261014141500_pf_pj_card_issue_limits.sql",
+      "git_blob_sha1": "ed722f0c712dd6acca36bf79a53a6fb89ce1cc84",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261014134550",
+      "ledger_name": "account_financial_overrides_20261014",
+      "sql_statements": 1,
+      "single_statement_md5": "6b22f002e9c585a171d73d678838f28d",
+      "source_path": "supabase/migrations/20261014142000_account_financial_overrides.sql",
+      "git_blob_sha1": "76fc0b74ebc147f1654f6c0c5aba0f5fd9d4605a",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    },
+    {
+      "ledger_version": "20261018013732",
+      "ledger_name": "bank_receipts_history_20261018",
+      "sql_statements": 1,
+      "single_statement_md5": "8e904d3ae314563663480f90c616721b",
+      "source_path": "supabase/migrations/20261018013000_bank_receipts_history.sql",
+      "git_blob_sha1": "f65d40329351fba6ee8470f9bd8773c5060bb00d",
+      "match_basis": "renumbered_filename_candidate",
+      "version_collision_with": null
+    }
+  ],
+  "repository_files": [
+    {
+      "path": "supabase/migrations/20260928033000_pix_single_use_and_status.sql",
+      "git_blob_sha1": "ae6af71c5e0933a273af68e81d6d36041e72034d",
+      "source_version": "20260928033000",
+      "category": "not_registered_under_source_name_and_version"
+    },
+    {
+      "path": "supabase/migrations/20261020235000_explicit_data_api_object_grants.sql",
+      "git_blob_sha1": "429ddbadd05a2220d93e15f65bbc7cd07acdef78",
+      "source_version": "20261020235000",
+      "category": "not_registered_under_source_name_and_version"
+    },
+    {
+      "path": "supabase/migrations/20261021100000_restore_pix_single_use_index.sql",
+      "git_blob_sha1": "840b203c2fd4e62bc3e06ec1c894e8d727c7659b",
+      "source_version": "20261021100000",
+      "category": "not_registered_under_source_name_and_version"
+    },
+    {
+      "path": "supabase/migrations/20261022004000_transactions_owner_account_rls.sql",
+      "git_blob_sha1": "0b369abfe36636db63d5d97b821fd8d7117bae66",
+      "source_version": "20261022004000",
+      "category": "not_registered_under_source_name_and_version"
+    }
+  ],
+  "recovery_artifact": null
+}
