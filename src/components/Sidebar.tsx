@@ -66,7 +66,7 @@ export const Sidebar: React.FC = () => {
     <aside className="hidden md:flex flex-col w-64 shrink-0 bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 min-h-[calc(100vh-61px)] p-4">
       <div className="flex items-center justify-between px-3 mb-3">
         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-sans">
-          {mode === 'edu' ? 'OptmaPay Educação' : 'Internet Banking Dev'}
+          {mode === 'edu' ? 'Learn • Educação Financeira' : 'Dev • Integrações Sandbox'}
         </span>
         {mode === 'edu' && (
           <span
