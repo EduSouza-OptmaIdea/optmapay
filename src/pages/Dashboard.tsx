@@ -124,7 +124,7 @@ export function getTransactionSettlementDetails(tx: SandboxTransaction) {
 }
 
 export const Dashboard: React.FC = () => {
-  const { user, activeAccount, refreshAccounts } = useAuth();
+  const { user, activeAccount, refreshAccounts, isSuperAdmin } = useAuth();
 
   const [showBalance, setShowBalance] = useState(true);
   const [transactions, setTransactions] = useState<SandboxTransaction[]>([]);
@@ -611,9 +611,9 @@ export const Dashboard: React.FC = () => {
                 await createBankAccount(user.id, {
                   name: meta.account_name || user.email?.split('@')[0] || 'Conta Sandbox',
                   type: meta.account_type || 'merchant',
-                  cpf_cnpj: meta.cpf_cnpj || '45.892.102/0001-90',
+                  cpf_cnpj: isSuperAdmin ? `SANDBOX-OWNER-${user.id}` : (meta.cpf_cnpj || '45.892.102/0001-90'),
                   initialBalance: 1000.00,
-                  pixKey: user.email || `pix.${Date.now()}@optmapay.fake`,
+                  pixKey: isSuperAdmin ? `owner.${user.id}@optmapay.fake` : (user.email || `pix.${Date.now()}@optmapay.fake`),
                 });
                 await refreshAccounts();
               } catch (e: any) {
