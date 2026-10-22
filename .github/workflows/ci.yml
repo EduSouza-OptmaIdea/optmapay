@@ -9,7 +9,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021, agent/p04-transaction-owner-rls-20261022]
+    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021, agent/p04-transaction-owner-rls-20261022, agent/p05-migration-provenance-20261022]
 
 jobs:
   quality-gates:
@@ -59,6 +59,11 @@ jobs:
         run: npm run scan:secrets
 
       # Offline read-only provenance attestation. No Supabase keys or hosted DB access.
+      - name: Verify live SQL lineage for all 20 multi-statement migrations (P0.6)
+        run: |
+          node scripts/check-migration-sql-equivalence.js --self-test
+          node scripts/check-migration-sql-equivalence.js
+
       - name: Verify migration provenance and known version collision (P0.5)
         run: |
           node scripts/check-migration-provenance.js --self-test
