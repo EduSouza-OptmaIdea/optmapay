@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
+import { previewSandboxDeposit, confirmSandboxDeposit, newDepositIdempotencyKey } from '../services/sandboxDepositService';
 
 export type AppMode = 'dev' | 'edu';
 
@@ -248,13 +249,15 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Governança de Menor
   const [isJuniorAccount, setIsJuniorAccountState] = useState<boolean>(() => {
-    return localStorage.getItem('optmapay_is_junior') === 'true';
+    return localStorage.getItem('optmapay_is_junior') === 'true' && localStorage.getItem('optmapay_parental_ack_v2') === 'true';
   });
   const [guardianName, setGuardianNameState] = useState<string>(() => {
-    return localStorage.getItem('optmapay_guardian_name') || 'Prof. Responsável / Guardião';
+    return localStorage.getItem('optmapay_guardian_name') || '';
   });
   const [parentalConsent, setParentalConsentState] = useState<boolean>(() => {
-    return localStorage.getItem('optmapay_parental_consent') !== 'false';
+    // Legacy localStorage consent is NOT proof of adult identity and must not
+    // silently enroll a minor on the next visit.
+    return localStorage.getItem('optmapay_parental_ack_v2') === 'true';
   });
 
   // Score Didático (0 a 1000)
@@ -323,8 +326,10 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const setIsJuniorAccount = (val: boolean) => {
-    setIsJuniorAccountState(val);
-    localStorage.setItem('optmapay_is_junior', String(val));
+    // Local pilot acknowledgement is UX guidance, not verified guardian access.
+    const allowed = val && parentalConsent && guardianName.trim().length >= 2;
+    setIsJuniorAccountState(allowed);
+    localStorage.setItem('optmapay_is_junior', String(allowed));
   };
 
   const setGuardianName = (name: string) => {
@@ -334,7 +339,11 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const setParentalConsent = (val: boolean) => {
     setParentalConsentState(val);
-    localStorage.setItem('optmapay_parental_consent', String(val));
+    localStorage.setItem('optmapay_parental_ack_v2', String(val));
+    if (!val) {
+      setIsJuniorAccountState(false);
+      localStorage.setItem('optmapay_is_junior', 'false');
+    }
   };
 
   const adjustScore = (delta: number, description: string) => {
@@ -718,28 +727,35 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  // Mesada do Guardião
+  // Mesada didática: MUST use the atomic sandbox RPC (not a balance update
+  // followed by a separate, unchecked transaction insert).
+  // This is a local supervised family PILOT, not verified guardian authorization.
   const grantMesada = async (amount: number, reason: string): Promise<boolean> => {
-    if (!activeAccount || amount <= 0) return false;
+    if (!activeAccount) throw new Error('Escolha uma conta de simulação primeiro.');
+    if (!isJuniorAccount || !parentalConsent || guardianName.trim().length < 2) {
+      throw new Error('Ative a supervisão local de um adulto antes de conceder mesada fictícia.');
+    }
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100)) {
+      throw new Error('Informe um valor fictício válido com até duas casas decimais.');
+    }
+    const title = reason.trim().slice(0, 120);
+    if (title.length < 3) throw new Error('Informe um motivo para a mesada didática.');
 
-    await supabase
-      .from('accounts')
-      .update({ balance: activeAccount.balance + amount })
-      .eq('id', activeAccount.id);
-
-    await supabase.from('transactions').insert({
-      user_id: activeAccount.user_id || null,
-      account_id: activeAccount.id,
-      type: 'deposit',
-      direction: 'in',
+    const quote = await previewSandboxDeposit(activeAccount.id, amount);
+    if (quote.environment !== 'sandbox' || quote.real_money !== false) {
+      throw new Error('A cotação não pertence ao ambiente de simulação.');
+    }
+    const receipt = await confirmSandboxDeposit(
+      activeAccount.id,
       amount,
-      description: `Mesada Educativa / Aporte do Guardião (${reason || 'Mesada Mensal'})`,
-      status: 'completed',
-      real_money: false,
-      environment: 'sandbox',
-    });
-
-    adjustScore(+15, `Recebeu mesada didática (${reason})`);
+      `Mesada educativa simulada: ${title}`,
+      newDepositIdempotencyKey(),
+      quote.fee_amount,
+    );
+    if (receipt.environment !== 'sandbox' || receipt.real_money !== false || !receipt.success) {
+      throw new Error('O lançamento de mesada não foi confirmado como fictício.');
+    }
+    adjustScore(+15, `Recebeu mesada didática (${title})`);
     await refreshAccounts();
     return true;
   };
