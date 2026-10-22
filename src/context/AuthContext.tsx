@@ -62,8 +62,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPlatformRole(isMaster ? 'owner' : identity.role);
     setPlatformPermissions(isMaster ? ['*'] : identity.permissions);
 
-    // Operadores da plataforma nunca assumem conta bancária.
-    if (isStaff) {
+    // Staff delegado NÃO assume contas fictícias de usuários.
+    // O owner, verificado em RPC do servidor, pode usar SOMENTE suas próprias
+    // contas sandbox: fetchUserAccounts filtra user_id e RLS continua ativa.
+    if (isStaff && !isMaster) {
       setAccounts([]);
       setAllAccounts([]);
       setActiveAccount(null);
@@ -95,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       // Se o usuário está autenticado e válido, auto-cria a conta se existirem metadados do cadastro
       const authUser = currentUser || userRef.current;
-      if (authUser && authUser.id) {
+      if (authUser && authUser.id && !isMaster) {
         const meta = authUser.user_metadata || {};
         if (meta.account_name && meta.cpf_cnpj) {
           try {
