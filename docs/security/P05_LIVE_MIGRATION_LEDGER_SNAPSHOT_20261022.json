@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "snapshot_utc": "2026-10-22T01:08:21Z",
+  "snapshot_utc": "2026-10-22T01:14:00Z",
   "database_project_ref": "wertmoquxdrucdbobuie",
   "repo": "EduSouza-OptmaIdea/optmapay",
   "repo_kind": "deployment_mirror",
   "source_git_sha": "57377325b7619e738fc4cb878a62a895e0792f93",
-  "source_note": "Read-only ledger metadata & SHA-1 Git blobs. Filename pairing is NOT proof SQL execution. No repair/push allowed.",
+  "source_note": "Read-only ledger metadata & SHA-1 Git blobs. Filename pairing is NOT proof SQL execution. No repair/push allowed. Snapshot capture time is approximate. Re-run a LIVE read-only audit immediately before any production release.",
   "database_records": [
     {
       "ledger_version": "20260829000000",
