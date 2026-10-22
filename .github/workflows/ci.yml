@@ -63,6 +63,44 @@ jobs:
         env:
           DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
 
+      # Real PostgREST speaks HTTP+JWT to the same reconstructed PostgreSQL 17 DB.
+      # No Supabase cloud branch, remote database, real key, or production data.
+      - name: Seed synthetic Data API tenant fixtures
+        run: node scripts/test-data-api-rls.js --setup
+        env:
+          DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
+          CI_POSTGREST_DB_PASSWORD: ci-local-no-production-credential
+          CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
+
+      - name: Start disposable PostgREST HTTP API
+        run: |
+          docker run -d --rm --name optmapay-postgrest-ci --network host \
+            -e PGRST_DB_URI=postgres://authenticator:ci-local-no-production-credential@127.0.0.1:54399/postgres \
+            -e PGRST_DB_SCHEMAS=public \
+            -e PGRST_DB_ANON_ROLE=anon \
+            -e PGRST_JWT_SECRET=ci-test-only-hs256-jwt-secret-not-prod-20261021-12345 \
+            -e PGRST_SERVER_PORT=3003 \
+            postgrest/postgrest:v14.18
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3003/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 40 ]; then
+              docker logs optmapay-postgrest-ci
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Verify authenticated and negative RLS over Data API
+        run: node scripts/test-data-api-rls.js --verify
+        env:
+          DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
+          CI_POSTGREST_DB_PASSWORD: ci-local-no-production-credential
+          CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
+
+      - name: Stop disposable PostgREST
+        if: always()
+        run: docker rm -f optmapay-postgrest-ci || true
+
       - name: Run Test Suite (Vitest)
         # Shared integration PostgreSQL fixtures must not execute concurrently.
         run: npm run test:run -- --fileParallelism=false
