@@ -25,6 +25,7 @@ const EXPECTED_STAGED=[
   '20261021100000_restore_pix_single_use_index.sql',
   '20261022004000_transactions_owner_account_rls.sql',
   '20261022123000_enforce_educational_sandbox_only.sql',
+  '20261022164000_allow_verified_owner_personal_sandbox.sql',
 ].sort();
 const KNOWN_VERSION_COLLISION='20261014130500';
 const basename=p=>path.posix.basename(p);
