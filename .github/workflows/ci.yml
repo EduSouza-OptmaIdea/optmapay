@@ -9,7 +9,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, agent/p0-supabase-explicit-grants-20261021 ]
+    branches: [ main, agent/p0-supabase-explicit-grants-20261021 , agent/p03-free-postgrest-rls-ci-20261021]
 
 jobs:
   quality-gates:
