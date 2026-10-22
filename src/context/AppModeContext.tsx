@@ -735,14 +735,15 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isJuniorAccount || !parentalConsent || guardianName.trim().length < 2) {
       throw new Error('Ative a supervisão local de um adulto antes de conceder mesada fictícia.');
     }
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100)) {
+    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-8) {
       throw new Error('Informe um valor fictício válido com até duas casas decimais.');
     }
     const title = reason.trim().slice(0, 120);
     if (title.length < 3) throw new Error('Informe um motivo para a mesada didática.');
 
     const quote = await previewSandboxDeposit(activeAccount.id, amount);
-    if (quote.environment !== 'sandbox' || quote.real_money !== false) {
+    if (quote.environment !== 'sandbox' || quote.real_money !== false ||
+        quote.account_id !== activeAccount.id || !Number.isFinite(Number(quote.fee_amount))) {
       throw new Error('A cotação não pertence ao ambiente de simulação.');
     }
     const receipt = await confirmSandboxDeposit(
@@ -752,7 +753,8 @@ export const AppModeProvider: React.FC<{ children: React.ReactNode }> = ({ child
       newDepositIdempotencyKey(),
       quote.fee_amount,
     );
-    if (receipt.environment !== 'sandbox' || receipt.real_money !== false || !receipt.success) {
+    if (receipt.environment !== 'sandbox' || receipt.real_money !== false || !receipt.success ||
+        receipt.account_id !== activeAccount.id) {
       throw new Error('O lançamento de mesada não foi confirmado como fictício.');
     }
     adjustScore(+15, `Recebeu mesada didática (${title})`);
