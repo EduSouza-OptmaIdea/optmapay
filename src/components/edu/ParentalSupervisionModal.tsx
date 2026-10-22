@@ -34,20 +34,31 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
   const [mesadaAmount, setMesadaAmount] = useState('50.00');
   const [mesadaReason, setMesadaReason] = useState('Mesada do Mês');
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const acknowledgementReady = parentalConsent && guardianName.trim().length >= 2;
 
   if (!isOpen) return null;
 
   const handleGrantMesada = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(mesadaAmount);
-    if (isNaN(val) || val <= 0) return;
-
+    if (submitting) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    if (!Number.isFinite(val) || val <= 0) {
+      setErrorMsg('Informe um valor fictício válido.');
+      return;
+    }
+    setSubmitting(true);
     try {
-      await grantMesada(val, mesadaReason);
-      setSuccessMsg(`Mesada de R$ ${val.toFixed(2)} liberada com sucesso para a conta do menor!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err: any) {
-      alert(err.message || 'Falha ao injetar mesada.');
+      const confirmed = await grantMesada(val, mesadaReason);
+      if (!confirmed) throw new Error('Não foi possível confirmar a mesada simulada.');
+      setSuccessMsg(`Mesada fictícia de R$ ${val.toFixed(2)} confirmada no extrato de simulação.`);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Falha ao registrar a mesada fictícia.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -68,7 +79,7 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Governança, consentimento de responsável e liberação de mesada simulada
+                Piloto familiar: acompanhamento do adulto e mesada exclusivamente fictícia
               </p>
             </div>
           </div>
@@ -94,11 +105,11 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
               Regra de Ouro para Contas de Crianças e Jovens
             </p>
             <p className="text-[11px] leading-relaxed">
-              O OptmaPay Sandbox é um ambiente de testes e educação financeira. <strong>Não solicitamos nem armazenamos CPFs, senhas reais ou dados sensíveis de menores</strong>. Todos os números de cartão, chaves Pix e moedas são 100% fictícios.
+              O OptmaPay é um <strong>simulador educacional</strong>: saldos, cartões, Pix e mesadas não representam dinheiro real. Para o piloto familiar, utilize uma <strong>conta criada e operada pelo adulto</strong>. Não informe documentos, números de cartões reais, senhas bancárias ou dados pessoais de crianças nos campos da simulação.
             </p>
           </div>
 
-          {/* Termo de Consentimento do Adulto */}
+          {/* Aviso local. NÃO substitui autenticação, vínculo ou consentimento legal verificável. */}
           <div className="space-y-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input
@@ -108,19 +119,19 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
                 className="mt-0.5 rounded text-[#19A999] focus:ring-[#19A999] w-4 h-4"
               />
               <span className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
-                <strong>Consentimento Formal do Responsável / Professor:</strong> Confirmo que sou o responsável legal ou educador autorizado a orientar o menor nesta plataforma para fins puramente didáticos.
+                <strong>Confirmação local de acompanhamento:</strong> Estou usando uma conta sob minha responsabilidade e acompanharei a atividade didática. Esta confirmação fica somente neste navegador e <strong>não verifica minha identidade nem cria vínculo legal de responsável</strong>.
               </span>
             </label>
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Nome do Responsável / Educador Vinculado
+                Apelido do adulto supervisor (sem nome completo)
               </label>
               <input
                 type="text"
                 value={guardianName}
                 onChange={(e) => setGuardianName(e.target.value)}
-                placeholder="Ex: Prof. Carlos Eduardo / Ana Lúcia (Mãe)"
+                placeholder="Ex.: Mãe / Pai / Prof. responsável"
                 className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
               />
             </div>
@@ -132,7 +143,8 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
               <button
                 type="button"
                 onClick={() => setIsJuniorAccount(!isJuniorAccount)}
-                className={`px-3 py-1 rounded-full font-bold text-[11px] transition ${
+                disabled={!isJuniorAccount && !acknowledgementReady}
+                className={`px-3 py-1 rounded-full font-bold text-[11px] transition disabled:opacity-40 disabled:cursor-not-allowed ${
                   isJuniorAccount
                     ? 'bg-emerald-600 text-white'
                     : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
@@ -143,11 +155,13 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
             </div>
           </div>
 
+          {!acknowledgementReady && <p role="status" className="text-amber-700 dark:text-amber-200">Informe um apelido do adulto e marque a confirmação local para liberar o modo de demonstração júnior.</p>}
+
           {/* Aporte de Mesada Didática */}
           <form onSubmit={handleGrantMesada} className="space-y-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
             <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-amber-500" />
-              Injetar Mesada / Aporte Didático na Conta do Menor
+              Registrar mesada fictícia na conta familiar de teste
             </h4>
 
             <div className="grid grid-cols-2 gap-3">
@@ -157,7 +171,7 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
                 </label>
                 <input
                   type="number"
-                  step="5"
+                  step="0.01"
                   min="5"
                   value={mesadaAmount}
                   onChange={(e) => setMesadaAmount(e.target.value)}
@@ -181,11 +195,14 @@ export const ParentalSupervisionModal: React.FC<ParentalSupervisionModalProps> =
               </div>
             </div>
 
+            <p className="text-[11px] text-slate-500 dark:text-slate-300">A operação segue as regras e possíveis tarifas fictícias do simulador. É registrada atomicamente no extrato; nenhuma transferência real será feita.</p>
+            {errorMsg && <p role="alert" className="rounded-lg bg-rose-100 p-2 text-rose-800">{errorMsg}</p>}
             <button
               type="submit"
-              className="w-full py-2.5 bg-gradient-to-r from-teal-600 to-[#19A999] hover:opacity-95 text-white font-bold rounded-xl shadow-md transition"
+              disabled={submitting || !isJuniorAccount || !acknowledgementReady}
+              className="w-full py-2.5 bg-gradient-to-r from-teal-600 to-[#19A999] hover:opacity-95 text-white font-bold rounded-xl shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Liberar Mesada no Saldo Disponível
+              {submitting ? 'Confirmando mesada fictícia...' : 'Registrar mesada fictícia no saldo'}
             </button>
           </form>
         </div>

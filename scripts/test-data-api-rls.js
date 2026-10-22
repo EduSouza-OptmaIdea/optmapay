@@ -152,6 +152,35 @@ async function verify(){
     'A cannot reassign its own transaction to account B');
 
   const trustedLedgerId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+  // Education-sandbox invariant: even the privileged service_role must never
+  // persist a row marked as real money or a non-sandbox environment.
+  const rejectedAuthMoney=await http('POST','/transactions?select=id',tokenA,{
+    user_id:U_A,account_id:A_A,type:'withdraw',direction:'out',amount:0.01,
+    description:'P07 reject real money',status:'completed',real_money:true,environment:'sandbox'
+  });
+  check(rejectedAuthMoney.status===400 && rejectedAuthMoney.data?.code==='23514',
+    'authenticated cannot create a real-money ledger row');
+
+  const rejectedServiceMoney=await http('POST','/transactions?select=id',tokenService,{
+    user_id:U_A,account_id:A_A,type:'withdraw',direction:'out',amount:0.01,
+    description:'P07 privileged cannot mark real money',status:'completed',real_money:true,environment:'sandbox'
+  });
+  check(rejectedServiceMoney.status===400 && rejectedServiceMoney.data?.code==='23514',
+    'service_role cannot create a real-money ledger row');
+
+  const rejectedServiceEnvironment=await http('POST','/transactions?select=id',tokenService,{
+    user_id:U_A,account_id:A_A,type:'withdraw',direction:'out',amount:0.01,
+    description:'P07 privileged cannot use real environment',status:'completed',real_money:false,environment:'production'
+  });
+  check(rejectedServiceEnvironment.status===400 && rejectedServiceEnvironment.data?.code==='23514',
+    'service_role cannot create a production-environment ledger row');
+
+  const rejectedLedgerPatch=await http('PATCH','/transactions?id=eq.'+ledgerId+'&select=id',tokenA,{
+    real_money:true
+  });
+  check(rejectedLedgerPatch.status===400 && rejectedLedgerPatch.data?.code==='23514',
+    'existing sandbox ledger entry cannot be converted to real money');
+
   const trustedWrite=await http('POST','/transactions?select=id',tokenService,{
     id:trustedLedgerId,
     user_id:U_A,account_id:A_B,
