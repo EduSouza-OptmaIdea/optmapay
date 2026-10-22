@@ -44,3 +44,13 @@ Essa implementação **não** dá leitura irrestrita de contas de clientes ao pr
 - A autorização Learn/Dev de outros papéis, a relação adulto-criança no backend e a atomicidade das outras operações didáticas são etapas futuras, distintas da pilotagem owner.
 
 **Status:** entrega de código em homologação; GO de revisão e testes automatizados. **Nenhum deploy remoto** realizado nesta frente.
+
+## Adendo de implementação P08: exceção de owner também no banco
+
+A auditoria de produção encontrou o trigger `trg_prevent_platform_staff_bank_account`, que originalmente bloqueia a criação de contas fictícias por **qualquer** operador da plataforma. Sem mudança, o frontend mostraria Learn/Dev para o owner, mas ele não conseguiria criar a conta de teste; portanto, **só a alteração na UI não seria uma entrega funcional**.
+
+A migration forward-only **`20261022164000_allow_verified_owner_personal_sandbox.sql`** substitui apenas a lógica da função existente `prevent_platform_staff_bank_account()`: o titular de uma nova conta que esteja habilitado simultaneamente em `platform_staff` com `role='owner'` **e** em `optmapay_super_admins` habilitado fica autorizado; outros operadores seguem bloqueados. O RLS existente `auth.uid()=user_id` permanece obrigatório para qualquer conta criada e lida, e nenhuma permissão é concedida por `GRANT`. Não há impersonação nem poder para usar a conta de terceiros.
+
+A CI inclui `scripts/test-owner-dual-mode-db.js`, que fala por HTTP com PostgREST JWT real sobre PostgreSQL 17 descartável e verifica: duas contas próprias do owner, read isolado, operador delegado impedido de criar conta, owner impedido de criar em nome de outro usuário, e revogação de superadmin anulando a exceção. Sem alteração no Supabase ativo e sem branch paga.
+
+**Atenção:** o SQL P08 só produz efeito após implantação forward-only deliberada com preflight/backup; o banco ativo permanece com a proibição antiga. Não publicar o frontend do owner sem implantar, testar e validar a migration correspondente. A criação da conta sintética também depende de vínculo válido de autenticação, RLS e checks de saldo normais.
