@@ -108,6 +108,12 @@ jobs:
           CI_POSTGREST_DB_PASSWORD: ci-local-no-production-credential
           CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
 
+      - name: Verify owner personal sandbox accounts and delegated staff denial over signed JWT
+        run: node scripts/test-owner-dual-mode-db.js
+        env:
+          DATABASE_TEST_URL: postgresql://postgres:postgres@127.0.0.1:54399/postgres
+          CI_POSTGREST_JWT_SECRET: ci-test-only-hs256-jwt-secret-not-prod-20261021-12345
+
       - name: Stop disposable PostgREST
         if: always()
         run: docker rm -f optmapay-postgrest-ci || true
