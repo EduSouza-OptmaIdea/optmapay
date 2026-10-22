@@ -249,7 +249,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const setActiveAccountId = (id: string) => {
-    if (isPlatformStaff) return;
+    // Owner may select only their own fetched sandbox test accounts.
+    if (isPlatformStaff && !isSuperAdmin) return;
     const pool = accounts;
     const matched = pool.find((a) => a.id === id) || accounts.find((a) => a.id === id);
     if (matched) {
