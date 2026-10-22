@@ -32,6 +32,14 @@
 3. `20261021100000_restore_pix_single_use_index.sql` — proteção de uso único de referência Pix, ainda em revisão.
 4. `20261022004000_transactions_owner_account_rls.sql` — proteção do vínculo de usuário e conta nos lançamentos, testada em CI e não publicada.
 
+## Resultado real do GitHub Actions em 22/10/2026
+
+A barreira de proveniência passou na CI: conferiu a integridade por Git blob SHA-1 dos **55 arquivos SQL** e confirmou os 51 registros fotografados do ledger, inclusive a colisão de versão documentada. O self-test negativo rejeitou um manifesto incompleto.
+
+**Comparação de conteúdo SQL realmente armazenado pelo Supabase:** entre os 31 registros de uma única instrução, **31** têm SQL executado byte a byte idêntico ao arquivo no diretório migrations deste repositório. Os 31 hashes MD5 de instrução única coincidiram exatamente; inclusive o histórico de comprovantes bancários, embora os timestamps sejam diferentes.
+
+Permanecem **20 migrations multistatement** sem atestado equivalente; a verificação estrutural e a reconstrução sintética do PostgreSQL não provam que elas sejam byte a byte iguais ao que foi executado em produção. A versão `20261014130500` continua colidindo no nome. **Não efetuar reparos automáticos.**
+
 ## Qual é a prova disponível?
 
 O Supabase preserva metadados `version`, `name` e `statements` no ledger. Nesta leitura foram encontrados **31** registros com um único elemento SQL e **20** com múltiplos elementos. Foram coletados os hashes MD5 dos elementos únicos sem publicar seu texto, e os SHA-1 de **blobs Git** dos arquivos.
