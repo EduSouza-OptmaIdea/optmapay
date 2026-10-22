@@ -30,7 +30,7 @@ export const BottomNav: React.FC = () => {
   ];
 
   const eduMobileNavItems = [
-    { to: '/edu-dashboard', label: 'Edu', icon: GraduationCap },
+    { to: '/edu-dashboard', label: 'Learn', icon: GraduationCap },
     { to: '/comprovantes', label: 'Recibos', icon: FileCheck2 },
     { to: '/contas-a-pagar', label: 'Contas', icon: FileText },
     { to: '/investimentos', label: 'Poupança', icon: PiggyBank },
