@@ -5,7 +5,7 @@
   "repo": "EduSouza-OptmaIdea/optmapay",
   "repo_kind": "deployment_mirror",
   "source_git_sha": "57377325b7619e738fc4cb878a62a895e0792f93",
-  "source_note": "Read-only ledger metadata & SHA-1 Git blobs. Filename pairing is NOT proof SQL execution. No repair/push allowed. Snapshot capture time is approximate. Re-run a LIVE read-only audit immediately before any production release.",
+  "source_note": "Read-only ledger metadata & SHA-1 Git blobs. Filename pairing is NOT proof SQL execution. No repair/push allowed. Snapshot capture time is approximate. Re-run a LIVE read-only audit immediately before any production release. P0.7 staged sandbox-only safeguard included in Git inventory; not applied to live ledger.",
   "database_records": [
     {
       "ledger_version": "20260829000000",
@@ -541,6 +541,12 @@
       "path": "supabase/migrations/20261022004000_transactions_owner_account_rls.sql",
       "git_blob_sha1": "0b369abfe36636db63d5d97b821fd8d7117bae66",
       "source_version": "20261022004000",
+      "category": "not_registered_under_source_name_and_version"
+    },
+    {
+      "path": "supabase/migrations/20261022123000_enforce_educational_sandbox_only.sql",
+      "git_blob_sha1": "87ad7e7c3ff442205b0cad3fdd70bbde86e4a0b4",
+      "source_version": "20261022123000",
       "category": "not_registered_under_source_name_and_version"
     }
   ],
