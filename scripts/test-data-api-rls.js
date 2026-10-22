@@ -40,7 +40,7 @@ async function setup(){
   await db.connect();
   try{
     await db.query("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticator') THEN CREATE ROLE authenticator LOGIN; END IF; END $$;");
-    const {rows:[stmt]}=await db.query("SELECT format('ALTER ROLE authenticator LOGIN PASSWORD %L', $1) AS sql",[DB_PASSWORD]);
+    const {rows:[stmt]}=await db.query("SELECT format('ALTER ROLE authenticator LOGIN PASSWORD %L', $1::text) AS sql",[DB_PASSWORD]);
     await db.query(stmt.sql);
     await db.query('GRANT anon,authenticated,service_role TO authenticator');
     await db.query('GRANT CONNECT ON DATABASE postgres TO authenticator');
