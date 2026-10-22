@@ -47,7 +47,7 @@ const AdminOverview = ({ isOwner }: { isOwner: boolean }) => {
       <h2 className="text-2xl font-extrabold">Visão geral da plataforma</h2>
       <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">Administração do OptmaPay Sandbox, independente das contas bancárias fictícias.</p>
     </div>
-    {error && <p role="alert" className="text-sm text-rose-600">{error}</p>
+    {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
     {isOwner && (
       <section className="rounded-2xl border border-teal-300 bg-teal-50 p-5 text-sm dark:border-teal-900 dark:bg-teal-950/30">
         <h3 className="font-bold">Espaço do Owner • Learn + Dev Sandbox</h3>
@@ -58,7 +58,7 @@ const AdminOverview = ({ isOwner }: { isOwner: boolean }) => {
           <Link to="/dev" className="rounded-lg border border-teal-700 px-3 py-2 font-bold">APIs e Webhooks Dev</Link>
         </div>
       </section>
-    )}}
+    )}
     <div className="grid sm:grid-cols-3 gap-4">
       <div className="p-5 rounded-2xl border bg-white dark:bg-slate-800 dark:border-slate-700"><Users className="text-teal-500 mb-3"/><p className="text-sm font-bold">Correntistas</p><p className="text-xs text-slate-500 mt-2">Consulte usuários, contas e atividade operacional no módulo dedicado.</p><Link to="/admin/correntistas" className="text-sm text-teal-600 inline-flex gap-1 mt-4">Abrir consulta <ArrowRight size={15}/></Link></div>
       <div className="p-5 rounded-2xl border bg-white dark:bg-slate-800 dark:border-slate-700"><Wallet className="text-teal-500 mb-3"/><p className="text-sm font-bold">Operações fictícias</p><p className="text-xs text-slate-500 mt-2">Informações operacionais sem assumir contas de terceiros.</p></div>
