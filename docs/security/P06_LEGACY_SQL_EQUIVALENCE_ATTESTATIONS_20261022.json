@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "project": "wertmoquxdrucdbobuie",
+  "comparison_method": "Exact SQL token sequence after ignoring SQL comments, whitespace outside literals, and statement terminators; preserves quoted strings, identifiers and dollar bodies. NOT byte equivalence.",
+  "captured_utc": "2026-10-22",
+  "ledger_count_expected": 51,
+  "attestations": [
+    {
+      "ledger_version": "20260829000000",
+      "sql_statements": 49,
+      "source_path": "supabase/migrations/20260829000000_initial_schema.sql",
+      "git_blob_sha1": "44efc6b9aab99f1b7b9896bd8069f3b1041b8fad",
+      "semantic_token_count": 1269,
+      "semantic_fnv1a64": "a377827b6e57461a"
+    },
+    {
+      "ledger_version": "20260829000001",
+      "sql_statements": 5,
+      "source_path": "supabase/migrations/20260829000001_rpc_functions.sql",
+      "git_blob_sha1": "8b9d059c4ff596f8d4c33487477667e85b96bded",
+      "semantic_token_count": 132,
+      "semantic_fnv1a64": "384af2b464a45154"
+    },
+    {
+      "ledger_version": "20260829000002",
+      "sql_statements": 6,
+      "source_path": "supabase/migrations/20260829000002_data_retention_and_warnings.sql",
+      "git_blob_sha1": "2c0edb8190bc745208e030660274ae24251517a8",
+      "semantic_token_count": 151,
+      "semantic_fnv1a64": "37222e6a8a850c42"
+    },
+    {
+      "ledger_version": "20260829000003",
+      "sql_statements": 88,
+      "source_path": "supabase/migrations/20260829000003_security_hardening.sql",
+      "git_blob_sha1": "f267fe8fc9799ed7f23bd78ee91791c94755623d",
+      "semantic_token_count": 1513,
+      "semantic_fnv1a64": "773d7aeaf7e0fb49"
+    },
+    {
+      "ledger_version": "20260830000000",
+      "sql_statements": 2,
+      "source_path": "supabase/migrations/20260830000000_fix_transfer_pix_security_definer.sql",
+      "git_blob_sha1": "3f1231d2835970877de84eca9bcf56dad7c0473d",
+      "semantic_token_count": 66,
+      "semantic_fnv1a64": "58eb057420112703"
+    },
+    {
+      "ledger_version": "20260830000001",
+      "sql_statements": 8,
+      "source_path": "supabase/migrations/20260830000001_realtime_and_advisors_fix.sql",
+      "git_blob_sha1": "a756f49650c3e6b5a506cffe7036d447bf0016c5",
+      "semantic_token_count": 159,
+      "semantic_fnv1a64": "0c5c378bb63faa0b"
+    },
+    {
+      "ledger_version": "20260830000002",
+      "sql_statements": 6,
+      "source_path": "supabase/migrations/20260830000002_revoke_anon_and_optimize.sql",
+      "git_blob_sha1": "3fd6d8e0b6e05f50b15ad24231e75f82b41dc3cf",
+      "semantic_token_count": 108,
+      "semantic_fnv1a64": "c2ccb31c3c2b6f12"
+    },
+    {
+      "ledger_version": "20260830000003",
+      "sql_statements": 5,
+      "source_path": "supabase/migrations/20260830000003_link_pix_refunds_and_balance.sql",
+      "git_blob_sha1": "f49f8ef1c44a118ece7d2a116bdc736b7a9108fb",
+      "semantic_token_count": 135,
+      "semantic_fnv1a64": "6cbfa0209643a344"
+    },
+    {
+      "ledger_version": "20260901000000",
+      "sql_statements": 8,
+      "source_path": "supabase/migrations/20260901000000_cards_pos_and_fee_system.sql",
+      "git_blob_sha1": "5c09e340a68ca8a0854e23559ce08e149c485e84",
+      "semantic_token_count": 235,
+      "semantic_fnv1a64": "01b9ed4696643dea"
+    },
+    {
+      "ledger_version": "20260901000001",
+      "sql_statements": 8,
+      "source_path": "supabase/migrations/20260901000001_credit_card_invoices_and_d1_settlement.sql",
+      "git_blob_sha1": "41e22fe4cd2625ad0f6515efb3558c7e04b5a795",
+      "semantic_token_count": 275,
+      "semantic_fnv1a64": "f3013f98f92d210f"
+    }
+  ],
+  "complete": false
+}
