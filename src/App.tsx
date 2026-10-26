@@ -11,6 +11,7 @@ import { PublicHome } from './pages/PublicHome';
 import { TermsOfUse } from './pages/TermsOfUse';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Dashboard } from './pages/Dashboard';
+import { Onboarding } from './pages/Onboarding';
 import { PixArea } from './pages/PixArea';
 import { ReceiptsPage } from './pages/ReceiptsPage';
 import { PixLimitsPage } from './pages/PixLimitsPage';
@@ -65,6 +66,7 @@ const ProtectedLayout: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/edu-dashboard" element={<EduDashboard />} />
             <Route path="/contas-a-pagar" element={<ContasPagarArea />} />
             <Route path="/investimentos" element={<InvestimentosEduArea />} />
