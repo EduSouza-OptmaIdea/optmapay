@@ -56,6 +56,7 @@ const AdminOverview = ({ isOwner }: { isOwner: boolean }) => {
           <Link to="/edu-dashboard" className="rounded-lg bg-teal-700 px-3 py-2 font-bold text-white">Entrar no Learn</Link>
           <Link to="/dashboard" className="rounded-lg bg-slate-800 px-3 py-2 font-bold text-white">Entrar no Dev</Link>
           <Link to="/dev" className="rounded-lg border border-teal-700 px-3 py-2 font-bold">APIs e Webhooks Dev</Link>
+          <Link to="/onboarding" className="rounded-lg border border-teal-700 px-3 py-2 font-bold">Nova conta PJ/PF fictícia</Link>
         </div>
       </section>
     )}
