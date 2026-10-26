@@ -10,7 +10,7 @@ import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isUnauthorized, refreshAccounts, setActiveAccountId } = useAuth();
+  const { user, isUnauthorized, refreshAccounts } = useAuth();
 
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('customer');
@@ -80,9 +80,10 @@ export const Onboarding: React.FC = () => {
       });
 
       if (created) {
+        // Select after the refresh: AuthContext's prior accounts snapshot may be stale.
+        localStorage.setItem('optmapay_active_account_id', created.id);
         await refreshAccounts();
-        setActiveAccountId(created.id);
-        navigate('/dashboard');
+        navigate('/dev-panel');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao criar conta no Supabase.');
